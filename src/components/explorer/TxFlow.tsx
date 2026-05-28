@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { satsToTxc, shortHash } from "@/lib/txc/format";
-import { decodeOpReturn, omniLabel, isOpReturn } from "@/lib/txc/omni";
+import { decodeOpReturn, omniLabel, isOpReturn, type OmniMessage } from "@/lib/txc/omni";
 import type { Tx, TxVin, TxVout } from "@/lib/txc/esplora";
 
 function VinRow({ v }: { v: TxVin }) {
@@ -98,7 +98,7 @@ function VoutRow({ o, index }: { o: TxVout; index: number }) {
   );
 }
 
-function OmniDetail({ msg }: { msg: ReturnType<typeof decodeOpReturn> extends { kind: "omni"; message: infer M } ? M : never }) {
+function OmniDetail({ msg }: { msg: OmniMessage }) {
   switch (msg.kind) {
     case "simple-send":
       return (
