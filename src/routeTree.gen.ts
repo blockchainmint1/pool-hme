@@ -9,38 +9,181 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as MiningRouteImport } from './routes/mining'
+import { Route as GraphsRouteImport } from './routes/graphs'
+import { Route as BlocksRouteImport } from './routes/blocks'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TxTxidRouteImport } from './routes/tx.$txid'
+import { Route as BlockHashRouteImport } from './routes/block.$hash'
+import { Route as AddressAddrRouteImport } from './routes/address.$addr'
 
+const MiningRoute = MiningRouteImport.update({
+  id: '/mining',
+  path: '/mining',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GraphsRoute = GraphsRouteImport.update({
+  id: '/graphs',
+  path: '/graphs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlocksRoute = BlocksRouteImport.update({
+  id: '/blocks',
+  path: '/blocks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplatRoute = SplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TxTxidRoute = TxTxidRouteImport.update({
+  id: '/tx/$txid',
+  path: '/tx/$txid',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlockHashRoute = BlockHashRouteImport.update({
+  id: '/block/$hash',
+  path: '/block/$hash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddressAddrRoute = AddressAddrRouteImport.update({
+  id: '/address/$addr',
+  path: '/address/$addr',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/about': typeof AboutRoute
+  '/blocks': typeof BlocksRoute
+  '/graphs': typeof GraphsRoute
+  '/mining': typeof MiningRoute
+  '/address/$addr': typeof AddressAddrRoute
+  '/block/$hash': typeof BlockHashRoute
+  '/tx/$txid': typeof TxTxidRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/about': typeof AboutRoute
+  '/blocks': typeof BlocksRoute
+  '/graphs': typeof GraphsRoute
+  '/mining': typeof MiningRoute
+  '/address/$addr': typeof AddressAddrRoute
+  '/block/$hash': typeof BlockHashRoute
+  '/tx/$txid': typeof TxTxidRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/about': typeof AboutRoute
+  '/blocks': typeof BlocksRoute
+  '/graphs': typeof GraphsRoute
+  '/mining': typeof MiningRoute
+  '/address/$addr': typeof AddressAddrRoute
+  '/block/$hash': typeof BlockHashRoute
+  '/tx/$txid': typeof TxTxidRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/$'
+    | '/about'
+    | '/blocks'
+    | '/graphs'
+    | '/mining'
+    | '/address/$addr'
+    | '/block/$hash'
+    | '/tx/$txid'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/$'
+    | '/about'
+    | '/blocks'
+    | '/graphs'
+    | '/mining'
+    | '/address/$addr'
+    | '/block/$hash'
+    | '/tx/$txid'
+  id:
+    | '__root__'
+    | '/'
+    | '/$'
+    | '/about'
+    | '/blocks'
+    | '/graphs'
+    | '/mining'
+    | '/address/$addr'
+    | '/block/$hash'
+    | '/tx/$txid'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SplatRoute: typeof SplatRoute
+  AboutRoute: typeof AboutRoute
+  BlocksRoute: typeof BlocksRoute
+  GraphsRoute: typeof GraphsRoute
+  MiningRoute: typeof MiningRoute
+  AddressAddrRoute: typeof AddressAddrRoute
+  BlockHashRoute: typeof BlockHashRoute
+  TxTxidRoute: typeof TxTxidRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/mining': {
+      id: '/mining'
+      path: '/mining'
+      fullPath: '/mining'
+      preLoaderRoute: typeof MiningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/graphs': {
+      id: '/graphs'
+      path: '/graphs'
+      fullPath: '/graphs'
+      preLoaderRoute: typeof GraphsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/blocks': {
+      id: '/blocks'
+      path: '/blocks'
+      fullPath: '/blocks'
+      preLoaderRoute: typeof BlocksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$': {
+      id: '/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,12 +191,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tx/$txid': {
+      id: '/tx/$txid'
+      path: '/tx/$txid'
+      fullPath: '/tx/$txid'
+      preLoaderRoute: typeof TxTxidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/block/$hash': {
+      id: '/block/$hash'
+      path: '/block/$hash'
+      fullPath: '/block/$hash'
+      preLoaderRoute: typeof BlockHashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/address/$addr': {
+      id: '/address/$addr'
+      path: '/address/$addr'
+      fullPath: '/address/$addr'
+      preLoaderRoute: typeof AddressAddrRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SplatRoute: SplatRoute,
+  AboutRoute: AboutRoute,
+  BlocksRoute: BlocksRoute,
+  GraphsRoute: GraphsRoute,
+  MiningRoute: MiningRoute,
+  AddressAddrRoute: AddressAddrRoute,
+  BlockHashRoute: BlockHashRoute,
+  TxTxidRoute: TxTxidRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
