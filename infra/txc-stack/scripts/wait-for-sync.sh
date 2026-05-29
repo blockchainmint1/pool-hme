@@ -17,7 +17,7 @@ until cli getblockchaininfo >/dev/null 2>&1; do sleep 5; done
 
 echo "==> Syncing chain..."
 while :; do
-  info=$(cli getblockchaynfo 2>/dev/null || cli getblockchaininfo)
+  info=$(cli getblockchaininfo 2>/dev/null || cli getblockchaininfo)
   prog=$(echo "$info" | grep -oE '"verificationprogress": *[0-9.]+' | grep -oE '[0-9.]+$')
   height=$(echo "$info" | grep -oE '"blocks": *[0-9]+' | grep -oE '[0-9]+$')
   printf "    height=%s  progress=%s\r" "$height" "$prog"
