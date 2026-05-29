@@ -25,7 +25,6 @@ likes RAM during initial sync. Hetzner CCX13 / DO 4 GB / Vultr HF work fine.
 ## Quick start
 
 ```bash
-```bash
 # On a fresh Ubuntu 22.04 / 24.04 box, as root or with sudo.
 # Replace the URL with your actual repo, or scp the infra/txc-stack folder up.
 git clone https://github.com/YOUR_USER/YOUR_REPO.git
