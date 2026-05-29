@@ -46,7 +46,9 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
     async function pullAll(): Promise<Partial<MempoolFeedSnapshot>> {
       const [tip, blocks, mempool, mempoolBlocks, fees] = await Promise.allSettled([
         esplora.tipHeight(),
-        esplora.recentBlocks(),
+        // v1 includes extras.medianFee / totalFees / pool — needed by the
+        // confirmed-blocks strip. Fall back to the plain endpoint if 404.
+        esplora.blocksV1().catch(() => esplora.recentBlocks()),
         esplora.mempool(),
         esplora.mempoolBlocks(),
         esplora.feesRecommended(),

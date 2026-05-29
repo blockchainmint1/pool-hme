@@ -1,0 +1,12 @@
+# electrs config. Most of the runtime settings are passed via CLI flags in
+# docker-compose.yml — this file is the place for tuning knobs.
+
+log_filters = "INFO"
+index_lookup_limit = 1000
+index_batch_size  = 100
+jsonrpc_timeout_secs = 30
+wait_duration_secs = 5
+
+# Allow large address queries — explorer pages can request a lot of history.
+electrum_txs_limit = 10000
+electrum_rpc_logging = "errors"

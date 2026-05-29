@@ -1,0 +1,129 @@
+# Full self-hosted TXC explorer backend.
+# Frontend points at https://${DOMAIN}/api + wss://${DOMAIN}/api/v1/ws.
+
+services:
+  texitcoind:
+    build:
+      context: ./texitcoind
+      args:
+        GIT_REF: ${TEXITCOIN_GIT_REF:-master}
+    container_name: txc-node
+    restart: unless-stopped
+    volumes:
+      - ./data/texitcoin:/home/txc/.texitcoin
+      - ./texitcoind/texitcoin.conf:/home/txc/.texitcoin/texitcoin.conf:ro
+    environment:
+      RPC_USER: ${RPC_USER}
+      RPC_PASSWORD: ${RPC_PASSWORD}
+    expose:
+      - "8332"   # RPC
+      - "8333"   # P2P (also published below for inbound peers)
+    ports:
+      - "8333:8333"
+    healthcheck:
+      test: ["CMD", "texitcoin-cli", "-rpcuser=${RPC_USER}", "-rpcpassword=${RPC_PASSWORD}", "getblockchaininfo"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+  electrs:
+    image: getumbrel/electrs:v0.10.5
+    container_name: txc-electrs
+    restart: unless-stopped
+    depends_on:
+      texitcoind:
+        condition: service_healthy
+    volumes:
+      - ./data/electrs:/data
+      - ./data/texitcoin:/bitcoin:ro
+      - ./electrs/electrs.toml:/etc/electrs/config.toml:ro
+    command:
+      - --conf=/etc/electrs/config.toml
+      - --daemon-rpc-addr=texitcoind:8332
+      - --daemon-p2p-addr=texitcoind:8333
+      - --network=bitcoin
+      - --db-dir=/data
+      - --electrum-rpc-addr=0.0.0.0:50001
+      - --http-addr=0.0.0.0:3000
+      - --cookie=${RPC_USER}:${RPC_PASSWORD}
+    expose:
+      - "50001"
+      - "3000"
+
+  mempool-db:
+    image: mariadb:11
+    container_name: txc-mempool-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MYSQL_DATABASE}
+      MARIADB_USER: ${MYSQL_USER}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./data/mempool-db:/var/lib/mysql
+    expose:
+      - "3306"
+
+  mempool-api:
+    image: mempool/backend:latest
+    container_name: txc-mempool-api
+    restart: unless-stopped
+    depends_on:
+      - texitcoind
+      - electrs
+      - mempool-db
+    user: "1000:1000"
+    environment:
+      MEMPOOL_BACKEND: "electrum"
+      ELECTRUM_HOST: "electrs"
+      ELECTRUM_PORT: "50001"
+      ELECTRUM_TLS_ENABLED: "false"
+      CORE_RPC_HOST: "texitcoind"
+      CORE_RPC_PORT: "8332"
+      CORE_RPC_USERNAME: ${RPC_USER}
+      CORE_RPC_PASSWORD: ${RPC_PASSWORD}
+      DATABASE_ENABLED: "true"
+      DATABASE_HOST: "mempool-db"
+      DATABASE_DATABASE: ${MYSQL_DATABASE}
+      DATABASE_USERNAME: ${MYSQL_USER}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      STATISTICS_ENABLED: "true"
+      MEMPOOL_NETWORK: "mainnet"
+      MEMPOOL_INDEXING_BLOCKS_AMOUNT: "-1"  # index full chain
+    volumes:
+      - ./mempool/mempool-config.json:/backend/mempool-config.json:ro
+      - ./data/mempool-cache:/backend/cache
+    expose:
+      - "8999"
+
+  nginx:
+    image: nginx:alpine
+    container_name: txc-nginx
+    restart: unless-stopped
+    depends_on:
+      - mempool-api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+      - ./data/certbot/www:/var/www/certbot:ro
+    environment:
+      DOMAIN: ${DOMAIN}
+    command: >
+      /bin/sh -c "envsubst '$$DOMAIN' < /etc/nginx/nginx.conf > /tmp/nginx.conf
+      && exec nginx -c /tmp/nginx.conf -g 'daemon off;'"
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: txc-certbot
+    restart: unless-stopped
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+      sleep 12h & wait $${!}; done"

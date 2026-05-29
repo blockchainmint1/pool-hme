@@ -1,0 +1,39 @@
+{
+  "MEMPOOL": {
+    "NETWORK": "mainnet",
+    "BACKEND": "electrum",
+    "HTTP_PORT": 8999,
+    "API_URL_PREFIX": "/api/v1/",
+    "POLL_RATE_MS": 2000,
+    "CACHE_DIR": "./cache",
+    "INDEXING_BLOCKS_AMOUNT": -1,
+    "BLOCKS_SUMMARIES_INDEXING": true,
+    "AUTOMATIC_BLOCK_REINDEXING": true
+  },
+  "CORE_RPC": {
+    "HOST": "texitcoind",
+    "PORT": 8332,
+    "USERNAME": "__FROM_ENV__",
+    "PASSWORD": "__FROM_ENV__",
+    "TIMEOUT": 60000
+  },
+  "ELECTRUM": {
+    "HOST": "electrs",
+    "PORT": 50001,
+    "TLS_ENABLED": false
+  },
+  "DATABASE": {
+    "ENABLED": true,
+    "HOST": "mempool-db",
+    "PORT": 3306,
+    "DATABASE": "__FROM_ENV__",
+    "USERNAME": "__FROM_ENV__",
+    "PASSWORD": "__FROM_ENV__"
+  },
+  "STATISTICS": {
+    "ENABLED": true,
+    "TX_PER_SECOND_SAMPLE_PERIOD": 150
+  },
+  "SOCKS5PROXY": { "ENABLED": false },
+  "PRICE_DATA_SERVER": { "TOR_URL": "", "CLEARNET_URL": "" }
+}
