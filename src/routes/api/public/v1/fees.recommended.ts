@@ -1,0 +1,12 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { proxy } from "@/lib/api/upstream";
+import { optionsHandler } from "@/lib/api/cors";
+
+export const Route = createFileRoute("/api/public/v1/fees/recommended")({
+  server: {
+    handlers: {
+      OPTIONS: optionsHandler,
+      GET: async () => proxy("/v1/fees/recommended", { cacheSeconds: 15 }),
+    },
+  },
+});

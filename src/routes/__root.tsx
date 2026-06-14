@@ -10,6 +10,7 @@ import {
 
 import appCss from "../styles.css?url";
 import { SearchBar } from "@/components/explorer/SearchBar";
+import { PriceTicker } from "@/components/explorer/PriceTicker";
 
 function NotFoundComponent() {
   return (
@@ -121,6 +122,7 @@ function Header() {
             { to: "/blocks", label: "Blocks" },
             { to: "/mining", label: "Mining" },
             { to: "/graphs", label: "Graphs" },
+            { to: "/docs", label: "API" },
             { to: "/about", label: "About" },
           ].map((l) => (
             <Link
@@ -134,7 +136,8 @@ function Header() {
             </Link>
           ))}
         </nav>
-        <div className="flex-1 flex justify-end">
+        <div className="flex-1 flex justify-end items-center gap-2">
+          <PriceTicker />
           <SearchBar variant="header" />
         </div>
       </div>
