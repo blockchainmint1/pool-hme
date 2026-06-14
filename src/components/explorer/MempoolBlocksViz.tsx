@@ -31,9 +31,10 @@ export function MempoolBlocksViz({ blocks }: Props) {
         const cls = FEE_CLASS[feeBucket(b.medianFee || 1)];
         const filledPct = Math.min(100, (b.blockVSize / 1_000_000) * 100);
         return (
-          <div
+          <Link
             key={i}
-            className="flex-shrink-0 w-36 rounded-md overflow-hidden border border-border shadow-card animate-block-pop"
+            to="/mempool"
+            className="flex-shrink-0 w-36 rounded-md overflow-hidden border border-border shadow-card animate-block-pop hover:border-primary/60 transition-colors"
           >
             <div
               className={cn(
