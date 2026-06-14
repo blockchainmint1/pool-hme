@@ -131,26 +131,26 @@ function AddressPage() {
               <StatTile label="Balance" value={`${satsToTxc(bal.total)} TXC`} hint={bal.unconfirmed !== 0 ? `${satsToTxc(bal.unconfirmed)} pending` : undefined} />
               <StatTile label="Total received" value={`${satsToTxc(info.data.chain_stats.funded_txo_sum)} TXC`} />
               <StatTile label="Transactions" value={formatNumber(info.data.chain_stats.tx_count + info.data.mempool_stats.tx_count)} />
-              <StatTile label="UTXOs" value={utxos.data ? formatNumber(utxos.data.length) : "—"} hint={txs.data?.length ? `last seen ${timeAgo(txs.data[0]?.status.block_time)}` : undefined} />
+              <StatTile label="UTXOs" value={utxos.data ? formatNumber(utxos.data.length) : "—"} hint={allTxs.length ? `last seen ${timeAgo(allTxs[0]?.status.block_time)}` : undefined} />
             </div>
           )}
         </div>
       </div>
 
       {/* BALANCE HISTORY */}
-      {txs.data && txs.data.length > 0 && (
-        <BalanceHistoryChart txs={txs.data} address={addr} />
+      {allTxs.length > 0 && (
+        <BalanceHistoryChart txs={allTxs} address={addr} />
       )}
 
       {/* UTXO BUBBLES + HEATMAP */}
       <div className="grid lg:grid-cols-2 gap-4">
         {utxos.data && <UtxoBubbleChart utxos={utxos.data} tipHeight={tip.data ?? undefined} />}
-        {txs.data && <ActivityHeatmap txs={txs.data} />}
+        {allTxs.length > 0 && <ActivityHeatmap txs={allTxs} />}
       </div>
 
       {/* COUNTERPARTIES */}
-      {txs.data && txs.data.length > 0 && (
-        <CounterpartiesPanel txs={txs.data} address={addr} />
+      {allTxs.length > 0 && (
+        <CounterpartiesPanel txs={allTxs} address={addr} />
       )}
 
       {/* TX LIST */}
@@ -158,6 +158,11 @@ function AddressPage() {
         <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
           <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground">
             Transaction history
+            {info.data && (
+              <span className="ml-2 text-foreground font-mono normal-case tracking-normal">
+                {formatNumber(allTxs.length)} loaded / {formatNumber(info.data.chain_stats.tx_count + info.data.mempool_stats.tx_count)} total
+              </span>
+            )}
           </h2>
           <div className="inline-flex rounded-md border border-border surface-2 p-0.5 text-[11px]">
             {(["all", "received", "sent", "omni", "coinbase"] as Filter[]).map((f) => (
@@ -172,15 +177,31 @@ function AddressPage() {
           </div>
         </div>
         <div className="space-y-2">
-          {txs.isLoading && <div className="text-sm text-muted-foreground">Loading transactions…</div>}
-          {filtered.length === 0 && !txs.isLoading && (
+          {firstPage.isLoading && <div className="text-sm text-muted-foreground">Loading transactions…</div>}
+          {firstPage.isError && (
+            <div className="text-sm text-destructive">
+              Failed to load transactions: {(firstPage.error as Error)?.message}
+            </div>
+          )}
+          {filtered.length === 0 && !firstPage.isLoading && !firstPage.isError && (
             <div className="text-sm text-muted-foreground">No transactions match this filter.</div>
           )}
           {filtered.map((t) => <TxListRow key={t.txid} tx={t} />)}
         </div>
-        {txs.data && txs.data.length >= 25 && (
+        {allTxs.length > 0 && !exhausted && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="px-4 py-2 rounded-md border border-border surface-2 hover:border-primary text-xs font-medium disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load 25 more"}
+            </button>
+          </div>
+        )}
+        {exhausted && allTxs.length >= 25 && (
           <div className="mt-3 text-center text-[11px] text-muted-foreground">
-            Showing most recent {txs.data.length} transactions · use <Link to="/docs" className="text-accent hover:underline">the API</Link> for full pagination.
+            End of history · use <Link to="/docs" className="text-accent hover:underline">the API</Link> for programmatic access.
           </div>
         )}
       </div>
