@@ -130,9 +130,13 @@ export interface PoolRanking {
 }
 
 // ---------- HTTP helpers ----------
+// The backend runs mempool with MEMPOOL_BACKEND=none (no electrs), so the
+// Esplora-compatible bare /api/* routes don't exist — only mempool's native
+// /api/v1/* routes do. Auto-prefix any path that isn't already under /v1.
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${TXC_API_BASE}${path}`);
-  if (!res.ok) throw new Error(`Esplora ${path} → ${res.status}`);
+  const normalized = path.startsWith("/v1/") ? path : `/v1${path}`;
+  const res = await fetch(`${TXC_API_BASE}${normalized}`);
+  if (!res.ok) throw new Error(`API ${normalized} → ${res.status}`);
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json() as Promise<T>;
   const text = await res.text();
