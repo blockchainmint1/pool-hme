@@ -181,12 +181,12 @@ export const esplora = {
       `/tx/${txid}/outspends`,
     ),
 
-  // ---- addresses ----
-  address: (a: string) => get<AddressInfo>(`/address/${a}`),
-  addressUtxos: (a: string) => get<Utxo[]>(`/address/${a}/utxo`),
+  // ---- addresses (routed to electrs-backed legacy host) ----
+  address: (a: string) => getAddr<AddressInfo>(`/address/${a}`),
+  addressUtxos: (a: string) => getAddr<Utxo[]>(`/address/${a}/utxo`),
   addressTxs: (a: string, lastSeenTxid?: string) =>
-    get<Tx[]>(`/address/${a}/txs${lastSeenTxid ? `/chain/${lastSeenTxid}` : ""}`),
-  addressMempool: (a: string) => get<Tx[]>(`/address/${a}/txs/mempool`),
+    getAddr<Tx[]>(`/address/${a}/txs${lastSeenTxid ? `/chain/${lastSeenTxid}` : ""}`),
+  addressMempool: (a: string) => getAddr<Tx[]>(`/address/${a}/txs/mempool`),
 
   // ---- mempool / fees ----
   mempool: () => get<MempoolInfo>("/mempool"),
