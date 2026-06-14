@@ -119,6 +119,7 @@ function Header() {
         <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
           {[
             { to: "/", label: "Dashboard" },
+            { to: "/mempool", label: "Mempool" },
             { to: "/blocks", label: "Blocks" },
             { to: "/mining", label: "Mining" },
             { to: "/graphs", label: "Graphs" },
