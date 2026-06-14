@@ -1,98 +1,66 @@
+# Three-part build: Public API, Live Price, Fun Address Page
 
-# TXC Mempool Explorer — Plan
+## 1) Public API + `/docs` page
 
-## TL;DR
+Stand up a **TXC-flavored** version of the mempool.space REST/WebSocket API, hosted on our explorer at `/api/v1/*`. Routes proxy through to the self-hosted backend at `api.mempool.texitcoin.org` and add TXC-only extras.
 
-You already have all the hard backend infra: a synced TXC node behind a mempool/Esplora-compatible HTTP API at `https://mempool.texitcoin.org/api` (the same API surface mempool.space's frontend talks to). That means this becomes a **frontend project**, not an infra project — fully buildable inside Lovable's normal TanStack Start stack, no node-running, no indexer.
+**New server routes** (under `src/routes/api/public/v1/`, so they're CORS-free for outside callers):
+- `blocks/tip/height`, `blocks/tip/hash`
+- `block/$hash`, `block/$hash/txids`, `block-height/$height`
+- `blocks` (paginated), `blocks/$startHeight`
+- `tx/$txid`, `tx/$txid/status`, `tx/$txid/hex`, `tx/$txid/outspends`
+- `address/$addr`, `address/$addr/utxo`, `address/$addr/txs`
+- `mempool`, `mempool/recent`, `fees/recommended`, `fees/mempool-blocks`
+- `mining/pools/24h|1w|1m`, `difficulty-adjustment`
+- **TXC extras**: `omni/tx/$txid` (decoded Omni payload), `price` (live TXC price + 24h change), `supply` (circulating supply from emission curve)
+- `ws` — thin WebSocket pass-through to the upstream mempool WS, so external apps can subscribe to new blocks/txs/address updates
 
-The build is the full mempool.space feature set, re-skinned in TEXITcoin branding (consistent with TEXITcoin.org, the wallet, etc.), with extra OP_RETURN / Omni-Layer parsing so token activity is first-class.
+All routes: GET-only, CORS `*`, OPTIONS handlers, JSON, 30-60s edge cache where appropriate.
 
-## What it will include
+**New `/docs` route**: a clean, searchable reference page (left sidebar of categories, right pane with endpoint + example curl + example JSON response) styled in the explorer's dark theme. Tabs for **REST** and **WebSocket**.
 
-**Live dashboard (home `/`)**
-- Mempool blocks visualization: colored projected blocks by fee bucket, from `/api/v1/fees/mempool-blocks`
-- Confirmed blocks strip: latest ~8 blocks with height, age, tx count, size, miner pool, fee range
-- Fee gauge: next-block / 30m / 1h recommended sat/vB from `/api/v1/fees/recommended`
-- Stats tiles: tip height, hashrate, difficulty, avg block time, mempool size (count + vsize)
-- Live updates over WebSocket (`wss://mempool.texitcoin.org/api/v1/ws` — falls back to 10s polling if not exposed)
+## 2) Live TXC price (CoinMarketCap)
 
-**Blocks `/blocks` + `/block/$hash`**
-- Paginated block list
-- Block detail: header, miner pool, reward, fee total, fee histogram, full tx list with pagination
+- Add `CMC_API_KEY` secret.
+- New server fn `getTxcPrice` → calls CMC `/v2/cryptocurrency/quotes/latest?symbol=TXC`, caches result for 60s in memory.
+- New `/api/v1/price` public endpoint exposes `{ usd, btc, change24h, marketCap, volume24h, updatedAt }`.
+- New `<PriceTicker>` component pinned in the top nav: TXC/USD with green/red 24h delta.
+- USD values appear next to TXC amounts on the **address** and **tx** pages (toggleable).
 
-**Transactions `/tx/$txid`**
-- Inputs/outputs with addresses, values, prev-tx links
-- Status (confirmed in block X / N confirmations / in mempool with projected block position)
-- Fee, fee rate (sat/vB), vsize, weight
-- RBF status, ancestor/descendant info where API provides it
-- **OP_RETURN decoder panel**: detects the `omni` magic bytes and renders parsed Omni-Layer payloads (Simple Send, Issuance, etc.) with property ID, amount, sender/receiver — based on the format documented at cryptopop.asia/api and imaginenation.com/api. Raw hex fallback for unknown payloads.
+## 3) Supercharged address page
 
-**Addresses `/address/$addr`**
-- Balance (confirmed / unconfirmed), tx count, totals
-- UTXO list and tx history with infinite scroll
-- "Tokens held" summary aggregated from OP_RETURN history (best-effort, client-side decode)
-- QR code, copy buttons
+Rebuild `/address/$addr` into a multi-section dashboard:
 
-**Mining `/mining`**
-- Pool distribution donut (last 24h / 1w / 1m) from `/api/v1/mining/pools/*`
-- Hashrate chart, difficulty adjustment progress and ETA
-- Reward and block-time stats
+1. **Header card** (existing) + new pills: first-seen, last-seen, age, Type badge (P2PKH / P2SH / Multisig / Omni-issuer if detected).
+2. **Balance History chart** — line/area chart (Recharts), computed client-side by walking the address's tx history and summing deltas. Toggle: All vs Last 30 days. USD overlay if price is available.
+3. **UTXO bubble chart** — packed circles sized by sat value, color-graded by age (fresh → aged). Hover = value + height + age. Click = jump to funding tx.
+4. **Activity heatmap** — GitHub-style 12-month grid, one cell per day, intensity = tx count.
+5. **Flow & counterparties** — totals received vs sent, top 5 sending addresses, top 5 receiving addresses (with TXC totals), Omni token holdings if present.
+6. **Tx history list** (existing) moved to the bottom, with sticky filter chips: All / Received / Sent / Omni / Coinbase.
 
-**Charts `/graphs`**
-- Mempool size over time, fee rate over time, block size, tx count per block — from `/api/v1/mining/*` and `/api/v1/statistics/*`
+## Technical details
 
-**Search**
-- Global search bar: detects whether input is a block height, block hash, txid, or TXC address (T-prefix) and routes accordingly
+- Server routes use `createFileRoute(... )({ server: { handlers: { GET, OPTIONS } } })` with shared `CORS_HEADERS` helper at `src/lib/api/cors.ts`.
+- A thin `proxy(path)` helper in `src/lib/api/upstream.ts` fetches from `https://api.mempool.texitcoin.org/api/v1/...` and returns `Response.json(...)` with CORS + cache headers.
+- Charts use the existing `recharts` (already in deps); bubble packing uses `d3-hierarchy` (small, edge-safe).
+- Heatmap is a custom CSS-grid component (no extra dep).
+- Price fetcher is a server fn (keeps CMC key server-side), called from a React Query hook polling every 60s.
+- Docs page content is a single data file (`src/lib/docs/api-spec.ts`) so endpoints stay easy to edit.
 
-**Static**
-- `/about` (what this is, links to wallet, texitcoin.org, the L2 docs)
-- `/api` (proxy of the upstream API reference, plus the OP_RETURN/Omni decoder schema we use)
+## Files (new)
+- `src/lib/api/cors.ts`, `src/lib/api/upstream.ts`
+- `src/routes/api/public/v1/*.ts` (one per endpoint group)
+- `src/routes/docs.tsx`
+- `src/lib/docs/api-spec.ts`
+- `src/lib/txc/price.functions.ts`, `src/components/explorer/PriceTicker.tsx`
+- `src/components/address/BalanceHistoryChart.tsx`
+- `src/components/address/UtxoBubbleChart.tsx`
+- `src/components/address/ActivityHeatmap.tsx`
+- `src/components/address/CounterpartiesPanel.tsx`
 
-## How it's built
+## Out of scope (for this round)
+- Persisting historical price snapshots (we'll just cache live).
+- Authenticated/rate-limited API keys (open public API for now).
+- Mobile-specific layouts beyond what Tailwind responsive utilities already give us.
 
-**Stack** (default Lovable TanStack Start template — no infra changes)
-- TanStack Start v1 + React 19, Vite 7
-- Tailwind v4 with semantic tokens in `src/styles.css`, TEXITcoin palette pulled from the existing TXC projects
-- TanStack Query for data fetching/caching (matches the project template's loader + `useSuspenseQuery` pattern)
-- D3 (`d3-scale`, `d3-shape`) + Recharts for charts; custom SVG for the signature mempool-blocks viz
-- Framer Motion for the block-arrival animation
-- `qrcode.react` for address QR codes
-
-**Data layer** (`src/lib/txc/`)
-- `network.ts` — base URLs, network constants (ported from your wallet project)
-- `esplora.ts` — typed wrapper around `mempool.texitcoin.org/api` (extended beyond your wallet's version: blocks list, block detail, mining endpoints, mempool stats, recent txs, search-by-height/hash)
-- `omni.ts` — OP_RETURN parser. Detects `omni` magic, decodes Simple Send (type 0), Managed Issuance (type 54), Send-All (type 4) etc. per cryptopop.asia spec; returns `{ kind, propertyId, amount, ... }`
-- `ws.ts` — WebSocket client with auto-reconnect + polling fallback; React hook `useMempoolFeed()` that publishes new blocks, mempool deltas, fee updates
-- `format.ts` — sats↔TXC, vsize, time-ago, hash truncation
-
-**Routes** (file-based under `src/routes/`)
-- `index.tsx`, `blocks.tsx`, `block.$hash.tsx`, `tx.$txid.tsx`, `address.$addr.tsx`, `mining.tsx`, `graphs.tsx`, `about.tsx`, `api.tsx`, `$.tsx` (catch-all → search)
-- Each route ships its own `head()` meta (title/description/og) for SEO and share previews
-
-**Component shape**
-- `<MempoolBlocksViz>` (the colored projected-blocks graphic)
-- `<ConfirmedBlocksStrip>`, `<BlockCard>`, `<FeeGauge>`, `<StatsTile>`
-- `<TxFlow>` (input → output visualization), `<OpReturnPanel>`, `<AddressHeader>`
-- `<PoolDonut>`, `<HashrateChart>`, `<DifficultyAdjustment>`
-- `<SearchBar>` (in root header), `<NetworkBadge>` (mainnet only for v1)
-
-**Theming**
-- Pulled from existing TXC projects so this feels native to the Honest Money ecosystem: deep navy + red/orange TEXITcoin accents, monospace for hashes/heights, sharp corners, dense data-dashboard density (not soft consumer-y)
-
-## Risks / open items
-
-1. **WebSocket availability**: I'll detect at runtime. If `wss://mempool.texitcoin.org/api/v1/ws` isn't exposed, polling fallback kicks in transparently. I'll note this in `/about`.
-2. **Mining endpoints**: mempool-backend's `/api/v1/mining/*` may or may not be enabled on the TXC instance. I'll feature-detect and hide the `/mining` page if the endpoints 404. (Easy follow-up: ask the upstream operator to enable them.)
-3. **Omni decoder coverage**: I'll cover the message types documented at cryptopop.asia/api (Simple Send, Issuance variants, Send-All). Anything outside that shows as "Unknown Omni payload type N" + raw hex — easy to extend later as new types appear.
-4. **CORS**: if browser-direct fetches to `mempool.texitcoin.org` get blocked, I'll add a thin TanStack Start server route at `/api/proxy/$` that forwards to the upstream. (Negligible cost; cached at the edge.)
-
-## Out of scope for v1
-
-- Lightning Network (TXC doesn't run LN)
-- Testnet/signet switcher (mainnet only — easy to add later)
-- Accelerator / paid prioritization (mempool.space premium feature, doesn't apply here)
-- Running our own indexer (not needed — upstream API is sufficient)
-
-## Effort
-
-Realistically 1 polished pass to get the dashboard, blocks, tx, address, search, and OP_RETURN decoder shipped and looking sharp. Mining + charts pages are a natural second pass once we confirm which `/api/v1/mining/*` endpoints the upstream exposes.
+Ready to build — shall I go?
