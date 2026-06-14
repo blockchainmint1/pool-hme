@@ -1,11 +1,11 @@
 # TXC explorer backend. Node (texitcoind) runs on the HOST via node-spinner.
 # Frontend points at https://${DOMAIN}/api + wss://${DOMAIN}/api/v1/ws.
 #
-# NOTE: electrs has been removed. Stock romanz/electrs only supports Bitcoin
-# mainnet magic bytes / genesis hash, so it cannot index TexitCoin. The mempool
-# backend runs in bitcoind-only mode (MEMPOOL_BACKEND=none) and talks to the
-# host texitcoind via JSON-RPC. Address-level indexing will require a
-# TexitCoin-patched electrs/esplora later.
+# Address-level indexing is served by our own `txc-indexer` service (see
+# ./indexer/) which walks the chain via texitcoind RPC and exposes
+# Esplora-compatible /address/* endpoints. The mempool backend runs in
+# bitcoind-only mode (MEMPOOL_BACKEND=none) — nginx routes /api/address/*
+# straight to the indexer and everything else to mempool-api.
 
 services:
   mempool-db:
