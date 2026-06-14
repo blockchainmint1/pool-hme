@@ -1,11 +1,11 @@
 # TXC explorer backend. Node (texitcoind) runs on the HOST via node-spinner.
 # Frontend points at https://${DOMAIN}/api + wss://${DOMAIN}/api/v1/ws.
 #
-# NOTE: electrs has been removed. Stock romanz/electrs only supports Bitcoin
-# mainnet magic bytes / genesis hash, so it cannot index TexitCoin. The mempool
-# backend runs in bitcoind-only mode (MEMPOOL_BACKEND=none) and talks to the
-# host texitcoind via JSON-RPC. Address-level indexing will require a
-# TexitCoin-patched electrs/esplora later.
+# Address-level indexing is served by our own `txc-indexer` service (see
+# ./indexer/) which walks the chain via texitcoind RPC and exposes
+# Esplora-compatible /address/* endpoints. The mempool backend runs in
+# bitcoind-only mode (MEMPOOL_BACKEND=none) — nginx routes /api/address/*
+# straight to the indexer and everything else to mempool-api.
 
 services:
   mempool-db:
@@ -56,12 +56,33 @@ services:
     expose:
       - "8999"
 
+  indexer:
+    build: ./indexer
+    image: txc-address-indexer:latest
+    container_name: txc-indexer
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RPC_URL: "http://host.docker.internal:${RPC_PORT}"
+      RPC_USER: "${RPC_USER}"
+      RPC_PASSWORD: "${RPC_PASSWORD}"
+      DB_PATH: "/data/indexer.sqlite"
+      HTTP_PORT: "3001"
+      POLL_MS: "5000"
+      MEMPOOL_REFRESH_MS: "15000"
+    volumes:
+      - ./data/indexer:/data
+    expose:
+      - "3001"
+
   nginx:
     image: nginx:alpine
     container_name: txc-nginx
     restart: unless-stopped
     depends_on:
       - mempool-api
+      - indexer
     ports:
       - "80:80"
       - "443:443"
