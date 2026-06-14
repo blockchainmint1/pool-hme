@@ -130,9 +130,10 @@ export interface PoolRanking {
 }
 
 // ---------- HTTP helpers ----------
-// The backend runs mempool with MEMPOOL_BACKEND=none (no electrs), so the
-// Esplora-compatible bare /api/* routes don't exist — only mempool's native
-// /api/v1/* routes do. Auto-prefix any path that isn't already under /v1.
+// The primary backend (api.mempool.texitcoin.org) runs mempool with
+// MEMPOOL_BACKEND=none — no electrs — so the Esplora-compatible bare /api/*
+// routes don't exist; only mempool's native /api/v1/* routes do. Auto-prefix
+// any path that isn't already under /v1.
 async function get<T>(path: string): Promise<T> {
   const normalized = path.startsWith("/v1/") ? path : `/v1${path}`;
   const res = await fetch(`${TXC_API_BASE}${normalized}`);
@@ -140,10 +141,19 @@ async function get<T>(path: string): Promise<T> {
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json() as Promise<T>;
   const text = await res.text();
-  // numeric endpoints (tip/height) return plain text
   const n = Number(text);
   if (!Number.isNaN(n) && text.trim() !== "") return n as unknown as T;
   return text as unknown as T;
+}
+
+// Address lookups require electrs, which only the legacy explorer host runs.
+// Route those calls there (CORS allows *). Path is the bare Esplora path,
+// e.g. "/address/Txxx" or "/address/Txxx/txs".
+const TXC_ADDR_API_BASE = "https://mempool.texitcoin.org/api";
+async function getAddr<T>(path: string): Promise<T> {
+  const res = await fetch(`${TXC_ADDR_API_BASE}${path}`);
+  if (!res.ok) throw new Error(`Addr API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
 export const esplora = {
@@ -171,12 +181,12 @@ export const esplora = {
       `/tx/${txid}/outspends`,
     ),
 
-  // ---- addresses ----
-  address: (a: string) => get<AddressInfo>(`/address/${a}`),
-  addressUtxos: (a: string) => get<Utxo[]>(`/address/${a}/utxo`),
+  // ---- addresses (routed to electrs-backed legacy host) ----
+  address: (a: string) => getAddr<AddressInfo>(`/address/${a}`),
+  addressUtxos: (a: string) => getAddr<Utxo[]>(`/address/${a}/utxo`),
   addressTxs: (a: string, lastSeenTxid?: string) =>
-    get<Tx[]>(`/address/${a}/txs${lastSeenTxid ? `/chain/${lastSeenTxid}` : ""}`),
-  addressMempool: (a: string) => get<Tx[]>(`/address/${a}/txs/mempool`),
+    getAddr<Tx[]>(`/address/${a}/txs${lastSeenTxid ? `/chain/${lastSeenTxid}` : ""}`),
+  addressMempool: (a: string) => getAddr<Tx[]>(`/address/${a}/txs/mempool`),
 
   // ---- mempool / fees ----
   mempool: () => get<MempoolInfo>("/mempool"),
