@@ -32,6 +32,11 @@ function AddressPage() {
   const info = useQuery({ queryKey: ["mempool", "addr", addr], queryFn: () => esplora.address(addr) });
   const utxos = useQuery({ queryKey: ["mempool", "addr-utxos", addr], queryFn: () => esplora.addressUtxos(addr) });
   const tip = useQuery({ queryKey: ["mempool", "tip-height"], queryFn: () => esplora.tipHeight(), refetchInterval: 30_000 });
+  const indexerStatus = useQuery({
+    queryKey: ["indexer", "status"],
+    queryFn: () => esplora.indexerStatus(),
+    refetchInterval: 15_000,
+  });
 
   // Paginated tx history — esplora returns 25 confirmed + all mempool per page,
   // keyed by the last-seen txid. Some addresses (e.g. coinbase) have thousands.
@@ -92,6 +97,32 @@ function AddressPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      {/* INDEXER SYNC STATUS */}
+      {indexerStatus.data && tip.data && indexerStatus.data.indexed_tip < tip.data - 2 && (() => {
+        const indexed = indexerStatus.data.indexed_tip;
+        const node = tip.data;
+        const pct = Math.min(100, Math.max(0, (indexed / node) * 100));
+        const behind = node - indexed;
+        return (
+          <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <span className="font-semibold text-warning">Indexer catching up</span>
+                <span className="ml-2 text-muted-foreground">
+                  Block {formatNumber(indexed)} / {formatNumber(node)} ({pct.toFixed(1)}%) ·{" "}
+                  {formatNumber(behind)} behind. Transactions in unindexed blocks aren't visible yet.
+                </span>
+              </div>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">auto-refresh</span>
+            </div>
+            <div className="mt-2 h-1.5 w-full rounded-full bg-surface-2 overflow-hidden">
+              <div className="h-full bg-warning transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })()}
+
+
       {/* HEADER */}
       <div className="rounded-md surface border border-border p-5 flex flex-col md:flex-row gap-5">
         <div className="flex-shrink-0 bg-white p-2 rounded-md self-start">

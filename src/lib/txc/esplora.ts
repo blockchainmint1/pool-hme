@@ -193,6 +193,7 @@ export const esplora = {
   addressTxs: (a: string, lastSeenTxid?: string) =>
     getAddr<Tx[]>(`/address/${a}/txs${lastSeenTxid ? `/chain/${lastSeenTxid}` : ""}`),
   addressMempool: (a: string) => getAddr<Tx[]>(`/address/${a}/txs/mempool`),
+  indexerStatus: () => getAddr<{ ok: boolean; indexed_tip: number }>(`/address/_status`),
 
   // ---- mempool / fees ----
   mempool: () => get<MempoolInfo>("/mempool"),

@@ -191,6 +191,12 @@ app.get("/health", async () => ({
   tip: getTipHeight(),
 }));
 
+// GET /address/_status — indexer sync status, reachable via nginx /api/address/_status
+app.get("/address/_status", async () => ({
+  ok: true,
+  indexed_tip: getTipHeight(),
+}));
+
 // GET /address/:addr
 app.get<{ Params: { addr: string } }>("/address/:addr", async ({ params }) => {
   const { addr } = params;
