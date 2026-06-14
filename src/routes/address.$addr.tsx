@@ -32,6 +32,11 @@ function AddressPage() {
   const info = useQuery({ queryKey: ["mempool", "addr", addr], queryFn: () => esplora.address(addr) });
   const utxos = useQuery({ queryKey: ["mempool", "addr-utxos", addr], queryFn: () => esplora.addressUtxos(addr) });
   const tip = useQuery({ queryKey: ["mempool", "tip-height"], queryFn: () => esplora.tipHeight(), refetchInterval: 30_000 });
+  const indexerStatus = useQuery({
+    queryKey: ["indexer", "status"],
+    queryFn: () => esplora.indexerStatus(),
+    refetchInterval: 15_000,
+  });
 
   // Paginated tx history — esplora returns 25 confirmed + all mempool per page,
   // keyed by the last-seen txid. Some addresses (e.g. coinbase) have thousands.
