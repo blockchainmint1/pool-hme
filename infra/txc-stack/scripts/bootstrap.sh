@@ -1,53 +1,71 @@
 #!/usr/bin/env bash
-# One-shot host bootstrap for a fresh Ubuntu 22.04/24.04 VPS.
-# - installs docker + compose plugin
-# - opens 80/443/8333 in ufw
-# - issues the initial Let's Encrypt cert (standalone, then hands off to nginx)
-#
-# Run as root. Idempotent — safe to re-run.
+# One-shot host setup for the TXC mempool stack.
+# Run as root on a fresh Ubuntu 22.04/24.04 box AFTER node-spinner has
+# installed and started texitcoind.
 
 set -euo pipefail
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Run as root (sudo -i)." >&2; exit 1
-fi
-
 cd "$(dirname "$0")/.."
-[[ -f .env ]] || { echo "Create .env first (cp .env.example .env && edit)" >&2; exit 1; }
+
+if [[ ! -f .env ]]; then
+  echo "!! Copy .env.example to .env and edit it first."
+  exit 1
+fi
 # shellcheck disable=SC1091
 source .env
-: "${DOMAIN:?set DOMAIN in .env}"
-: "${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL in .env}"
 
-echo "==> Installing docker"
-if ! command -v docker >/dev/null; then
+# ---------- 1. Docker ----------
+if ! command -v docker >/dev/null 2>&1; then
+  echo "==> Installing Docker..."
   curl -fsSL https://get.docker.com | sh
-  systemctl enable --now docker
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y docker-compose-plugin
 fi
 
-echo "==> Firewall"
-if command -v ufw >/dev/null; then
-  ufw allow 22/tcp  || true
-  ufw allow 80/tcp  || true
-  ufw allow 443/tcp || true
-  ufw allow 8333/tcp || true   # TXC P2P inbound
-  yes | ufw enable || true
+# ---------- 2. Firewall ----------
+if command -v ufw >/dev/null 2>&1; then
+  echo "==> Configuring ufw..."
+  ufw allow OpenSSH      || true
+  ufw allow 80/tcp       || true
+  ufw allow 443/tcp      || true
+  ufw allow "${P2P_PORT}/tcp" || true
+  yes | ufw enable       || true
 fi
 
+# ---------- 3. Verify the host node is reachable ----------
+echo "==> Checking host texitcoind RPC on 127.0.0.1:${RPC_PORT}..."
+if ! curl -fsS --user "${RPC_USER}:${RPC_PASSWORD}" \
+      --data-binary '{"jsonrpc":"1.0","id":"boot","method":"getblockchaininfo","params":[]}' \
+      -H 'content-type: text/plain;' "http://127.0.0.1:${RPC_PORT}/" >/dev/null; then
+  echo "!! Could not reach texitcoind RPC. Make sure node-spinner installed it,"
+  echo "   that systemctl status texitcoind is active, and that texitcoin.conf has:"
+  echo "     rpcbind=0.0.0.0"
+  echo "     rpcallowip=172.17.0.0/16"
+  echo "   (containers use the docker0 bridge to reach the host RPC.)"
+  exit 1
+fi
+echo "    RPC OK"
+
+# ---------- 4. Issue TLS cert standalone (port 80 must be free) ----------
 mkdir -p data/certbot/conf data/certbot/www
-
-echo "==> Issuing initial cert for ${DOMAIN}"
 if [[ ! -d "data/certbot/conf/live/${DOMAIN}" ]]; then
-  docker run --rm \
-    -p 80:80 \
+  echo "==> Issuing Let's Encrypt cert for ${DOMAIN} (standalone)..."
+  docker run --rm -p 80:80 \
     -v "$PWD/data/certbot/conf:/etc/letsencrypt" \
     -v "$PWD/data/certbot/www:/var/www/certbot" \
-    certbot/certbot:latest certonly --standalone \
-      --non-interactive --agree-tos \
-      -m "${LETSENCRYPT_EMAIL}" \
-      -d "${DOMAIN}"
+    certbot/certbot:latest certonly --standalone --non-interactive --agree-tos \
+      -m "${LETSENCRYPT_EMAIL}" -d "${DOMAIN}"
 else
-  echo "    cert already exists, skipping"
+  echo "==> Cert already exists for ${DOMAIN}, skipping."
 fi
 
-echo "==> Done. Next:  docker compose up -d --build"
+# ---------- 5. Up ----------
+echo "==> docker compose up -d"
+docker compose --env-file .env up -d
+
+echo
+echo "All set. Watch logs with:"
+echo "  docker compose logs -f electrs mempool-api nginx"
+echo "Test once electrs is indexed (~30-60min after node sync):"
+echo "  curl https://${DOMAIN}/api/blocks/tip/height"
