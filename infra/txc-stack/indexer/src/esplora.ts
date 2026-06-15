@@ -197,6 +197,63 @@ app.get("/address/_status", async () => ({
   indexed_tip: getTipHeight(),
 }));
 
+// GET /address/_richlist?limit=100 — top N addresses by unspent (confirmed) balance.
+// Cached in-memory for RICHLIST_TTL_MS to keep this cheap even under traffic.
+interface RichlistEntry {
+  address: string;
+  balance: number; // sats
+  utxo_count: number;
+}
+interface RichlistSnapshot {
+  computed_at: number; // unix seconds
+  indexed_tip: number;
+  total_entries: number;
+  entries: RichlistEntry[];
+}
+const RICHLIST_TTL_MS = Number(process.env.RICHLIST_TTL_MS ?? 60_000);
+const RICHLIST_MAX = Number(process.env.RICHLIST_MAX ?? 500);
+let richlistCache: { at: number; snapshot: RichlistSnapshot } | null = null;
+
+function computeRichlist(limit: number): RichlistSnapshot {
+  const rows = db
+    .prepare(
+      `SELECT address, SUM(value) AS balance, COUNT(*) AS utxo_count
+       FROM outputs
+       WHERE spent_txid IS NULL AND address IS NOT NULL
+       GROUP BY address
+       ORDER BY balance DESC
+       LIMIT ?`,
+    )
+    .all(limit) as Array<{ address: string; balance: number; utxo_count: number }>;
+  return {
+    computed_at: Math.floor(Date.now() / 1000),
+    indexed_tip: getTipHeight(),
+    total_entries: rows.length,
+    entries: rows.map((r) => ({
+      address: r.address,
+      balance: r.balance,
+      utxo_count: r.utxo_count,
+    })),
+  };
+}
+
+app.get<{ Querystring: { limit?: string } }>("/address/_richlist", async ({ query }, reply) => {
+  const requested = Math.max(1, Math.min(RICHLIST_MAX, Number(query.limit ?? 100) || 100));
+  const now = Date.now();
+  if (!richlistCache || now - richlistCache.at > RICHLIST_TTL_MS) {
+    richlistCache = { at: now, snapshot: computeRichlist(RICHLIST_MAX) };
+  }
+  const snap = richlistCache.snapshot;
+  reply.header("cache-control", `public, max-age=${Math.floor(RICHLIST_TTL_MS / 1000)}`);
+  return {
+    computed_at: snap.computed_at,
+    indexed_tip: snap.indexed_tip,
+    limit: requested,
+    total_entries: Math.min(requested, snap.entries.length),
+    entries: snap.entries.slice(0, requested),
+  };
+});
+
 // GET /address/:addr
 app.get<{ Params: { addr: string } }>("/address/:addr", async ({ params }) => {
   const { addr } = params;

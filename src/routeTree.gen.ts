@@ -21,6 +21,7 @@ import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
 import { Route as AddressAddrRouteImport } from './routes/address.$addr'
 import { Route as ApiPublicV1SupplyRouteImport } from './routes/api/public/v1/supply'
+import { Route as ApiPublicV1RichlistRouteImport } from './routes/api/public/v1/richlist'
 import { Route as ApiPublicV1PriceRouteImport } from './routes/api/public/v1/price'
 import { Route as ApiPublicV1DifficultyAdjustmentRouteImport } from './routes/api/public/v1/difficulty-adjustment'
 import { Route as ApiPublicV1MempoolIndexRouteImport } from './routes/api/public/v1/mempool.index'
@@ -102,6 +103,11 @@ const AddressAddrRoute = AddressAddrRouteImport.update({
 const ApiPublicV1SupplyRoute = ApiPublicV1SupplyRouteImport.update({
   id: '/api/public/v1/supply',
   path: '/api/public/v1/supply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicV1RichlistRoute = ApiPublicV1RichlistRouteImport.update({
+  id: '/api/public/v1/richlist',
+  path: '/api/public/v1/richlist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicV1PriceRoute = ApiPublicV1PriceRouteImport.update({
@@ -242,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/tx/$txid': typeof TxTxidRoute
   '/api/public/v1/difficulty-adjustment': typeof ApiPublicV1DifficultyAdjustmentRoute
   '/api/public/v1/price': typeof ApiPublicV1PriceRoute
+  '/api/public/v1/richlist': typeof ApiPublicV1RichlistRoute
   '/api/public/v1/supply': typeof ApiPublicV1SupplyRoute
   '/api/public/v1/address/$addr': typeof ApiPublicV1AddressAddrRouteWithChildren
   '/api/public/v1/block-height/$height': typeof ApiPublicV1BlockHeightHeightRoute
@@ -278,6 +285,7 @@ export interface FileRoutesByTo {
   '/tx/$txid': typeof TxTxidRoute
   '/api/public/v1/difficulty-adjustment': typeof ApiPublicV1DifficultyAdjustmentRoute
   '/api/public/v1/price': typeof ApiPublicV1PriceRoute
+  '/api/public/v1/richlist': typeof ApiPublicV1RichlistRoute
   '/api/public/v1/supply': typeof ApiPublicV1SupplyRoute
   '/api/public/v1/address/$addr': typeof ApiPublicV1AddressAddrRouteWithChildren
   '/api/public/v1/block-height/$height': typeof ApiPublicV1BlockHeightHeightRoute
@@ -315,6 +323,7 @@ export interface FileRoutesById {
   '/tx/$txid': typeof TxTxidRoute
   '/api/public/v1/difficulty-adjustment': typeof ApiPublicV1DifficultyAdjustmentRoute
   '/api/public/v1/price': typeof ApiPublicV1PriceRoute
+  '/api/public/v1/richlist': typeof ApiPublicV1RichlistRoute
   '/api/public/v1/supply': typeof ApiPublicV1SupplyRoute
   '/api/public/v1/address/$addr': typeof ApiPublicV1AddressAddrRouteWithChildren
   '/api/public/v1/block-height/$height': typeof ApiPublicV1BlockHeightHeightRoute
@@ -353,6 +362,7 @@ export interface FileRouteTypes {
     | '/tx/$txid'
     | '/api/public/v1/difficulty-adjustment'
     | '/api/public/v1/price'
+    | '/api/public/v1/richlist'
     | '/api/public/v1/supply'
     | '/api/public/v1/address/$addr'
     | '/api/public/v1/block-height/$height'
@@ -389,6 +399,7 @@ export interface FileRouteTypes {
     | '/tx/$txid'
     | '/api/public/v1/difficulty-adjustment'
     | '/api/public/v1/price'
+    | '/api/public/v1/richlist'
     | '/api/public/v1/supply'
     | '/api/public/v1/address/$addr'
     | '/api/public/v1/block-height/$height'
@@ -425,6 +436,7 @@ export interface FileRouteTypes {
     | '/tx/$txid'
     | '/api/public/v1/difficulty-adjustment'
     | '/api/public/v1/price'
+    | '/api/public/v1/richlist'
     | '/api/public/v1/supply'
     | '/api/public/v1/address/$addr'
     | '/api/public/v1/block-height/$height'
@@ -462,6 +474,7 @@ export interface RootRouteChildren {
   TxTxidRoute: typeof TxTxidRoute
   ApiPublicV1DifficultyAdjustmentRoute: typeof ApiPublicV1DifficultyAdjustmentRoute
   ApiPublicV1PriceRoute: typeof ApiPublicV1PriceRoute
+  ApiPublicV1RichlistRoute: typeof ApiPublicV1RichlistRoute
   ApiPublicV1SupplyRoute: typeof ApiPublicV1SupplyRoute
   ApiPublicV1AddressAddrRoute: typeof ApiPublicV1AddressAddrRouteWithChildren
   ApiPublicV1BlockHeightHeightRoute: typeof ApiPublicV1BlockHeightHeightRoute
@@ -563,6 +576,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/v1/supply'
       fullPath: '/api/public/v1/supply'
       preLoaderRoute: typeof ApiPublicV1SupplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/richlist': {
+      id: '/api/public/v1/richlist'
+      path: '/api/public/v1/richlist'
+      fullPath: '/api/public/v1/richlist'
+      preLoaderRoute: typeof ApiPublicV1RichlistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/v1/price': {
@@ -778,6 +798,7 @@ const rootRouteChildren: RootRouteChildren = {
   TxTxidRoute: TxTxidRoute,
   ApiPublicV1DifficultyAdjustmentRoute: ApiPublicV1DifficultyAdjustmentRoute,
   ApiPublicV1PriceRoute: ApiPublicV1PriceRoute,
+  ApiPublicV1RichlistRoute: ApiPublicV1RichlistRoute,
   ApiPublicV1SupplyRoute: ApiPublicV1SupplyRoute,
   ApiPublicV1AddressAddrRoute: ApiPublicV1AddressAddrRouteWithChildren,
   ApiPublicV1BlockHeightHeightRoute: ApiPublicV1BlockHeightHeightRoute,
