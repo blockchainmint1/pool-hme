@@ -15,10 +15,3 @@ export const TXC_NETWORK = {
 export const TXC_API_BASE = "https://api.mempool.texitcoin.org/api";
 export const TXC_WS_URL = "wss://api.mempool.texitcoin.org/api/v1/ws";
 
-// Legacy block explorer — kept around for cross-referencing while the
-// community migrates. Not authoritative; this app is the authoritative UI.
-export const LEGACY_EXPLORER_BASE = "https://mempool.texitcoin.org";
-
-export const legacyExplorerTxUrl = (txid: string) => `${LEGACY_EXPLORER_BASE}/tx/${txid}`;
-export const legacyExplorerAddrUrl = (addr: string) => `${LEGACY_EXPLORER_BASE}/address/${addr}`;
-export const legacyExplorerBlockUrl = (hash: string) => `${LEGACY_EXPLORER_BASE}/block/${hash}`;
