@@ -104,7 +104,7 @@ function MempoolPage() {
           </h3>
           {histogram.length === 0 ? (
             <div className="text-sm text-muted-foreground py-8 text-center">
-              Mempool is empty.
+              {hasMempool ? "Fee histogram unavailable." : "Mempool is empty."}
             </div>
           ) : (
             <div className="flex items-end gap-1 h-40">
