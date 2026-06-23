@@ -264,6 +264,80 @@ app.get<{ Params: { addr: string } }>("/address/:addr", async ({ params }) => {
   };
 });
 
+// GET /address/:addr/balance-history?bucket=day|hour&limit=400
+//
+// Materialises a balance time-series directly from the indexed outputs.
+// For each address we union two event streams:
+//   - credits: (height, +value) for every output paying the address
+//   - debits:  (spent_height, -value) for every output of theirs that's spent
+// We join each event to its block timestamp, bucket by day (default), sum the
+// deltas per bucket, and accumulate into a running balance. This is O(n) over
+// the address's tx history and runs as a single SQL statement.
+//
+// Response: { address, bucket, currentBalance, history: [{ t, balance, delta }] }
+// `t` is unix seconds at the START of each bucket, `balance` is the balance
+// AT THE END of that bucket (so the latest bucket equals currentBalance).
+app.get<{
+  Params: { addr: string };
+  Querystring: { bucket?: string; limit?: string };
+}>("/address/:addr/balance-history", async ({ params, query }) => {
+  const { addr } = params;
+  const bucket = query.bucket === "hour" ? "hour" : "day";
+  const limit = Math.max(10, Math.min(2000, Number(query.limit ?? 400) || 400));
+  const secs = bucket === "hour" ? 3600 : 86400;
+
+  // Per-bucket delta in satoshis. SQLite integer arithmetic — exact.
+  const rows = db
+    .prepare(
+      `WITH events AS (
+         SELECT b.time AS t, o.value AS delta
+           FROM outputs o JOIN blocks b ON b.height = o.height
+          WHERE o.address = ?
+         UNION ALL
+         SELECT b.time AS t, -o.value AS delta
+           FROM outputs o JOIN blocks b ON b.height = o.spent_height
+          WHERE o.address = ? AND o.spent_txid IS NOT NULL
+       )
+       SELECT (t / ?) * ? AS bucket_t, SUM(delta) AS delta
+         FROM events
+        GROUP BY bucket_t
+        ORDER BY bucket_t ASC`,
+    )
+    .all(addr, addr, secs, secs) as Array<{ bucket_t: number; delta: number }>;
+
+  // Running balance.
+  let bal = 0;
+  const full = rows.map((r) => {
+    bal += r.delta;
+    return { t: r.bucket_t, balance: bal, delta: r.delta };
+  });
+  const current = bal;
+
+  // Downsample evenly to `limit` points so the wire payload stays small
+  // even for ancient addresses with thousands of buckets.
+  const history =
+    full.length <= limit
+      ? full
+      : (() => {
+          const step = full.length / limit;
+          const out: typeof full = [];
+          for (let i = 0; i < limit; i++) out.push(full[Math.floor(i * step)]);
+          // Always include the final point so the chart ends at "now".
+          if (out[out.length - 1] !== full[full.length - 1]) out.push(full[full.length - 1]);
+          return out;
+        })();
+
+  return {
+    address: addr,
+    bucket,
+    currentBalance: current,
+    indexedTip: getTipHeight(),
+    computedAt: Math.floor(Date.now() / 1000),
+    points: history.length,
+    history,
+  };
+});
+
 // GET /address/:addr/utxo
 app.get<{ Params: { addr: string } }>("/address/:addr/utxo", async ({ params }) => {
   const rows = db
