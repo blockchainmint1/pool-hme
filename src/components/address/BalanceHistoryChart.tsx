@@ -4,11 +4,15 @@ import type { Tx } from "@/lib/txc/esplora";
 import { satsToTxc } from "@/lib/txc/format";
 
 /**
- * Compute a balance time-series by walking the address's tx history.
- * For each tx, the delta to *this address* = sum of outputs to addr - sum of inputs from addr.
- * We sort ascending by block_time and accumulate.
+ * Build a balance time-series anchored to the address's *current* balance.
+ *
+ * The loaded `txs` are typically a recent page (e.g. 25), not the full
+ * history. Summing deltas from 0 would understate the balance by orders
+ * of magnitude on active addresses. Instead we start from `currentSats`
+ * (= present balance) and walk newest → oldest, subtracting each delta
+ * to recover the historical balance before each tx.
  */
-function buildSeries(txs: Tx[], addr: string) {
+function buildSeries(txs: Tx[], addr: string, currentSats: number) {
   const events: Array<{ t: number; delta: number }> = [];
   for (const tx of txs) {
     const t = tx.status.block_time ?? Math.floor(Date.now() / 1000);
@@ -17,30 +21,58 @@ function buildSeries(txs: Tx[], addr: string) {
     for (const i of tx.vin) if (i.prevout?.scriptpubkey_address === addr) delta -= i.prevout.value;
     if (delta !== 0) events.push({ t, delta });
   }
-  events.sort((a, b) => a.t - b.t);
-  let bal = 0;
-  return events.map((e) => {
-    bal += e.delta;
-    return { t: e.t, balance: bal / 1e8 };
-  });
+  // Newest first — walk back from current balance.
+  events.sort((a, b) => b.t - a.t);
+  const points: Array<{ t: number; balance: number }> = [];
+  let bal = currentSats;
+  // Plot the current balance "now".
+  points.push({ t: Math.floor(Date.now() / 1000), balance: bal / 1e8 });
+  for (const e of events) {
+    // The point AT this tx's time = balance right after it confirmed = current bal.
+    points.push({ t: e.t, balance: bal / 1e8 });
+    // Then step back: before this tx, balance was bal - delta.
+    bal -= e.delta;
+  }
+  // Anchor the start with the pre-history balance.
+  if (events.length > 0) {
+    points.push({ t: events[events.length - 1].t - 1, balance: bal / 1e8 });
+  }
+  return points.sort((a, b) => a.t - b.t);
 }
 
-export function BalanceHistoryChart({ txs, address }: { txs: Tx[]; address: string }) {
+export function BalanceHistoryChart({
+  txs,
+  address,
+  currentSats,
+}: {
+  txs: Tx[];
+  address: string;
+  currentSats: number;
+}) {
   const [range, setRange] = useState<"all" | "30d">("all");
-  const series = useMemo(() => buildSeries(txs, address), [txs, address]);
+  const series = useMemo(() => buildSeries(txs, address, currentSats), [txs, address, currentSats]);
   const data = useMemo(() => {
     if (range === "all") return series;
     const cutoff = Date.now() / 1000 - 30 * 86400;
     return series.filter((p) => p.t >= cutoff);
   }, [series, range]);
 
-  if (series.length === 0) {
+  if (series.length < 2) {
     return (
       <div className="surface-2 border border-border rounded-md p-6 text-sm text-muted-foreground">
         Not enough transaction data to chart balance history.
       </div>
     );
   }
+
+  // Pick tick formatter based on span: short windows show time, longer ones show date.
+  const span = data.length > 1 ? data[data.length - 1].t - data[0].t : 0;
+  const tickFmt = (v: number) => {
+    const d = new Date(v * 1000);
+    if (span < 2 * 86400) return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    if (span < 30 * 86400) return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" });
+  };
 
   return (
     <div className="surface border border-border rounded-md p-4">
