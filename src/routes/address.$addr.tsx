@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { addressBalanceSats, esplora } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
+import { UsdValue } from "@/components/explorer/UsdValue";
 import { TxListRow } from "@/components/explorer/TxListRow";
 import { formatNumber, satsToTxc, timeAgo } from "@/lib/txc/format";
 import { BalanceHistoryChart } from "@/components/address/BalanceHistoryChart";
