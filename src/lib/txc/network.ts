@@ -1,4 +1,4 @@
-// TEXITcoin network constants + mempool/Esplora API endpoints.
+// TEXITcoin network constants + self-hosted API endpoints.
 export const TXC_NETWORK = {
   ticker: "TXC",
   name: "TEXITcoin",
@@ -11,12 +11,14 @@ export const TXC_NETWORK = {
   addressPrefix: "T",
 } as const;
 
-// Self-hosted backend on EC2 (api.mempool.texitcoin.org).
+// Our own backend (mempool-api + custom indexer behind nginx on EC2).
 export const TXC_API_BASE = "https://api.mempool.texitcoin.org/api";
 export const TXC_WS_URL = "wss://api.mempool.texitcoin.org/api/v1/ws";
-// Public-facing explorer hostname (currently the old explorer; will swap to Lovable later).
-export const TXC_EXPLORER_BASE = "https://mempool.texitcoin.org";
 
-export const upstreamTxUrl = (txid: string) => `${TXC_EXPLORER_BASE}/tx/${txid}`;
-export const upstreamAddrUrl = (addr: string) => `${TXC_EXPLORER_BASE}/address/${addr}`;
-export const upstreamBlockUrl = (hash: string) => `${TXC_EXPLORER_BASE}/block/${hash}`;
+// Legacy block explorer — kept around for cross-referencing while the
+// community migrates. Not authoritative; this app is the authoritative UI.
+export const LEGACY_EXPLORER_BASE = "https://mempool.texitcoin.org";
+
+export const legacyExplorerTxUrl = (txid: string) => `${LEGACY_EXPLORER_BASE}/tx/${txid}`;
+export const legacyExplorerAddrUrl = (addr: string) => `${LEGACY_EXPLORER_BASE}/address/${addr}`;
+export const legacyExplorerBlockUrl = (hash: string) => `${LEGACY_EXPLORER_BASE}/block/${hash}`;

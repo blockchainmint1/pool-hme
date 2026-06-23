@@ -4,7 +4,7 @@ import { esplora, txFeeRate } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
 import { TxFlow } from "@/components/explorer/TxFlow";
 import { formatBytes, formatDateTime, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
-import { upstreamTxUrl } from "@/lib/txc/network";
+import { legacyExplorerTxUrl } from "@/lib/txc/network";
 
 export const Route = createFileRoute("/tx/$txid")({
   head: ({ params }) => ({
@@ -66,12 +66,12 @@ function TxPage() {
             </Link>
           )}
           <a
-            href={upstreamTxUrl(txid)}
+            href={legacyExplorerTxUrl(txid)}
             target="_blank"
             rel="noreferrer"
             className="text-xs text-muted-foreground hover:text-foreground ml-auto"
           >
-            view upstream ↗
+            view on legacy explorer ↗
           </a>
         </div>
       </div>
