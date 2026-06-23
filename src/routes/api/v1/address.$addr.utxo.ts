@@ -2,13 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-export const Route = createFileRoute("/api/public/v1/tx/$txid/hex")({
+export const Route = createFileRoute("/api/v1/address/$addr/utxo")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,
       GET: async ({ params }) => {
-        if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return errorResponse("Invalid txid", 400);
-        return proxy(`/v1/tx/${params.txid}/hex`, { cacheSeconds: 60 });
+        if (!/^T[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(params.addr)) return errorResponse("Invalid address", 400);
+        return proxy(`/v1/address/${params.addr}/utxo`, { cacheSeconds: 5 });
       },
     },
   },

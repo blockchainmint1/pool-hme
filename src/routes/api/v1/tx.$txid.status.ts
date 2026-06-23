@@ -2,14 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-export const Route = createFileRoute("/api/public/v1/block-height/$height")({
+export const Route = createFileRoute("/api/v1/tx/$txid/status")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,
       GET: async ({ params }) => {
-        const h = Number(params.height);
-        if (!Number.isFinite(h) || h < 0) return errorResponse("Invalid height", 400);
-        return proxy(`/v1/block-height/${h}`, { cacheSeconds: 60 });
+        if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return errorResponse("Invalid txid", 400);
+        return proxy(`/v1/tx/${params.txid}/status`, { cacheSeconds: 5 });
       },
     },
   },

@@ -2,15 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-function safe(p: string) { return /^[0-9a-fA-F]{64}$/.test(p); }
-
-export const Route = createFileRoute("/api/public/v1/block/$hash")({
+export const Route = createFileRoute("/api/v1/address/$addr/txs")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,
       GET: async ({ params }) => {
-        if (!safe(params.hash)) return errorResponse("Invalid hash", 400);
-        return proxy(`/v1/block/${params.hash}`, { cacheSeconds: 60 });
+        if (!/^T[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(params.addr)) return errorResponse("Invalid address", 400);
+        return proxy(`/v1/address/${params.addr}/txs`, { cacheSeconds: 5 });
       },
     },
   },

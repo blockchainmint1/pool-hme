@@ -4,7 +4,7 @@ import { optionsHandler } from "@/lib/api/cors";
 
 // Top N addresses by confirmed unspent balance.
 // Served by the self-hosted address indexer; cached at the edge for 60s.
-export const Route = createFileRoute("/api/public/v1/richlist")({
+export const Route = createFileRoute("/api/v1/richlist")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { optionsHandler, jsonResponse, errorResponse } from "@/lib/api/cors";
 import { getTxcPrice } from "@/lib/txc/price.functions";
 
-export const Route = createFileRoute("/api/public/v1/price")({
+export const Route = createFileRoute("/api/v1/price")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

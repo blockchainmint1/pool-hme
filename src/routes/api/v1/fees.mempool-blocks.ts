@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler } from "@/lib/api/cors";
 
-export const Route = createFileRoute("/api/public/v1/mempool/")({
+export const Route = createFileRoute("/api/v1/fees/mempool-blocks")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,
-      GET: async () => proxy("/v1/mempool", { cacheSeconds: 5 }),
+      GET: async () => proxy("/v1/fees/mempool-blocks", { cacheSeconds: 15 }),
     },
   },
 });
