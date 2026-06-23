@@ -69,6 +69,8 @@ function Dashboard() {
         </div>
       </section>
 
+      <NetworkDifficultyChart />
+
       {/* Mempool + confirmed strips */}
       <section className="grid lg:grid-cols-2 gap-6">
         <div>
@@ -152,8 +154,6 @@ function Dashboard() {
           </p>
         </div>
       </section>
-
-      <NetworkDifficultyChart />
 
       <RecentTransactions />
     </div>
