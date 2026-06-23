@@ -28,8 +28,21 @@ function MempoolPage() {
     retry: 0,
   });
 
-  const histogram = feed.mempool?.fee_histogram ?? [];
+  // Upstream fee_histogram is sometimes empty even when txs are queued. Fall
+  // back to synthesizing buckets from the projected mempool blocks so the
+  // chart reflects what the "next blocks" tiles show.
+  let histogram: [number, number][] = feed.mempool?.fee_histogram ?? [];
+  if (histogram.length === 0 && feed.mempoolBlocks.length > 0) {
+    const buckets: [number, number][] = [];
+    for (const b of feed.mempoolBlocks) {
+      const range = b.feeRange && b.feeRange.length > 0 ? b.feeRange : [b.medianFee];
+      const per = b.blockVSize / range.length;
+      for (const fee of range) buckets.push([fee, per]);
+    }
+    histogram = buckets.sort((a, z) => a[0] - z[0]);
+  }
   const maxBucketVsize = histogram.reduce((m, [, v]) => Math.max(m, v), 0);
+  const hasMempool = (feed.mempool?.count ?? 0) > 0 || feed.mempoolBlocks.length > 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -91,7 +104,7 @@ function MempoolPage() {
           </h3>
           {histogram.length === 0 ? (
             <div className="text-sm text-muted-foreground py-8 text-center">
-              Mempool is empty.
+              {hasMempool ? "Fee histogram unavailable." : "Mempool is empty."}
             </div>
           ) : (
             <div className="flex items-end gap-1 h-40">
