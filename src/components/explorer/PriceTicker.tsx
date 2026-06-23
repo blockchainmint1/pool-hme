@@ -1,16 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { getTxcPrice } from "@/lib/txc/price.functions";
+import { useTxcPrice } from "@/hooks/use-txc-price";
 
 export function PriceTicker() {
-  const fn = useServerFn(getTxcPrice);
-  const q = useQuery({
-    queryKey: ["txc-price"],
-    queryFn: () => fn(),
-    refetchInterval: 60_000,
-    staleTime: 60_000,
-  });
+  const q = useTxcPrice();
   const p = q.data;
   if (!p) return null;
   const up = p.change24h >= 0;
