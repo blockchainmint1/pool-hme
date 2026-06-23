@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { proxy } from "@/lib/api/upstream";
+import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 const isTxid = (s: string) => /^[0-9a-fA-F]{64}$/.test(s);

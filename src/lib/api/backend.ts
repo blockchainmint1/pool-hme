@@ -1,25 +1,27 @@
 import { CORS_HEADERS, errorResponse } from "./cors";
 
-const UPSTREAM = "https://api.mempool.texitcoin.org/api";
+// Our self-hosted TXC backend (mempool-api + custom indexer + nginx)
+// running on EC2. Same infrastructure that serves the WebSocket and the
+// raw mempool REST API. We proxy through here so the public /api/public/v1
+// surface gets consistent CORS, edge caching, and a stable URL even if
+// the backend hostname ever changes.
+const BACKEND_URL = "https://api.mempool.texitcoin.org/api";
 
 /**
- * Proxy a GET to the upstream mempool backend and forward the body back to the
- * client with our public CORS headers + a short edge cache. Passes through
+ * Proxy a GET to the TXC backend and forward the body back to the client
+ * with our public CORS headers + a short edge cache. Passes through
  * Content-Type so numeric endpoints (e.g. tip/height) stay plain-text.
  */
 export async function proxy(
-  upstreamPath: string,
+  path: string,
   opts: { cacheSeconds?: number } = {},
 ): Promise<Response> {
-  const url = `${UPSTREAM}${upstreamPath}`;
+  const url = `${BACKEND_URL}${path}`;
   let res: Response;
   try {
     res = await fetch(url, { headers: { Accept: "application/json, text/plain, */*" } });
   } catch (e) {
-    return errorResponse(
-      `Upstream fetch failed: ${(e as Error).message}`,
-      502,
-    );
+    return errorResponse(`Backend fetch failed: ${(e as Error).message}`, 502);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");

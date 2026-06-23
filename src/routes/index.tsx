@@ -7,6 +7,7 @@ import { ConfirmedBlocksStrip } from "@/components/explorer/ConfirmedBlocksStrip
 import { FeeGauge } from "@/components/explorer/FeeGauge";
 import { StatTile } from "@/components/explorer/StatTile";
 import { SearchBar } from "@/components/explorer/SearchBar";
+import { NetworkDifficultyChart } from "@/components/explorer/NetworkDifficultyChart";
 import { formatBytes, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
 import { Activity, Clock, Zap } from "lucide-react";
 
@@ -151,6 +152,8 @@ function Dashboard() {
           </p>
         </div>
       </section>
+
+      <NetworkDifficultyChart />
 
       <RecentTransactions />
     </div>

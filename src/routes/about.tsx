@@ -27,12 +27,13 @@ function AboutPage() {
 
       <h2 className="font-display text-2xl mt-8 mb-3">Where the data comes from</h2>
       <p className="text-muted-foreground leading-relaxed">
-        Everything is read live from{" "}
-        <code className="font-mono text-foreground">mempool.texitcoin.org/api</code>,
-        which is a mempool.space backend pointed at a fully-synced TXC node
-        (Litecoin-fork, Scrypt PoW, 3-min target). When available, this UI
-        subscribes to the upstream WebSocket at{" "}
-        <code className="font-mono text-foreground">wss://mempool.texitcoin.org/api/v1/ws</code>{" "}
+        Everything is read live from our own infrastructure at{" "}
+        <code className="font-mono text-foreground">api.mempool.texitcoin.org</code>:
+        a fully-synced TXC node (Litecoin-fork, Scrypt PoW, 3-min target), a
+        custom Esplora-compatible address indexer, and the mempool backend on
+        top — all self-hosted, no third parties in the path. When available,
+        this UI subscribes to the WebSocket at{" "}
+        <code className="font-mono text-foreground">wss://api.mempool.texitcoin.org/api/v1/ws</code>{" "}
         for live updates; otherwise it polls every 10 seconds. The status pill
         in the dashboard hero tells you which mode you're in.
       </p>
@@ -63,7 +64,7 @@ function AboutPage() {
       <ul className="list-disc pl-6 space-y-1 text-muted-foreground text-sm">
         <li><a href="https://texitcoin.org" className="text-primary hover:underline" target="_blank" rel="noreferrer">texitcoin.org</a> — chain home</li>
         <li><a href="https://honest.money" className="text-primary hover:underline" target="_blank" rel="noreferrer">honest.money</a> — the umbrella ecosystem</li>
-        <li><a href="https://mempool.texitcoin.org" className="text-primary hover:underline" target="_blank" rel="noreferrer">mempool.texitcoin.org</a> — upstream explorer / API source</li>
+        <li><a href="https://api.mempool.texitcoin.org" className="text-primary hover:underline" target="_blank" rel="noreferrer">api.mempool.texitcoin.org</a> — public REST + WebSocket API</li>
         <li><a href="https://explorer.texitcoin.org" className="text-primary hover:underline" target="_blank" rel="noreferrer">explorer.texitcoin.org</a> — classic block explorer</li>
       </ul>
 

@@ -42,8 +42,13 @@ function MiningPage() {
 
       {unavailable && (
         <div className="rounded-md border border-border surface-2 p-6 text-sm text-muted-foreground">
-          The upstream mempool backend doesn't expose <span className="font-mono">/v1/mining/*</span>{" "}
-          for this TXC instance yet. Once those endpoints are enabled, this page will populate automatically.
+          The mempool backend's <span className="font-mono">/v1/mining/*</span>{" "}
+          endpoints aren't populated for this chain yet. Once pool indexing
+          finishes, this page will populate automatically. In the meantime see{" "}
+          <a href="/api/public/v1/mining/hashrate?window=1m" className="text-primary hover:underline">
+            /api/public/v1/mining/hashrate
+          </a>{" "}
+          for the locally-computed network hashrate.
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { proxy } from "@/lib/api/upstream";
+import { proxy } from "@/lib/api/backend";
 import { optionsHandler } from "@/lib/api/cors";
 
 // Top N addresses by confirmed unspent balance.

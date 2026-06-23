@@ -28,6 +28,7 @@ import { Route as ApiPublicV1DifficultyAdjustmentRouteImport } from './routes/ap
 import { Route as ApiPublicV1MempoolIndexRouteImport } from './routes/api/public/v1/mempool.index'
 import { Route as ApiPublicV1BlocksIndexRouteImport } from './routes/api/public/v1/blocks.index'
 import { Route as ApiPublicV1TxTxidRouteImport } from './routes/api/public/v1/tx.$txid'
+import { Route as ApiPublicV1MiningHashrateRouteImport } from './routes/api/public/v1/mining.hashrate'
 import { Route as ApiPublicV1MempoolRecentRouteImport } from './routes/api/public/v1/mempool.recent'
 import { Route as ApiPublicV1FeesRecommendedRouteImport } from './routes/api/public/v1/fees.recommended'
 import { Route as ApiPublicV1FeesMempoolBlocksRouteImport } from './routes/api/public/v1/fees.mempool-blocks'
@@ -142,6 +143,12 @@ const ApiPublicV1TxTxidRoute = ApiPublicV1TxTxidRouteImport.update({
   path: '/api/public/v1/tx/$txid',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicV1MiningHashrateRoute =
+  ApiPublicV1MiningHashrateRouteImport.update({
+    id: '/api/public/v1/mining/hashrate',
+    path: '/api/public/v1/mining/hashrate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicV1MempoolRecentRoute =
   ApiPublicV1MempoolRecentRouteImport.update({
     id: '/api/public/v1/mempool/recent',
@@ -264,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/api/public/v1/fees/mempool-blocks': typeof ApiPublicV1FeesMempoolBlocksRoute
   '/api/public/v1/fees/recommended': typeof ApiPublicV1FeesRecommendedRoute
   '/api/public/v1/mempool/recent': typeof ApiPublicV1MempoolRecentRoute
+  '/api/public/v1/mining/hashrate': typeof ApiPublicV1MiningHashrateRoute
   '/api/public/v1/tx/$txid': typeof ApiPublicV1TxTxidRouteWithChildren
   '/api/public/v1/blocks/': typeof ApiPublicV1BlocksIndexRoute
   '/api/public/v1/mempool/': typeof ApiPublicV1MempoolIndexRoute
@@ -302,6 +310,7 @@ export interface FileRoutesByTo {
   '/api/public/v1/fees/mempool-blocks': typeof ApiPublicV1FeesMempoolBlocksRoute
   '/api/public/v1/fees/recommended': typeof ApiPublicV1FeesRecommendedRoute
   '/api/public/v1/mempool/recent': typeof ApiPublicV1MempoolRecentRoute
+  '/api/public/v1/mining/hashrate': typeof ApiPublicV1MiningHashrateRoute
   '/api/public/v1/tx/$txid': typeof ApiPublicV1TxTxidRouteWithChildren
   '/api/public/v1/blocks': typeof ApiPublicV1BlocksIndexRoute
   '/api/public/v1/mempool': typeof ApiPublicV1MempoolIndexRoute
@@ -341,6 +350,7 @@ export interface FileRoutesById {
   '/api/public/v1/fees/mempool-blocks': typeof ApiPublicV1FeesMempoolBlocksRoute
   '/api/public/v1/fees/recommended': typeof ApiPublicV1FeesRecommendedRoute
   '/api/public/v1/mempool/recent': typeof ApiPublicV1MempoolRecentRoute
+  '/api/public/v1/mining/hashrate': typeof ApiPublicV1MiningHashrateRoute
   '/api/public/v1/tx/$txid': typeof ApiPublicV1TxTxidRouteWithChildren
   '/api/public/v1/blocks/': typeof ApiPublicV1BlocksIndexRoute
   '/api/public/v1/mempool/': typeof ApiPublicV1MempoolIndexRoute
@@ -381,6 +391,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/fees/mempool-blocks'
     | '/api/public/v1/fees/recommended'
     | '/api/public/v1/mempool/recent'
+    | '/api/public/v1/mining/hashrate'
     | '/api/public/v1/tx/$txid'
     | '/api/public/v1/blocks/'
     | '/api/public/v1/mempool/'
@@ -419,6 +430,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/fees/mempool-blocks'
     | '/api/public/v1/fees/recommended'
     | '/api/public/v1/mempool/recent'
+    | '/api/public/v1/mining/hashrate'
     | '/api/public/v1/tx/$txid'
     | '/api/public/v1/blocks'
     | '/api/public/v1/mempool'
@@ -457,6 +469,7 @@ export interface FileRouteTypes {
     | '/api/public/v1/fees/mempool-blocks'
     | '/api/public/v1/fees/recommended'
     | '/api/public/v1/mempool/recent'
+    | '/api/public/v1/mining/hashrate'
     | '/api/public/v1/tx/$txid'
     | '/api/public/v1/blocks/'
     | '/api/public/v1/mempool/'
@@ -496,6 +509,7 @@ export interface RootRouteChildren {
   ApiPublicV1FeesMempoolBlocksRoute: typeof ApiPublicV1FeesMempoolBlocksRoute
   ApiPublicV1FeesRecommendedRoute: typeof ApiPublicV1FeesRecommendedRoute
   ApiPublicV1MempoolRecentRoute: typeof ApiPublicV1MempoolRecentRoute
+  ApiPublicV1MiningHashrateRoute: typeof ApiPublicV1MiningHashrateRoute
   ApiPublicV1TxTxidRoute: typeof ApiPublicV1TxTxidRouteWithChildren
   ApiPublicV1BlocksIndexRoute: typeof ApiPublicV1BlocksIndexRoute
   ApiPublicV1MempoolIndexRoute: typeof ApiPublicV1MempoolIndexRoute
@@ -638,6 +652,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/v1/tx/$txid'
       fullPath: '/api/public/v1/tx/$txid'
       preLoaderRoute: typeof ApiPublicV1TxTxidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/v1/mining/hashrate': {
+      id: '/api/public/v1/mining/hashrate'
+      path: '/api/public/v1/mining/hashrate'
+      fullPath: '/api/public/v1/mining/hashrate'
+      preLoaderRoute: typeof ApiPublicV1MiningHashrateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/v1/mempool/recent': {
@@ -828,6 +849,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicV1FeesMempoolBlocksRoute: ApiPublicV1FeesMempoolBlocksRoute,
   ApiPublicV1FeesRecommendedRoute: ApiPublicV1FeesRecommendedRoute,
   ApiPublicV1MempoolRecentRoute: ApiPublicV1MempoolRecentRoute,
+  ApiPublicV1MiningHashrateRoute: ApiPublicV1MiningHashrateRoute,
   ApiPublicV1TxTxidRoute: ApiPublicV1TxTxidRouteWithChildren,
   ApiPublicV1BlocksIndexRoute: ApiPublicV1BlocksIndexRoute,
   ApiPublicV1MempoolIndexRoute: ApiPublicV1MempoolIndexRoute,
@@ -839,13 +861,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

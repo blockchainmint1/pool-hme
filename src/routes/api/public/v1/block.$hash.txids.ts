@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { proxy } from "@/lib/api/upstream";
+import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 export const Route = createFileRoute("/api/public/v1/block/$hash/txids")({

@@ -130,10 +130,11 @@ export interface PoolRanking {
 }
 
 // ---------- HTTP helpers ----------
-// The primary backend (api.mempool.texitcoin.org) runs mempool with
-// MEMPOOL_BACKEND=none — no electrs — so the Esplora-compatible bare /api/*
-// routes don't exist; only mempool's native /api/v1/* routes do. Auto-prefix
-// any path that isn't already under /v1.
+// The backend (api.mempool.texitcoin.org) is our own self-hosted mempool
+// instance running with MEMPOOL_BACKEND=none. The Esplora-compatible bare
+// /api/* routes are handled by our own address indexer (see
+// infra/txc-stack/indexer); mempool.space's native /api/v1/* routes are
+// served by mempool-api. Auto-prefix any path that isn't already under /v1.
 async function get<T>(path: string): Promise<T> {
   const normalized = path.startsWith("/v1/") ? path : `/v1${path}`;
   const res = await fetch(`${TXC_API_BASE}${normalized}`);
@@ -146,18 +147,13 @@ async function get<T>(path: string): Promise<T> {
   return text as unknown as T;
 }
 
-// Address lookups require an Esplora-compatible index (electrs / mempool-electrs).
-// These live at the bare /address/... paths on the same host once the backend
-// is configured with MEMPOOL_BACKEND=electrum (or =esplora).
+// Address lookups are served by our custom indexer behind the same nginx —
+// no electrs in the stack.
 async function getAddr<T>(path: string): Promise<T> {
   const res = await fetch(`${TXC_API_BASE}${path}`);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(
-      res.status === 405 && body.includes("bitcoind as backend")
-        ? "Backend has no address index (MEMPOOL_BACKEND=none). Enable electrs to serve address lookups."
-        : `Addr API ${path} → ${res.status}`,
-    );
+    throw new Error(`Addr API ${path} → ${res.status}${body ? `: ${body.slice(0, 120)}` : ""}`);
   }
   return res.json() as Promise<T>;
 }
@@ -187,7 +183,7 @@ export const esplora = {
       `/tx/${txid}/outspends`,
     ),
 
-  // ---- addresses (routed to electrs-backed legacy host) ----
+  // ---- addresses (served by the custom TXC indexer) ----
   address: (a: string) => getAddr<AddressInfo>(`/address/${a}`),
   addressUtxos: (a: string) => getAddr<Utxo[]>(`/address/${a}/utxo`),
   addressTxs: (a: string, lastSeenTxid?: string) =>

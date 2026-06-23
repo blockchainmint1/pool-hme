@@ -72,6 +72,9 @@ export const REST_GROUPS: EndpointGroup[] = [
       { method: "GET", path: "/api/v1/mining/pools/1w", summary: "Pool block share over the last 7 days." },
       { method: "GET", path: "/api/v1/mining/pools/1m", summary: "Pool block share over the last 30 days." },
       { method: "GET", path: "/api/v1/difficulty-adjustment", summary: "Progress and ETA to the next retarget." },
+      { method: "GET", path: "/api/public/v1/mining/hashrate?window=1w",
+        summary: "Network hashrate + difficulty time series, computed locally from block headers. window = 1d | 1w | 1m | 3m | 1y. Same formula mempool uses internally: difficulty × 2³² ÷ avg_block_time. Edge-cached.",
+        example: `{\n  "window": "1w",\n  "tipHeight": 316395,\n  "computedAt": 1782205885,\n  "currentHashrate": 19834217856.42,\n  "currentDifficulty": 276448.15,\n  "hashrates": [\n    { "timestamp": 1781601085, "avgHashrate": 18910223104.1 }\n  ],\n  "difficulty": [\n    { "timestamp": 1781601085, "difficulty": 268914.7, "height": 313035 }\n  ],\n  "formula": "hashrate = difficulty * 2^32 / avg_block_time_sec",\n  "sampleSizePerPoint": 15\n}` },
     ],
   },
   {

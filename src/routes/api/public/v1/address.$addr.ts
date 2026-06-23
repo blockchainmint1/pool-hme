@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { proxy } from "@/lib/api/upstream";
+import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 const isAddr = (a: string) => /^T[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a);

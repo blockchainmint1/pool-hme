@@ -159,8 +159,8 @@ function Footer() {
         <div>
           <div className="font-display tracking-wide mb-2">TXC.MEMPOOL</div>
           <div className="text-xs text-muted-foreground">
-            Live block explorer for the TEXITcoin chain. Built on the upstream
-            mempool/Esplora API at <span className="font-mono">mempool.texitcoin.org</span>.
+            Live block explorer for the TEXITcoin chain. Self-hosted node +
+            indexer + mempool backend — fully independent infrastructure.
           </div>
         </div>
         <div>

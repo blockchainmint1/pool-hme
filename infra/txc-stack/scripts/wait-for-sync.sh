@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Polls texitcoind until verificationprogress >= 0.9999, then reports
-# electrs + mempool-api health. Run after `docker compose up -d`.
+# indexer + mempool-api health. Run after `docker compose up -d`.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -26,11 +26,11 @@ while :; do
 done
 echo "==> Node synced at block $height"
 
-echo "==> Waiting for electrs http..."
-until docker compose exec -T electrs wget -qO- http://localhost:3000/blocks/tip/height >/dev/null 2>&1; do
+echo "==> Waiting for address indexer..."
+until docker compose exec -T indexer node -e "fetch('http://127.0.0.1:3001/address/_status').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))" >/dev/null 2>&1; do
   sleep 10
 done
-echo "==> electrs ready"
+echo "==> indexer ready"
 
 echo "==> Waiting for mempool backend..."
 until docker compose exec -T mempool-api wget -qO- http://localhost:8999/api/blocks/tip/height >/dev/null 2>&1; do
@@ -41,3 +41,4 @@ echo "==> mempool backend ready"
 echo
 echo "All green. Test from your laptop:"
 echo "  curl https://${DOMAIN}/api/blocks/tip/height"
+echo "  curl https://${DOMAIN}/api/address/_status"

@@ -7,7 +7,7 @@ import { addressBalanceSats, esplora } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
 import { TxListRow } from "@/components/explorer/TxListRow";
 import { formatNumber, satsToTxc, timeAgo } from "@/lib/txc/format";
-import { upstreamAddrUrl } from "@/lib/txc/network";
+import { legacyExplorerAddrUrl } from "@/lib/txc/network";
 import { BalanceHistoryChart } from "@/components/address/BalanceHistoryChart";
 import { UtxoBubbleChart } from "@/components/address/UtxoBubbleChart";
 import { ActivityHeatmap } from "@/components/address/ActivityHeatmap";
@@ -140,12 +140,12 @@ function AddressPage() {
               {copied ? "Copied" : "Copy"}
             </button>
             <a
-              href={upstreamAddrUrl(addr)}
+              href={legacyExplorerAddrUrl(addr)}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-surface-2 border border-border text-xs hover:border-primary"
             >
-              <ExternalLink className="size-3" /> upstream
+              <ExternalLink className="size-3" /> legacy
             </a>
             <span className="px-1.5 py-0.5 rounded-sm bg-accent/20 text-accent text-[10px] uppercase font-semibold">{addrType}</span>
             {info.data && info.data.mempool_stats.tx_count > 0 && (
