@@ -6,7 +6,7 @@ interface RawTx {
   vout: Array<{ scriptpubkey: string; scriptpubkey_type?: string }>;
 }
 
-export const Route = createFileRoute("/api/public/v1/omni/tx/$txid")({
+export const Route = createFileRoute("/api/v1/omni/tx/$txid")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

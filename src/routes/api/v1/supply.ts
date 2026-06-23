@@ -17,7 +17,7 @@ function circulatingAtHeight(height: number): number {
   return total;
 }
 
-export const Route = createFileRoute("/api/public/v1/supply")({
+export const Route = createFileRoute("/api/v1/supply")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

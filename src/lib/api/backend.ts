@@ -2,7 +2,7 @@ import { CORS_HEADERS, errorResponse } from "./cors";
 
 // Our self-hosted TXC backend (mempool-api + custom indexer + nginx)
 // running on EC2. Same infrastructure that serves the WebSocket and the
-// raw mempool REST API. We proxy through here so the public /api/public/v1
+// raw mempool REST API. We proxy through here so the public /api/v1
 // surface gets consistent CORS, edge caching, and a stable URL even if
 // the backend hostname ever changes.
 const BACKEND_URL = "https://api.mempool.texitcoin.org/api";

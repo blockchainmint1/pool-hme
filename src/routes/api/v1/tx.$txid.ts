@@ -4,7 +4,7 @@ import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 const isTxid = (s: string) => /^[0-9a-fA-F]{64}$/.test(s);
 
-export const Route = createFileRoute("/api/public/v1/tx/$txid")({
+export const Route = createFileRoute("/api/v1/tx/$txid")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

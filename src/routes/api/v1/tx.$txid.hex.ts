@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-export const Route = createFileRoute("/api/public/v1/tx/$txid/hex")({
+export const Route = createFileRoute("/api/v1/tx/$txid/hex")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

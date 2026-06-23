@@ -42,7 +42,7 @@ export function NetworkDifficultyChart() {
   const q = useQuery({
     queryKey: ["network-hashrate", win],
     queryFn: async (): Promise<HashrateResponse> => {
-      const res = await fetch(`/api/public/v1/mining/hashrate?window=${win}`);
+      const res = await fetch(`/api/v1/mining/hashrate?window=${win}`);
       if (!res.ok) throw new Error(`hashrate ${res.status}`);
       return res.json();
     },

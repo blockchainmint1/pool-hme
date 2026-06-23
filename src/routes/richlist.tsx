@@ -41,7 +41,7 @@ function RichlistPage() {
   const { data, isLoading, error } = useQuery<RichlistResponse>({
     queryKey: ["richlist", 100],
     queryFn: async () => {
-      const r = await fetch("/api/public/v1/richlist?limit=100");
+      const r = await fetch("/api/v1/richlist?limit=100");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     },
@@ -122,7 +122,7 @@ function RichlistPage() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Powered by the open <Link to="/docs" className="text-accent hover:underline">/api/public/v1/richlist</Link> endpoint —
+        Powered by the open <Link to="/docs" className="text-accent hover:underline">/api/v1/richlist</Link> endpoint —
         free for anyone to use.
       </p>
     </div>

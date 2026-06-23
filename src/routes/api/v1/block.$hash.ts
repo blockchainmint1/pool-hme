@@ -4,7 +4,7 @@ import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 function safe(p: string) { return /^[0-9a-fA-F]{64}$/.test(p); }
 
-export const Route = createFileRoute("/api/public/v1/block/$hash")({
+export const Route = createFileRoute("/api/v1/block/$hash")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

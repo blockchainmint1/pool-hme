@@ -4,7 +4,7 @@ import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
 const isAddr = (a: string) => /^T[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(a);
 
-export const Route = createFileRoute("/api/public/v1/address/$addr")({
+export const Route = createFileRoute("/api/v1/address/$addr")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,

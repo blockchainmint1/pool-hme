@@ -64,7 +64,7 @@ async function mapWithConcurrency<T, U>(
   return out;
 }
 
-export const Route = createFileRoute("/api/public/v1/mining/hashrate")({
+export const Route = createFileRoute("/api/v1/mining/hashrate")({
   server: {
     handlers: {
       OPTIONS: optionsHandler,
