@@ -33,7 +33,8 @@ export function MempoolBlocksViz({ blocks }: Props) {
         return (
           <Link
             key={i}
-            to="/mempool"
+            to="/mempool/block/$index"
+            params={{ index: String(i) }}
             className="flex-shrink-0 w-36 rounded-md overflow-hidden border border-border shadow-card animate-block-pop hover:border-primary/60 transition-colors"
           >
             <div
