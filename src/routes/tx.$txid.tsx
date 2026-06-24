@@ -90,7 +90,9 @@ function TxPage() {
         />
       </div>
 
+      <TxFlowDiagram tx={t} />
       <TxFlow tx={t} />
+
     </div>
   );
 }
