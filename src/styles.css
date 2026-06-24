@@ -168,6 +168,12 @@
   .text-fee-4 { color: var(--color-fee-4); }
   .text-fee-5 { color: var(--color-fee-5); }
   .text-fee-6 { color: var(--color-fee-6); }
+  .fill-fee-1 { fill: var(--color-fee-1); }
+  .fill-fee-2 { fill: var(--color-fee-2); }
+  .fill-fee-3 { fill: var(--color-fee-3); }
+  .fill-fee-4 { fill: var(--color-fee-4); }
+  .fill-fee-5 { fill: var(--color-fee-5); }
+  .fill-fee-6 { fill: var(--color-fee-6); }
 
   @keyframes block-pop {
     0% { transform: scale(0.85); opacity: 0; }
