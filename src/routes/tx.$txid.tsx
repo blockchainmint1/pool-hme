@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { esplora, txFeeRate } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
 import { TxFlow } from "@/components/explorer/TxFlow";
+import { TxFlowDiagram } from "@/components/explorer/TxFlowDiagram";
 import { UsdValue } from "@/components/explorer/UsdValue";
 import { formatBytes, formatDateTime, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
 
@@ -89,7 +90,9 @@ function TxPage() {
         />
       </div>
 
+      <TxFlowDiagram tx={t} />
       <TxFlow tx={t} />
+
     </div>
   );
 }
