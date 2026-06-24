@@ -83,11 +83,13 @@ function BlockVizPage() {
 
   const layout = useMemo(() => {
     if (!blockTxs.length) return [];
-    const root = hierarchy<{ children?: Tx[]; tx?: Tx }>({ children: blockTxs.map((tx) => ({ tx })) })
+    type Node = { children?: Node[]; tx?: Tx };
+    const root = hierarchy<Node>({ children: blockTxs.map((tx) => ({ tx })) })
       .sum((d) => (d.tx ? Math.max(1, d.tx.vsize) : 0))
       .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    treemap<{ tx?: Tx }>().size([width, height]).tile(treemapSquarify).paddingInner(1)(root);
-    return root.leaves().map((n) => ({
+    const tm = treemap<Node>().size([width, height]).tile(treemapSquarify).paddingInner(1);
+    const laid = tm(root);
+    return laid.leaves().map((n) => ({
       tx: n.data.tx!,
       x: n.x0,
       y: n.y0,

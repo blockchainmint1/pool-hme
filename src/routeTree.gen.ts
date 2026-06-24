@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
 import { Route as AddressAddrRouteImport } from './routes/address.$addr'
+import { Route as MempoolBlockIndexRouteImport } from './routes/mempool.block.$index'
 import { Route as ApiV1SupplyRouteImport } from './routes/api/v1/supply'
 import { Route as ApiV1RichlistRouteImport } from './routes/api/v1/richlist'
 import { Route as ApiV1PriceRouteImport } from './routes/api/v1/price'
@@ -107,6 +108,11 @@ const AddressAddrRoute = AddressAddrRouteImport.update({
   id: '/address/$addr',
   path: '/address/$addr',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MempoolBlockIndexRoute = MempoolBlockIndexRouteImport.update({
+  id: '/block/$index',
+  path: '/block/$index',
+  getParentRoute: () => MempoolRoute,
 } as any)
 const ApiV1SupplyRoute = ApiV1SupplyRouteImport.update({
   id: '/api/v1/supply',
@@ -248,7 +254,7 @@ export interface FileRoutesByFullPath {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
-  '/mempool': typeof MempoolRoute
+  '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -258,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
+  '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -288,7 +295,7 @@ export interface FileRoutesByTo {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
-  '/mempool': typeof MempoolRoute
+  '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -298,6 +305,7 @@ export interface FileRoutesByTo {
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
+  '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -329,7 +337,7 @@ export interface FileRoutesById {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
-  '/mempool': typeof MempoolRoute
+  '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -339,6 +347,7 @@ export interface FileRoutesById {
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
+  '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -381,6 +390,7 @@ export interface FileRouteTypes {
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
+    | '/mempool/block/$index'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -421,6 +431,7 @@ export interface FileRouteTypes {
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
+    | '/mempool/block/$index'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -461,6 +472,7 @@ export interface FileRouteTypes {
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
+    | '/mempool/block/$index'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -492,7 +504,7 @@ export interface RootRouteChildren {
   BlocksRoute: typeof BlocksRoute
   DocsRoute: typeof DocsRoute
   GraphsRoute: typeof GraphsRoute
-  MempoolRoute: typeof MempoolRoute
+  MempoolRoute: typeof MempoolRouteWithChildren
   MiningRoute: typeof MiningRoute
   RichlistRoute: typeof RichlistRoute
   AddressAddrRoute: typeof AddressAddrRoute
@@ -604,6 +616,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/address/$addr'
       preLoaderRoute: typeof AddressAddrRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/mempool/block/$index': {
+      id: '/mempool/block/$index'
+      path: '/block/$index'
+      fullPath: '/mempool/block/$index'
+      preLoaderRoute: typeof MempoolBlockIndexRouteImport
+      parentRoute: typeof MempoolRoute
     }
     '/api/v1/supply': {
       id: '/api/v1/supply'
@@ -790,6 +809,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface MempoolRouteChildren {
+  MempoolBlockIndexRoute: typeof MempoolBlockIndexRoute
+}
+
+const MempoolRouteChildren: MempoolRouteChildren = {
+  MempoolBlockIndexRoute: MempoolBlockIndexRoute,
+}
+
+const MempoolRouteWithChildren =
+  MempoolRoute._addFileChildren(MempoolRouteChildren)
+
 interface ApiV1AddressAddrRouteChildren {
   ApiV1AddressAddrBalanceHistoryRoute: typeof ApiV1AddressAddrBalanceHistoryRoute
   ApiV1AddressAddrTxsRoute: typeof ApiV1AddressAddrTxsRoute
@@ -840,7 +870,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlocksRoute: BlocksRoute,
   DocsRoute: DocsRoute,
   GraphsRoute: GraphsRoute,
-  MempoolRoute: MempoolRoute,
+  MempoolRoute: MempoolRouteWithChildren,
   MiningRoute: MiningRoute,
   RichlistRoute: RichlistRoute,
   AddressAddrRoute: AddressAddrRoute,
@@ -869,13 +899,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
