@@ -38,7 +38,7 @@ function VinRow({ v, index }: { v: TxVin; index: number }) {
   const addr = v.prevout?.scriptpubkey_address;
 
   return (
-    <div className="surface-2 rounded border border-border overflow-hidden">
+    <div id={`vin-${index}`} className="surface-2 rounded border border-border overflow-hidden scroll-mt-24 transition-shadow">
       <div className="px-3 py-2 flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           {isCb ? (
@@ -130,7 +130,7 @@ function VoutRow({ o, index }: { o: TxVout; index: number }) {
   const addr = o.scriptpubkey_address;
 
   return (
-    <div className="surface-2 rounded border border-border overflow-hidden">
+    <div id={`vout-${index}`} className="surface-2 rounded border border-border overflow-hidden scroll-mt-24 transition-shadow">
       <div className="px-3 py-2 flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           {opReturn ? (

@@ -3,25 +3,31 @@ import type { Tx } from "@/lib/txc/esplora";
 import { isOpReturn } from "@/lib/txc/omni";
 import { satsToTxc } from "@/lib/txc/format";
 
+function scrollToId(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("ring-2", "ring-primary");
+  window.setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 1400);
+}
+
 /**
  * Banner-style transaction flow.
  *
- * Inputs render as a left "flag" with a chevron notch on the left edge.
- * The flag flows rightward as a single value-weighted ribbon, then splits
- * into one stub per output on the right. Stub thickness is proportional
- * to that output's share of the total value; zero-value outputs (OP_RETURN
- * markers) render as a thin tick so they're visible without dominating.
+ * Left flag = inputs (one clickable slice per input). Right stubs = outputs
+ * (one clickable stub per output). Clicking a region scrolls to the
+ * corresponding row below and briefly highlights it.
  */
 export function TxFlowDiagram({ tx }: { tx: Tx }) {
   const W = 1200;
   const H = 260;
   const PAD_Y = 18;
-  const NOTCH = 26; // chevron depth on the left
-  const SPLIT_X = W * 0.62; // where outputs begin to fan out
+  const NOTCH = 26;
+  const SPLIT_X = W * 0.62;
   const RIGHT_X = W - 6;
   const GAP = 6;
 
-  const { ins, outs, totalIn, totalOut, isCoinbase } = useMemo(() => {
+  const { ins, outs, totalOut, isCoinbase } = useMemo(() => {
     const cb = !!tx.vin[0]?.is_coinbase;
     const txTotalOut = tx.vout.reduce((s, o) => s + o.value, 0);
     const inputs = tx.vin.map((v, i) => ({
@@ -47,7 +53,7 @@ export function TxFlowDiagram({ tx }: { tx: Tx }) {
     };
   }, [tx]);
 
-  // Lay out output stub heights on the right side, with gaps.
+  // Output stub heights on the right side
   const usable = H - PAD_Y * 2;
   const gapTotal = Math.max(0, outs.length - 1) * GAP;
   const tickH = 4;
@@ -61,34 +67,37 @@ export function TxFlowDiagram({ tx }: { tx: Tx }) {
     return stub;
   });
 
-  // Left flag spans almost the full height.
+  // Left flag spans almost the full height
   const flagTop = PAD_Y;
   const flagBot = H - PAD_Y;
-
-  // Build one ribbon per output: flag right-edge midpoint → output stub.
-  const ribbons = outStubs.map((o) => {
-    // Slice of the flag right-edge proportional to this output's share.
-    const share = o.value === 0 ? 0.001 : o.value / totalOut;
-    return { o, share };
-  });
-
-  // Distribute slices vertically along the flag's right edge proportional to share.
-  let acc = 0;
   const flagH = flagBot - flagTop;
-  const slices = ribbons.map((r) => {
-    const sliceH = r.share * flagH;
+
+  // Ribbons per output: slice the flag's right edge proportionally
+  let acc = 0;
+  const slices = outStubs.map((r) => {
+    const share = r.value === 0 ? 0.001 : r.value / totalOut;
+    const sliceH = share * flagH;
     const y0a = flagTop + acc;
     const y0b = y0a + sliceH;
     acc += sliceH;
-    return { ...r, y0a, y0b };
+    return { o: r, y0a, y0b };
+  });
+
+  // Input slices on the left flag (stacked vertically, proportional to value)
+  const insTotal = ins.reduce((s, x) => s + x.value, 0) || 1;
+  let accIn = 0;
+  const inputSlices = ins.map((v) => {
+    const share = v.value === 0 ? 0.001 : v.value / insTotal;
+    const sliceH = share * flagH;
+    const y0 = flagTop + accIn;
+    accIn += sliceH;
+    return { v, y0, h: sliceH };
   });
 
   return (
     <div className="surface-2 border border-border rounded-lg p-4 overflow-hidden">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          Flow
-        </div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Flow</div>
         <div className="text-[10px] font-mono text-muted-foreground">
           {ins.length} in → {outs.length} out · {satsToTxc(totalOut)} TXC
         </div>
@@ -117,25 +126,21 @@ export function TxFlowDiagram({ tx }: { tx: Tx }) {
           </filter>
         </defs>
 
-        {/* Outer banner: left flag with chevron notch → split into per-output stubs */}
+        {/* Output ribbons (clickable per output) */}
         <g filter="url(#bannerGlow)">
           {slices.map((s) => {
-            const x0 = NOTCH; // start past the notch
+            const x0 = NOTCH;
             const xSplit = SPLIT_X;
             const x1 = RIGHT_X;
-            // Top edge: from flag-top to output-top, via two bezier handles
-            const cTopA = xSplit;
-            const cTopB = xSplit;
-            // Bottom edge mirrors
             const d = `
               M ${x0} ${s.y0a}
               L ${0} ${s.y0a}
               L ${NOTCH} ${(s.y0a + s.y0b) / 2}
               L ${0} ${s.y0b}
               L ${x0} ${s.y0b}
-              C ${cTopB} ${s.y0b}, ${cTopA} ${s.o.y + s.o.h}, ${x1} ${s.o.y + s.o.h}
+              C ${xSplit} ${s.y0b}, ${xSplit} ${s.o.y + s.o.h}, ${x1} ${s.o.y + s.o.h}
               L ${x1} ${s.o.y}
-              C ${cTopA} ${s.o.y}, ${cTopB} ${s.y0a}, ${x0} ${s.y0a}
+              C ${xSplit} ${s.o.y}, ${xSplit} ${s.y0a}, ${x0} ${s.y0a}
               Z
             `;
             return (
@@ -151,7 +156,39 @@ export function TxFlowDiagram({ tx }: { tx: Tx }) {
           })}
         </g>
 
-        {/* Tiny label hints */}
+        {/* Clickable output stubs (transparent hit-target on right side) */}
+        {outStubs.map((o) => (
+          <rect
+            key={`hit-${o.key}`}
+            x={SPLIT_X}
+            y={o.y}
+            width={RIGHT_X - SPLIT_X}
+            height={o.h}
+            fill="transparent"
+            style={{ cursor: "pointer" }}
+            onClick={() => scrollToId(`vout-${o.idx}`)}
+          >
+            <title>{`Output #${o.idx} — ${satsToTxc(o.value)} TXC`}</title>
+          </rect>
+        ))}
+
+        {/* Clickable input slices (left flag region) */}
+        {inputSlices.map(({ v, y0, h }) => (
+          <rect
+            key={`hit-${v.key}`}
+            x={0}
+            y={y0}
+            width={SPLIT_X * 0.4}
+            height={h}
+            fill="transparent"
+            style={{ cursor: "pointer" }}
+            onClick={() => scrollToId(`vin-${v.idx}`)}
+          >
+            <title>{`Input #${v.idx}${v.coinbase ? " — coinbase" : ` — ${satsToTxc(v.value)} TXC`}`}</title>
+          </rect>
+        ))}
+
+        {/* Label hints */}
         <g className="font-mono" fontSize="11" fill="hsl(0 0% 100% / 0.6)">
           <text x={NOTCH + 8} y={flagTop - 4}>
             {isCoinbase ? "coinbase" : `${ins.length} input${ins.length > 1 ? "s" : ""}`}
