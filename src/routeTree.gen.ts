@@ -18,6 +18,7 @@ import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MempoolIndexRouteImport } from './routes/mempool.index'
 import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
 import { Route as AddressAddrRouteImport } from './routes/address.$addr'
@@ -93,6 +94,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MempoolIndexRoute = MempoolIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MempoolRoute,
 } as any)
 const TxTxidRoute = TxTxidRouteImport.update({
   id: '/tx/$txid',
@@ -260,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
+  '/mempool/': typeof MempoolIndexRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
@@ -295,12 +302,12 @@ export interface FileRoutesByTo {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
-  '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
+  '/mempool': typeof MempoolIndexRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
@@ -343,6 +350,7 @@ export interface FileRoutesById {
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
+  '/mempool/': typeof MempoolIndexRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
@@ -386,6 +394,7 @@ export interface FileRouteTypes {
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
+    | '/mempool/'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/price'
     | '/api/v1/richlist'
@@ -421,12 +430,12 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/docs'
     | '/graphs'
-    | '/mempool'
     | '/mining'
     | '/richlist'
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
+    | '/mempool'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/price'
     | '/api/v1/richlist'
@@ -468,6 +477,7 @@ export interface FileRouteTypes {
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
+    | '/mempool/'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/price'
     | '/api/v1/richlist'
@@ -595,6 +605,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/mempool/': {
+      id: '/mempool/'
+      path: '/'
+      fullPath: '/mempool/'
+      preLoaderRoute: typeof MempoolIndexRouteImport
+      parentRoute: typeof MempoolRoute
     }
     '/tx/$txid': {
       id: '/tx/$txid'
@@ -810,10 +827,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface MempoolRouteChildren {
+  MempoolIndexRoute: typeof MempoolIndexRoute
   MempoolBlockIndexRoute: typeof MempoolBlockIndexRoute
 }
 
 const MempoolRouteChildren: MempoolRouteChildren = {
+  MempoolIndexRoute: MempoolIndexRoute,
   MempoolBlockIndexRoute: MempoolBlockIndexRoute,
 }
 
