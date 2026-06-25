@@ -3,11 +3,21 @@
 
 import Fastify from "fastify";
 import { db, getTipHeight } from "./db.js";
-import { getRawTx, txcToSats, voutAddress, type RpcTx } from "./rpc.js";
+import { getRawTx, rpc, RpcError, txcToSats, voutAddress, type RpcTx } from "./rpc.js";
 
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
 const app = Fastify({ logger: false });
+
+// Accept raw hex bodies for POST /tx (Esplora broadcast spec).
+app.addContentTypeParser("text/plain", { parseAs: "string" }, (_req, body, done) =>
+  done(null, body),
+);
+app.addContentTypeParser(
+  "application/octet-stream",
+  { parseAs: "string" },
+  (_req, body, done) => done(null, body),
+);
 
 // CORS — addresses are read-only and behind nginx anyway, but allow direct.
 app.addHook("onSend", async (_req, reply, payload) => {
