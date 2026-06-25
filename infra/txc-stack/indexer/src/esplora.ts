@@ -201,6 +201,45 @@ app.get("/health", async () => ({
   tip: getTipHeight(),
 }));
 
+// ---------- broadcast + raw tx (Esplora spec) ----------
+// POST /tx — body is the signed raw transaction as hex (text/plain or
+// application/octet-stream). Returns the txid as plain text on success,
+// or a 400 with the node's error message (e.g. "min relay fee not met",
+// "bad-txns-inputs-missingorspent") on rejection.
+app.post("/tx", async (req, reply) => {
+  const body = req.body as unknown;
+  let hex: string | undefined;
+  if (typeof body === "string") hex = body.trim();
+  else if (body && typeof body === "object" && typeof (body as { hex?: unknown }).hex === "string") {
+    hex = ((body as { hex: string }).hex).trim();
+  }
+  if (!hex) return reply.code(400).type("text/plain").send("missing raw tx hex in body");
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
+    return reply.code(400).type("text/plain").send("invalid hex");
+  }
+  try {
+    const txid = await rpc<string>("sendrawtransaction", [hex]);
+    return reply.type("text/plain").send(txid);
+  } catch (e) {
+    const msg = e instanceof RpcError ? e.message : (e as Error).message ?? "broadcast failed";
+    return reply.code(400).type("text/plain").send(msg);
+  }
+});
+
+// GET /tx/:txid/hex — raw signed transaction hex.
+app.get<{ Params: { txid: string } }>("/tx/:txid/hex", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) {
+    return reply.code(400).type("text/plain").send("invalid txid");
+  }
+  try {
+    const tx = await getRawTx(params.txid);
+    return reply.type("text/plain").send(tx.hex);
+  } catch (e) {
+    const msg = e instanceof RpcError ? e.message : (e as Error).message ?? "not found";
+    return reply.code(404).type("text/plain").send(msg);
+  }
+});
+
 // GET /address/_status — indexer sync status, reachable via nginx /api/address/_status
 app.get("/address/_status", async () => ({
   ok: true,
