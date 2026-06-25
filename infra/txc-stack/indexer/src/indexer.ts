@@ -34,8 +34,30 @@ const insertAddrTx = db.prepare(
   "INSERT OR IGNORE INTO address_txs(address, txid, height) VALUES (?, ?, ?)",
 );
 
+// Balance maintenance — incrementally update the materialized balances
+// table so the richlist endpoint is a simple ORDER BY LIMIT, not a full
+// GROUP BY scan of outputs on every cache miss.
+const bumpBalance = db.prepare(
+  `INSERT INTO balances(address, balance, utxo_count) VALUES (?, ?, 1)
+   ON CONFLICT(address) DO UPDATE SET
+     balance    = balance + excluded.balance,
+     utxo_count = utxo_count + 1`,
+);
+const dropBalance = db.prepare(
+  `INSERT INTO balances(address, balance, utxo_count) VALUES (?, ?, -1)
+   ON CONFLICT(address) DO UPDATE SET
+     balance    = balance - ?,
+     utxo_count = utxo_count - 1`,
+);
+
 const deleteBlock = db.prepare("DELETE FROM blocks WHERE height = ?");
 const deleteOutputsAt = db.prepare("DELETE FROM outputs WHERE height = ?");
+const selectOutputsAt = db.prepare(
+  "SELECT address, value FROM outputs WHERE height = ? AND address IS NOT NULL",
+);
+const selectSpentAt = db.prepare(
+  "SELECT o.address, o.value FROM outputs o WHERE o.spent_height = ? AND o.address IS NOT NULL",
+);
 const unspendAt = db.prepare(
   "UPDATE outputs SET spent_txid = NULL, spent_height = NULL WHERE spent_height = ?",
 );
@@ -49,7 +71,10 @@ const ingestBlock = db.transaction((block: RpcBlock) => {
       const addr = voutAddress(vo);
       const sats = txcToSats(vo.value);
       insertOutput.run(tx.txid, vo.n, addr, sats, block.height);
-      if (addr) insertAddrTx.run(addr, tx.txid, block.height);
+      if (addr) {
+        insertAddrTx.run(addr, tx.txid, block.height);
+        bumpBalance.run(addr, sats);
+      }
     }
     // inputs (skip coinbase)
     for (const vi of tx.vin) {
@@ -58,17 +83,34 @@ const ingestBlock = db.transaction((block: RpcBlock) => {
         | { address: string | null; value: number }
         | undefined;
       markSpent.run(tx.txid, block.height, vi.txid, vi.vout);
-      if (prev?.address) insertAddrTx.run(prev.address, tx.txid, block.height);
+      if (prev?.address) {
+        insertAddrTx.run(prev.address, tx.txid, block.height);
+        // negative sats so the INSERT branch is also self-consistent if
+        // we somehow see this address for the first time on a spend.
+        dropBalance.run(prev.address, -prev.value, prev.value);
+      }
     }
   }
 });
 
 const rollback = db.transaction((height: number) => {
+  // Reverse balance effects before mutating the underlying outputs rows.
+  // 1) Outputs spent AT this height become unspent again → add back.
+  for (const row of selectSpentAt.all(height) as Array<{ address: string; value: number }>) {
+    bumpBalance.run(row.address, row.value);
+  }
+  // 2) Outputs CREATED at this height go away → subtract.
+  //    (Anything that was spent at a later height is impossible because
+  //    rollback only ever runs for the current tip.)
+  for (const row of selectOutputsAt.all(height) as Array<{ address: string; value: number }>) {
+    dropBalance.run(row.address, -row.value, row.value);
+  }
   unspendAt.run(height);
   deleteAddrTxAt.run(height);
   deleteOutputsAt.run(height);
   deleteBlock.run(height);
 });
+
 
 async function syncOnce(): Promise<void> {
   const nodeHeight = await getBlockCount();

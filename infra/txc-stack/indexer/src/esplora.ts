@@ -215,12 +215,15 @@ const RICHLIST_MAX = Number(process.env.RICHLIST_MAX ?? 500);
 let richlistCache: { at: number; snapshot: RichlistSnapshot } | null = null;
 
 function computeRichlist(limit: number): RichlistSnapshot {
+  // Reads the materialized balances table maintained incrementally by the
+  // indexer. The partial index `idx_balances_balance` on (balance DESC)
+  // WHERE balance > 0 makes this an index range scan — sub-millisecond
+  // even with hundreds of thousands of addresses.
   const rows = db
     .prepare(
-      `SELECT address, SUM(value) AS balance, COUNT(*) AS utxo_count
-       FROM outputs
-       WHERE spent_txid IS NULL AND address IS NOT NULL
-       GROUP BY address
+      `SELECT address, balance, utxo_count
+       FROM balances
+       WHERE balance > 0
        ORDER BY balance DESC
        LIMIT ?`,
     )
@@ -229,13 +232,10 @@ function computeRichlist(limit: number): RichlistSnapshot {
     computed_at: Math.floor(Date.now() / 1000),
     indexed_tip: getTipHeight(),
     total_entries: rows.length,
-    entries: rows.map((r) => ({
-      address: r.address,
-      balance: r.balance,
-      utxo_count: r.utxo_count,
-    })),
+    entries: rows,
   };
 }
+
 
 app.get<{ Querystring: { limit?: string } }>("/address/_richlist", async ({ query }, reply) => {
   const requested = Math.max(1, Math.min(RICHLIST_MAX, Number(query.limit ?? 100) || 100));

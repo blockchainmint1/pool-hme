@@ -58,7 +58,43 @@ db.exec(`
     PRIMARY KEY (address, txid)
   );
   CREATE INDEX IF NOT EXISTS idx_mempool_addr ON mempool_address_txs(address);
+
+  -- Materialized confirmed balance per address. Maintained incrementally
+  -- by the indexer (see indexer.ts) so the richlist endpoint and any
+  -- "current balance" query is O(log n) instead of a full GROUP BY scan
+  -- over outputs. Rows with balance = 0 are kept (UTXO churn flips back
+  -- and forth) but filtered at read time; a periodic compactor could
+  -- delete them if needed.
+  CREATE TABLE IF NOT EXISTS balances (
+    address    TEXT PRIMARY KEY,
+    balance    INTEGER NOT NULL, -- sats, sum of unspent outputs
+    utxo_count INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_balances_balance
+    ON balances(balance DESC) WHERE balance > 0;
 `);
+
+// One-time backfill: if balances is empty but outputs has rows, populate
+// it from the existing UTXO set. This lets existing deployments adopt the
+// materialized table without re-indexing the chain.
+{
+  const have = db.prepare("SELECT 1 FROM balances LIMIT 1").get();
+  const haveOutputs = db.prepare("SELECT 1 FROM outputs LIMIT 1").get();
+  if (!have && haveOutputs) {
+    console.log("[db] backfilling balances table from outputs (one-time) ...");
+    const t0 = Date.now();
+    db.exec(`
+      INSERT INTO balances(address, balance, utxo_count)
+      SELECT address, SUM(value), COUNT(*)
+      FROM outputs
+      WHERE spent_txid IS NULL AND address IS NOT NULL
+      GROUP BY address;
+    `);
+    const n = (db.prepare("SELECT COUNT(*) AS c FROM balances").get() as { c: number }).c;
+    console.log(`[db] backfilled ${n} addresses in ${Date.now() - t0}ms`);
+  }
+}
+
 
 export function getMeta(key: string): string | null {
   const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
