@@ -7,95 +7,112 @@ import { satsToTxc, shortHash } from "@/lib/txc/format";
 /**
  * Sankey-ish flow diagram: inputs on the left funnel into outputs on the right
  * via smooth cubic-bezier ribbons whose thickness is proportional to value.
- * Inspired by the classic block explorer flow visualization.
+ *
+ * Design notes:
+ * - Side bars are slim (so the ribbons dominate, not the bars).
+ * - Segments have visible gaps so you can count inputs/outputs at a glance.
+ * - Zero-value entries (e.g. OP_RETURN markers) are rendered as a thin tick,
+ *   not a min-height slab, and contribute no ribbon mass.
  */
 export function TxFlowDiagram({ tx }: { tx: Tx }) {
   const W = 1000;
-  const H = 360;
-  const PAD_Y = 12;
+  const H = 220;
+  const PAD_Y = 8;
+  const BAR_W = 14;
   const LEFT_X = 0;
   const RIGHT_X = W;
-  const RIBBON_LEFT = 180;
-  const RIBBON_RIGHT = W - 180;
+  const RIBBON_LEFT = BAR_W;
+  const RIBBON_RIGHT = W - BAR_W;
+  const GAP = 3; // px gap between stacked segments
 
   const data = useMemo(() => {
-    const isCoinbase = tx.vin[0]?.is_coinbase;
+    const isCoinbase = !!tx.vin[0]?.is_coinbase;
+    const txTotalOut = tx.vout.reduce((s, o) => s + o.value, 0);
+
     const inputs = tx.vin.map((v, i) => ({
       key: `in-${i}`,
-      value: isCoinbase ? tx.vout.reduce((s, o) => s + o.value, 0) : (v.prevout?.value ?? 0),
-      label: v.is_coinbase
-        ? "Coinbase (newly minted)"
-        : v.prevout?.scriptpubkey_address ?? v.prevout?.scriptpubkey_type ?? "unknown",
+      value: isCoinbase ? txTotalOut : (v.prevout?.value ?? 0),
       addr: v.prevout?.scriptpubkey_address,
+      label: v.is_coinbase
+        ? "Coinbase"
+        : v.prevout?.scriptpubkey_address ?? v.prevout?.scriptpubkey_type ?? "unknown",
+      coinbase: !!v.is_coinbase,
       txid: v.txid,
       vout: v.vout,
-      coinbase: !!v.is_coinbase,
+      idx: i,
     }));
     const outputs = tx.vout.map((o, i) => ({
       key: `out-${i}`,
       value: o.value,
+      addr: o.scriptpubkey_address,
       label: isOpReturn(o)
         ? "OP_RETURN"
         : o.scriptpubkey_address ?? o.scriptpubkey_type ?? "unknown",
-      addr: o.scriptpubkey_address,
       opReturn: isOpReturn(o),
-      index: i,
+      idx: i,
     }));
+
     const totalIn = inputs.reduce((s, x) => s + x.value, 0) || 1;
     const totalOut = outputs.reduce((s, x) => s + x.value, 0) || 1;
 
-    const usableH = H - PAD_Y * 2;
-    let yIn = PAD_Y;
-    const ins = inputs.map((it) => {
-      const h = Math.max(2, (it.value / totalIn) * usableH);
-      const seg = { ...it, y: yIn, h };
-      yIn += h;
-      return seg;
-    });
-    let yOut = PAD_Y;
-    const outs = outputs.map((it) => {
-      const h = Math.max(2, (it.value / totalOut) * usableH);
-      const seg = { ...it, y: yOut, h };
-      yOut += h;
-      return seg;
-    });
-    return { ins, outs };
+    // Reserve gap space, then distribute remaining height proportionally.
+    // Zero-value entries get a fixed 3px tick and consume no proportional area.
+    function layout<T extends { value: number }>(items: T[], total: number) {
+      const gapTotal = Math.max(0, items.length - 1) * GAP;
+      const zeroCount = items.filter((it) => it.value === 0).length;
+      const tickH = 3;
+      const usable = H - PAD_Y * 2 - gapTotal - zeroCount * tickH;
+      let y = PAD_Y;
+      return items.map((it) => {
+        const h = it.value === 0 ? tickH : Math.max(2, (it.value / total) * usable);
+        const seg = { ...it, y, h };
+        y += h + GAP;
+        return seg;
+      });
+    }
+
+    return {
+      ins: layout(inputs, totalIn),
+      outs: layout(outputs, totalOut),
+      totalIn,
+      totalOut,
+    };
   }, [tx]);
 
-  // Build ribbons: distribute each input proportionally across all outputs
-  // (Bitcoin has no per-input→per-output mapping; the classic viz fans out).
-  const ribbons: Array<{ d: string; key: string; opacity: number }> = [];
-  const totalIn = data.ins.reduce((s, x) => s + x.value, 0) || 1;
-  const totalOut = data.outs.reduce((s, x) => s + x.value, 0) || 1;
+  // Build ribbons: distribute each input proportionally across non-zero outputs.
+  // Zero-value outputs (OP_RETURN markers) get no ribbon — they'd just add noise.
+  const ribbons: Array<{ d: string; key: string }> = [];
+  const nonZeroOut = data.outs.filter((o) => o.value > 0);
+  const valuedOutTotal = nonZeroOut.reduce((s, o) => s + o.value, 0) || 1;
 
-  // Track running offsets within each input/output band
-  const inOffsets = data.ins.map(() => 0);
-  const outOffsets = data.outs.map(() => 0);
+  // Running offsets *within* each segment's height
+  const inOffsets = new Map<string, number>();
+  const outOffsets = new Map<string, number>();
 
-  data.ins.forEach((inp, i) => {
-    data.outs.forEach((out, j) => {
-      const flow = (inp.value / totalIn) * out.value; // proportional share
-      const hIn = (flow / totalIn) * (H - PAD_Y * 2);
-      const hOut = (flow / totalOut) * (H - PAD_Y * 2);
-      const y0a = inp.y + inOffsets[i];
+  data.ins.forEach((inp) => {
+    if (inp.value === 0) return;
+    nonZeroOut.forEach((out) => {
+      const flow = (inp.value / data.totalIn) * out.value; // proportional fan-out
+      const hIn = (flow / inp.value) * inp.h;
+      const hOut = (flow / valuedOutTotal) * out.h * (valuedOutTotal / out.value) * (out.value / valuedOutTotal);
+      // simpler: ribbon thickness at the output edge proportional to share of that output
+      const hOutSimple = (flow / out.value) * out.h;
+      const offIn = inOffsets.get(inp.key) ?? 0;
+      const offOut = outOffsets.get(out.key) ?? 0;
+      const y0a = inp.y + offIn;
       const y0b = y0a + hIn;
-      const y1a = out.y + outOffsets[j];
-      const y1b = y1a + hOut;
-      inOffsets[i] += hIn;
-      outOffsets[j] += hOut;
+      const y1a = out.y + offOut;
+      const y1b = y1a + hOutSimple;
+      inOffsets.set(inp.key, offIn + hIn);
+      outOffsets.set(out.key, offOut + hOutSimple);
+      void hOut;
 
       const x0 = RIBBON_LEFT;
       const x1 = RIBBON_RIGHT;
       const cx0 = x0 + (x1 - x0) * 0.5;
-      const cx1 = x0 + (x1 - x0) * 0.5;
-      const d = `
-        M ${x0} ${y0a}
-        C ${cx0} ${y0a}, ${cx1} ${y1a}, ${x1} ${y1a}
-        L ${x1} ${y1b}
-        C ${cx1} ${y1b}, ${cx0} ${y0b}, ${x0} ${y0b}
-        Z
-      `;
-      ribbons.push({ d, key: `r-${i}-${j}`, opacity: 0.55 });
+      const cx1 = cx0;
+      const d = `M ${x0} ${y0a} C ${cx0} ${y0a}, ${cx1} ${y1a}, ${x1} ${y1a} L ${x1} ${y1b} C ${cx1} ${y1b}, ${cx0} ${y0b}, ${x0} ${y0b} Z`;
+      ribbons.push({ d, key: `r-${inp.key}-${out.key}` });
     });
   });
 
@@ -107,80 +124,59 @@ export function TxFlowDiagram({ tx }: { tx: Tx }) {
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="w-full h-[260px] md:h-[340px]"
+        className="w-full h-[160px] md:h-[200px]"
       >
         <defs>
           <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="hsl(280 80% 60%)" />
-            <stop offset="50%" stopColor="hsl(220 90% 60%)" />
-            <stop offset="100%" stopColor="hsl(190 90% 55%)" />
+            <stop offset="0%" stopColor="hsl(280 80% 60%)" stopOpacity="0.55" />
+            <stop offset="50%" stopColor="hsl(220 90% 60%)" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="hsl(190 90% 55%)" stopOpacity="0.55" />
           </linearGradient>
-          <linearGradient id="inBar" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="hsl(280 80% 55%)" />
-            <stop offset="100%" stopColor="hsl(260 80% 55%)" />
+          <linearGradient id="inBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(280 85% 65%)" />
+            <stop offset="100%" stopColor="hsl(260 80% 50%)" />
           </linearGradient>
-          <linearGradient id="outBar" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="hsl(200 90% 55%)" />
-            <stop offset="100%" stopColor="hsl(190 90% 50%)" />
+          <linearGradient id="outBar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(200 90% 60%)" />
+            <stop offset="100%" stopColor="hsl(190 90% 45%)" />
           </linearGradient>
         </defs>
 
-        {/* Ribbons */}
         <g style={{ mixBlendMode: "screen" }}>
           {ribbons.map((r) => (
-            <path
-              key={r.key}
-              d={r.d}
-              fill="url(#flowGrad)"
-              opacity={r.opacity}
-            >
-              <title />
-            </path>
+            <path key={r.key} d={r.d} fill="url(#flowGrad)" />
           ))}
         </g>
 
-        {/* Input bars */}
         {data.ins.map((it) => (
-          <g key={it.key}>
-            <rect
-              x={LEFT_X}
-              y={it.y}
-              width={RIBBON_LEFT - 4}
-              height={it.h}
-              fill="url(#inBar)"
-              rx={2}
-            >
-              <title>
-                {it.label}
-                {"\n"}
-                {satsToTxc(it.value)} TXC
-              </title>
-            </rect>
-          </g>
+          <rect
+            key={it.key}
+            x={LEFT_X}
+            y={it.y}
+            width={BAR_W}
+            height={it.h}
+            fill="url(#inBar)"
+            rx={3}
+          >
+            <title>{`${it.label}\n${satsToTxc(it.value)} TXC`}</title>
+          </rect>
         ))}
 
-        {/* Output bars */}
         {data.outs.map((it) => (
-          <g key={it.key}>
-            <rect
-              x={RIBBON_RIGHT + 4}
-              y={it.y}
-              width={RIGHT_X - RIBBON_RIGHT - 4}
-              height={it.h}
-              fill={it.opReturn ? "hsl(45 90% 55%)" : "url(#outBar)"}
-              rx={2}
-            >
-              <title>
-                {it.label}
-                {"\n"}
-                {satsToTxc(it.value)} TXC
-              </title>
-            </rect>
-          </g>
+          <rect
+            key={it.key}
+            x={RIGHT_X - BAR_W}
+            y={it.y}
+            width={BAR_W}
+            height={it.h}
+            fill={it.opReturn ? "hsl(45 90% 55%)" : "url(#outBar)"}
+            rx={3}
+          >
+            <title>{`${it.label}\n${satsToTxc(it.value)} TXC`}</title>
+          </rect>
         ))}
       </svg>
 
-      {/* Legend rows under the diagram */}
       <div className="mt-3 grid md:grid-cols-2 gap-4 text-[11px]">
         <div className="space-y-1">
           <div className="text-muted-foreground uppercase tracking-widest text-[10px]">
