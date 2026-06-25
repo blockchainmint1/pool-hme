@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { feeBucket } from "@/lib/txc/format";
 import type { MempoolBlock } from "@/lib/txc/esplora";
-import { Block3D } from "./Block3D";
 
 const FEE_VAR: Record<number, string> = {
   1: "var(--color-fee-1)",
@@ -17,9 +16,9 @@ interface Props {
 }
 
 /**
- * Mempool projected blocks — a chain of real 3D cubes receding into the
- * distance. Next block is closest (largest); subsequent projected blocks
- * fall back into perspective.
+ * Mempool projected blocks — flat rectangular tiles in the classic
+ * mempool.space style. Next block is leftmost; subsequent projected
+ * blocks queue to the right.
  */
 export function MempoolBlocksViz({ blocks }: Props) {
   if (!blocks.length) {
@@ -31,36 +30,31 @@ export function MempoolBlocksViz({ blocks }: Props) {
   }
   const items = blocks.slice(0, 6);
   return (
-    <div className="relative scene-3d pt-8 pb-12 px-2 overflow-hidden rounded-lg surface-2 border border-border">
-      <div className="chain-stars" />
-      <div className="chain-floor" />
-      <div className="chain-row chain-row-mempool relative flex items-end gap-3 justify-start">
-        {items.map((b, i) => {
-          // Receding chain: each subsequent block sits a little smaller & deeper
-          const scale = 1 - i * 0.07;
-          const filledPct = Math.max(2, Math.min(100, (b.blockVSize / 1_000_000) * 100));
-          const emptyPct = 100 - filledPct;
-          return (
-            <Link
-              key={i}
-              to="/mempool/block/$index"
-              params={{ index: String(i) }}
-              className="group flex flex-col items-center animate-block-pop"
+    <div className="flex items-end gap-3 overflow-x-auto pb-2">
+      {items.map((b, i) => {
+        const color = FEE_VAR[feeBucket(b.medianFee || 1)];
+        const filledPct = Math.max(2, Math.min(100, (b.blockVSize / 1_000_000) * 100));
+        return (
+          <Link
+            key={i}
+            to="/mempool/block/$index"
+            params={{ index: String(i) }}
+            className="group flex flex-col items-center flex-shrink-0"
+          >
+            <div
+              className="relative w-32 h-32 rounded-md border border-border overflow-hidden transition-transform group-hover:-translate-y-1 group-hover:shadow-lg"
               style={{
-                animationDelay: `${i * 80}ms`,
-                transformStyle: "preserve-3d",
+                background: `linear-gradient(180deg, color-mix(in oklab, ${color} 85%, transparent), color-mix(in oklab, ${color} 55%, transparent))`,
+                boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 60%, transparent), 0 8px 20px -10px ${color}`,
               }}
             >
-              <Block3D
-                color={FEE_VAR[feeBucket(b.medianFee || 1)]}
-                size={140}
-                depth={44}
-                scale={scale}
-                emptyPct={emptyPct}
-                rotateY={-32}
-                rotateX={-18}
-              >
-                <div className="font-display text-2xl font-bold leading-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]">
+              {/* fill indicator */}
+              <div
+                className="absolute inset-x-0 bottom-0 bg-black/25"
+                style={{ height: `${100 - filledPct}%` }}
+              />
+              <div className="relative h-full flex flex-col items-center justify-center text-center px-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                <div className="font-display text-2xl font-bold leading-none">
                   ~{b.medianFee.toFixed(1)}
                 </div>
                 <div className="text-[9px] uppercase tracking-widest opacity-80 mt-1">sat/vB</div>
@@ -69,16 +63,16 @@ export function MempoolBlocksViz({ blocks }: Props) {
                     ? `${b.feeRange[0].toFixed(1)} – ${b.feeRange[b.feeRange.length - 1].toFixed(1)}`
                     : ""}
                 </div>
-                <div className="text-[10px] mt-3 opacity-90">{b.nTx.toLocaleString()} tx</div>
+                <div className="text-[10px] mt-2 opacity-90">{b.nTx.toLocaleString()} tx</div>
                 <div className="text-[9px] opacity-70">{(b.blockVSize / 1000).toFixed(0)} kvB</div>
-              </Block3D>
-              <div className="mt-4 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors">
-                {i === 0 ? "next block" : `in ~${(i + 1) * 3} min`}
               </div>
-            </Link>
-          );
-        })}
-      </div>
+            </div>
+            <div className="mt-2 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors">
+              {i === 0 ? "next block" : `in ~${(i + 1) * 3} min`}
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }
