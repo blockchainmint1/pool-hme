@@ -1,240 +1,166 @@
 import { useMemo } from "react";
-import { Link } from "@tanstack/react-router";
 import type { Tx } from "@/lib/txc/esplora";
 import { isOpReturn } from "@/lib/txc/omni";
-import { satsToTxc, shortHash } from "@/lib/txc/format";
+import { satsToTxc } from "@/lib/txc/format";
 
 /**
- * Sankey-ish flow diagram: inputs on the left funnel into outputs on the right
- * via smooth cubic-bezier ribbons whose thickness is proportional to value.
+ * Banner-style transaction flow.
  *
- * Design notes:
- * - Side bars are slim (so the ribbons dominate, not the bars).
- * - Segments have visible gaps so you can count inputs/outputs at a glance.
- * - Zero-value entries (e.g. OP_RETURN markers) are rendered as a thin tick,
- *   not a min-height slab, and contribute no ribbon mass.
+ * Inputs render as a left "flag" with a chevron notch on the left edge.
+ * The flag flows rightward as a single value-weighted ribbon, then splits
+ * into one stub per output on the right. Stub thickness is proportional
+ * to that output's share of the total value; zero-value outputs (OP_RETURN
+ * markers) render as a thin tick so they're visible without dominating.
  */
 export function TxFlowDiagram({ tx }: { tx: Tx }) {
-  const W = 1000;
-  const H = 220;
-  const PAD_Y = 8;
-  const BAR_W = 14;
-  const LEFT_X = 0;
-  const RIGHT_X = W;
-  const RIBBON_LEFT = BAR_W;
-  const RIBBON_RIGHT = W - BAR_W;
-  const GAP = 3; // px gap between stacked segments
+  const W = 1200;
+  const H = 260;
+  const PAD_Y = 18;
+  const NOTCH = 26; // chevron depth on the left
+  const SPLIT_X = W * 0.62; // where outputs begin to fan out
+  const RIGHT_X = W - 6;
+  const GAP = 6;
 
-  const data = useMemo(() => {
-    const isCoinbase = !!tx.vin[0]?.is_coinbase;
+  const { ins, outs, totalIn, totalOut, isCoinbase } = useMemo(() => {
+    const cb = !!tx.vin[0]?.is_coinbase;
     const txTotalOut = tx.vout.reduce((s, o) => s + o.value, 0);
-
     const inputs = tx.vin.map((v, i) => ({
       key: `in-${i}`,
-      value: isCoinbase ? txTotalOut : (v.prevout?.value ?? 0),
+      value: cb ? txTotalOut : v.prevout?.value ?? 0,
       addr: v.prevout?.scriptpubkey_address,
-      label: v.is_coinbase
-        ? "Coinbase"
-        : v.prevout?.scriptpubkey_address ?? v.prevout?.scriptpubkey_type ?? "unknown",
       coinbase: !!v.is_coinbase,
-      txid: v.txid,
-      vout: v.vout,
       idx: i,
     }));
     const outputs = tx.vout.map((o, i) => ({
       key: `out-${i}`,
       value: o.value,
       addr: o.scriptpubkey_address,
-      label: isOpReturn(o)
-        ? "OP_RETURN"
-        : o.scriptpubkey_address ?? o.scriptpubkey_type ?? "unknown",
       opReturn: isOpReturn(o),
       idx: i,
     }));
-
-    const totalIn = inputs.reduce((s, x) => s + x.value, 0) || 1;
-    const totalOut = outputs.reduce((s, x) => s + x.value, 0) || 1;
-
-    // Reserve gap space, then distribute remaining height proportionally.
-    // Zero-value entries get a fixed 3px tick and consume no proportional area.
-    function layout<T extends { value: number }>(items: T[], total: number) {
-      const gapTotal = Math.max(0, items.length - 1) * GAP;
-      const zeroCount = items.filter((it) => it.value === 0).length;
-      const tickH = 3;
-      const usable = H - PAD_Y * 2 - gapTotal - zeroCount * tickH;
-      let y = PAD_Y;
-      return items.map((it) => {
-        const h = it.value === 0 ? tickH : Math.max(2, (it.value / total) * usable);
-        const seg = { ...it, y, h };
-        y += h + GAP;
-        return seg;
-      });
-    }
-
     return {
-      ins: layout(inputs, totalIn),
-      outs: layout(outputs, totalOut),
-      totalIn,
-      totalOut,
+      ins: inputs,
+      outs: outputs,
+      totalIn: inputs.reduce((s, x) => s + x.value, 0) || 1,
+      totalOut: outputs.reduce((s, x) => s + x.value, 0) || 1,
+      isCoinbase: cb,
     };
   }, [tx]);
 
-  // Build ribbons: distribute each input proportionally across non-zero outputs.
-  // Zero-value outputs (OP_RETURN markers) get no ribbon — they'd just add noise.
-  const ribbons: Array<{ d: string; key: string }> = [];
-  const nonZeroOut = data.outs.filter((o) => o.value > 0);
-  const valuedOutTotal = nonZeroOut.reduce((s, o) => s + o.value, 0) || 1;
+  // Lay out output stub heights on the right side, with gaps.
+  const usable = H - PAD_Y * 2;
+  const gapTotal = Math.max(0, outs.length - 1) * GAP;
+  const tickH = 4;
+  const zeroCount = outs.filter((o) => o.value === 0).length;
+  const propUsable = usable - gapTotal - zeroCount * tickH;
+  let yOut = PAD_Y;
+  const outStubs = outs.map((o) => {
+    const h = o.value === 0 ? tickH : Math.max(4, (o.value / totalOut) * propUsable);
+    const stub = { ...o, y: yOut, h };
+    yOut += h + GAP;
+    return stub;
+  });
 
-  // Running offsets *within* each segment's height
-  const inOffsets = new Map<string, number>();
-  const outOffsets = new Map<string, number>();
+  // Left flag spans almost the full height.
+  const flagTop = PAD_Y;
+  const flagBot = H - PAD_Y;
 
-  data.ins.forEach((inp) => {
-    if (inp.value === 0) return;
-    nonZeroOut.forEach((out) => {
-      const flow = (inp.value / data.totalIn) * out.value; // proportional fan-out
-      const hIn = (flow / inp.value) * inp.h;
-      const hOut = (flow / valuedOutTotal) * out.h * (valuedOutTotal / out.value) * (out.value / valuedOutTotal);
-      // simpler: ribbon thickness at the output edge proportional to share of that output
-      const hOutSimple = (flow / out.value) * out.h;
-      const offIn = inOffsets.get(inp.key) ?? 0;
-      const offOut = outOffsets.get(out.key) ?? 0;
-      const y0a = inp.y + offIn;
-      const y0b = y0a + hIn;
-      const y1a = out.y + offOut;
-      const y1b = y1a + hOutSimple;
-      inOffsets.set(inp.key, offIn + hIn);
-      outOffsets.set(out.key, offOut + hOutSimple);
-      void hOut;
+  // Build one ribbon per output: flag right-edge midpoint → output stub.
+  const ribbons = outStubs.map((o) => {
+    // Slice of the flag right-edge proportional to this output's share.
+    const share = o.value === 0 ? 0.001 : o.value / totalOut;
+    return { o, share };
+  });
 
-      const x0 = RIBBON_LEFT;
-      const x1 = RIBBON_RIGHT;
-      const cx0 = x0 + (x1 - x0) * 0.5;
-      const cx1 = cx0;
-      const d = `M ${x0} ${y0a} C ${cx0} ${y0a}, ${cx1} ${y1a}, ${x1} ${y1a} L ${x1} ${y1b} C ${cx1} ${y1b}, ${cx0} ${y0b}, ${x0} ${y0b} Z`;
-      ribbons.push({ d, key: `r-${inp.key}-${out.key}` });
-    });
+  // Distribute slices vertically along the flag's right edge proportional to share.
+  let acc = 0;
+  const flagH = flagBot - flagTop;
+  const slices = ribbons.map((r) => {
+    const sliceH = r.share * flagH;
+    const y0a = flagTop + acc;
+    const y0b = y0a + sliceH;
+    acc += sliceH;
+    return { ...r, y0a, y0b };
   });
 
   return (
-    <div className="surface-2 border border-border rounded-lg p-4">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-        Flow
+    <div className="surface-2 border border-border rounded-lg p-4 overflow-hidden">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          Flow
+        </div>
+        <div className="text-[10px] font-mono text-muted-foreground">
+          {ins.length} in → {outs.length} out · {satsToTxc(totalOut)} TXC
+        </div>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="w-full h-[160px] md:h-[200px]"
+        className="w-full h-[180px] md:h-[220px]"
       >
         <defs>
-          <linearGradient id="flowGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="hsl(280 80% 60%)" stopOpacity="0.55" />
-            <stop offset="50%" stopColor="hsl(220 90% 60%)" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="hsl(190 90% 55%)" stopOpacity="0.55" />
+          <linearGradient id="bannerGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="hsl(280 85% 62%)" />
+            <stop offset="55%" stopColor="hsl(225 90% 60%)" />
+            <stop offset="100%" stopColor="hsl(190 90% 55%)" />
           </linearGradient>
-          <linearGradient id="inBar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(280 85% 65%)" />
-            <stop offset="100%" stopColor="hsl(260 80% 50%)" />
+          <linearGradient id="bannerEdge" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(280 90% 70%)" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="hsl(190 90% 55%)" stopOpacity="0.6" />
           </linearGradient>
-          <linearGradient id="outBar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(200 90% 60%)" />
-            <stop offset="100%" stopColor="hsl(190 90% 45%)" />
-          </linearGradient>
+          <filter id="bannerGlow" x="-5%" y="-20%" width="110%" height="140%">
+            <feGaussianBlur stdDeviation="6" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
-        <g style={{ mixBlendMode: "screen" }}>
-          {ribbons.map((r) => (
-            <path key={r.key} d={r.d} fill="url(#flowGrad)" />
-          ))}
+        {/* Outer banner: left flag with chevron notch → split into per-output stubs */}
+        <g filter="url(#bannerGlow)">
+          {slices.map((s) => {
+            const x0 = NOTCH; // start past the notch
+            const xSplit = SPLIT_X;
+            const x1 = RIGHT_X;
+            // Top edge: from flag-top to output-top, via two bezier handles
+            const cTopA = xSplit;
+            const cTopB = xSplit;
+            // Bottom edge mirrors
+            const d = `
+              M ${x0} ${s.y0a}
+              L ${0} ${s.y0a}
+              L ${NOTCH} ${(s.y0a + s.y0b) / 2}
+              L ${0} ${s.y0b}
+              L ${x0} ${s.y0b}
+              C ${cTopB} ${s.y0b}, ${cTopA} ${s.o.y + s.o.h}, ${x1} ${s.o.y + s.o.h}
+              L ${x1} ${s.o.y}
+              C ${cTopA} ${s.o.y}, ${cTopB} ${s.y0a}, ${x0} ${s.y0a}
+              Z
+            `;
+            return (
+              <path
+                key={s.o.key}
+                d={d}
+                fill={s.o.opReturn ? "hsl(45 90% 55%)" : "url(#bannerGrad)"}
+                opacity={s.o.opReturn ? 0.85 : 0.92}
+                stroke="url(#bannerEdge)"
+                strokeWidth={1}
+              />
+            );
+          })}
         </g>
 
-        {data.ins.map((it) => (
-          <rect
-            key={it.key}
-            x={LEFT_X}
-            y={it.y}
-            width={BAR_W}
-            height={it.h}
-            fill="url(#inBar)"
-            rx={3}
-          >
-            <title>{`${it.label}\n${satsToTxc(it.value)} TXC`}</title>
-          </rect>
-        ))}
-
-        {data.outs.map((it) => (
-          <rect
-            key={it.key}
-            x={RIGHT_X - BAR_W}
-            y={it.y}
-            width={BAR_W}
-            height={it.h}
-            fill={it.opReturn ? "hsl(45 90% 55%)" : "url(#outBar)"}
-            rx={3}
-          >
-            <title>{`${it.label}\n${satsToTxc(it.value)} TXC`}</title>
-          </rect>
-        ))}
+        {/* Tiny label hints */}
+        <g className="font-mono" fontSize="11" fill="hsl(0 0% 100% / 0.6)">
+          <text x={NOTCH + 8} y={flagTop - 4}>
+            {isCoinbase ? "coinbase" : `${ins.length} input${ins.length > 1 ? "s" : ""}`}
+          </text>
+          <text x={RIGHT_X} y={flagTop - 4} textAnchor="end">
+            {satsToTxc(totalOut)} TXC
+          </text>
+        </g>
       </svg>
-
-      <div className="mt-3 grid md:grid-cols-2 gap-4 text-[11px]">
-        <div className="space-y-1">
-          <div className="text-muted-foreground uppercase tracking-widest text-[10px]">
-            Inputs ({data.ins.length})
-          </div>
-          {data.ins.map((it) => (
-            <div key={it.key} className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2 h-2 rounded-sm bg-[hsl(270_80%_55%)] flex-shrink-0" />
-                {it.coinbase ? (
-                  <span className="text-warning font-mono">coinbase</span>
-                ) : it.addr ? (
-                  <Link
-                    to="/address/$addr"
-                    params={{ addr: it.addr }}
-                    className="font-mono truncate hover:text-primary"
-                  >
-                    {shortHash(it.addr, 8, 8)}
-                  </Link>
-                ) : (
-                  <span className="font-mono text-muted-foreground truncate">{it.label}</span>
-                )}
-              </div>
-              <span className="font-mono flex-shrink-0">{satsToTxc(it.value)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="space-y-1">
-          <div className="text-muted-foreground uppercase tracking-widest text-[10px]">
-            Outputs ({data.outs.length})
-          </div>
-          {data.outs.map((it) => (
-            <div key={it.key} className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className={`w-2 h-2 rounded-sm flex-shrink-0 ${
-                    it.opReturn ? "bg-[hsl(45_90%_55%)]" : "bg-[hsl(195_90%_52%)]"
-                  }`}
-                />
-                {it.opReturn ? (
-                  <span className="text-accent font-mono">OP_RETURN</span>
-                ) : it.addr ? (
-                  <Link
-                    to="/address/$addr"
-                    params={{ addr: it.addr }}
-                    className="font-mono truncate hover:text-primary"
-                  >
-                    {shortHash(it.addr, 8, 8)}
-                  </Link>
-                ) : (
-                  <span className="font-mono text-muted-foreground truncate">{it.label}</span>
-                )}
-              </div>
-              <span className="font-mono flex-shrink-0">{satsToTxc(it.value)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
