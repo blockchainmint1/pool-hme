@@ -187,4 +187,121 @@
     50% { opacity: 0.35; }
   }
   .animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+  /* ---------- 3D Block Chain Scene ---------- */
+  .scene-3d {
+    perspective: 1600px;
+    perspective-origin: 50% 45%;
+    transform-style: preserve-3d;
+  }
+  .chain-row {
+    transform-style: preserve-3d;
+  }
+  .chain-row-mempool {
+    /* incoming chain — recedes to the left (further in time) */
+    transform: rotateX(6deg) rotateY(22deg);
+  }
+  .chain-row-confirmed {
+    /* mined chain — recedes to the right (further in past) */
+    transform: rotateX(6deg) rotateY(-22deg);
+  }
+  .cube-3d {
+    transform-style: preserve-3d;
+    transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: transform;
+  }
+  .cube-3d:hover {
+    transform: translateY(-6px) rotateY(4deg);
+  }
+  .cube-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    box-sizing: border-box;
+  }
+  /* Front face base — color is supplied inline via --c (rgb) */
+  .cube-front {
+    background:
+      radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,0.22), transparent 55%),
+      linear-gradient(165deg,
+        color-mix(in oklab, rgb(var(--c)) 100%, white 8%) 0%,
+        rgb(var(--c)) 40%,
+        color-mix(in oklab, rgb(var(--c)) 100%, black 28%) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.10),
+      inset 0 -18px 28px rgba(0,0,0,0.32),
+      inset 0 18px 22px rgba(255,255,255,0.06);
+  }
+  .cube-front-fill {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,
+      rgba(8,10,18,0.78) 0%,
+      rgba(8,10,18,0.55) var(--empty, 0%),
+      rgba(0,0,0,0) calc(var(--empty, 0%) + 0.5%));
+    pointer-events: none;
+  }
+  .cube-top {
+    background: linear-gradient(135deg,
+      color-mix(in oklab, rgb(var(--c)) 100%, white 38%) 0%,
+      color-mix(in oklab, rgb(var(--c)) 100%, white 14%) 60%,
+      color-mix(in oklab, rgb(var(--c)) 100%, black 4%) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.18),
+      inset 0 6px 14px rgba(255,255,255,0.12);
+  }
+  .cube-right {
+    background: linear-gradient(90deg,
+      color-mix(in oklab, rgb(var(--c)) 100%, black 12%) 0%,
+      color-mix(in oklab, rgb(var(--c)) 100%, black 38%) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(0,0,0,0.35),
+      inset 6px 0 14px rgba(0,0,0,0.25);
+  }
+  .cube-shadow {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: -14px;
+    height: 22px;
+    background: radial-gradient(50% 100% at 50% 0%, rgba(0,0,0,0.55), transparent 70%);
+    filter: blur(6px);
+    transform: translateZ(-1px);
+    pointer-events: none;
+  }
+  /* Perspective floor grid — adds "long universe" depth cue */
+  .chain-floor {
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: -28px;
+    height: 180px;
+    background-image:
+      linear-gradient(to right, rgba(120,160,220,0.10) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(120,160,220,0.10) 1px, transparent 1px);
+    background-size: 48px 48px;
+    transform: rotateX(70deg);
+    transform-origin: 50% 0%;
+    mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, black 30%, transparent 80%);
+    pointer-events: none;
+  }
+  @keyframes star-drift {
+    0% { background-position: 0 0, 0 0; }
+    100% { background-position: 200px 0, -200px 0; }
+  }
+  .chain-stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 30%, rgba(255,255,255,0.55), transparent 60%),
+      radial-gradient(1px 1px at 80% 60%, rgba(255,255,255,0.4), transparent 60%),
+      radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.35), transparent 60%),
+      radial-gradient(1.5px 1.5px at 65% 15%, rgba(180,200,255,0.55), transparent 60%),
+      radial-gradient(1px 1px at 25% 65%, rgba(255,220,180,0.4), transparent 60%);
+    background-size: 600px 300px, 800px 400px, 500px 250px, 700px 350px, 600px 300px;
+    opacity: 0.45;
+    pointer-events: none;
+    animation: star-drift 60s linear infinite;
+  }
 }
+
