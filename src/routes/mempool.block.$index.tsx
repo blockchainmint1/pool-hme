@@ -232,6 +232,55 @@ function BlockVizPage() {
           </span>
         ))}
       </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground">
+            Transactions in this projected block
+          </h2>
+          <span className="text-[11px] text-muted-foreground font-mono">
+            {blockTxs.length} tx · sorted by fee rate
+          </span>
+        </div>
+        {blockTxs.length === 0 ? (
+          <div className="surface-2 border border-border rounded-md p-6 text-sm text-muted-foreground text-center">
+            No transactions to list.
+          </div>
+        ) : (
+          <div className="surface-2 border border-border rounded-md overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border bg-background/40">
+              <div>Txid</div>
+              <div className="text-right">Fee rate</div>
+              <div className="text-right">vSize</div>
+              <div className="text-right">Fee</div>
+              <div className="text-right">Value</div>
+            </div>
+            <div className="max-h-[480px] overflow-y-auto divide-y divide-border">
+              {blockTxs.map((t) => {
+                const feeRate = t.vsize > 0 ? t.fee / t.vsize : 0;
+                const bucket = feeBucket(feeRate);
+                return (
+                  <Link
+                    key={t.txid}
+                    to="/tx/$txid"
+                    params={{ txid: t.txid }}
+                    className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-3 py-2 text-xs font-mono hover:bg-background/40 transition-colors items-center"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cn("inline-block w-2 h-4 rounded-sm flex-shrink-0", `bg-fee-${bucket}`)} />
+                      <span className="truncate">{shortHash(t.txid, 14, 10)}</span>
+                    </div>
+                    <div className="text-right text-accent">{feeRate.toFixed(2)} sat/vB</div>
+                    <div className="text-right text-muted-foreground">{t.vsize.toLocaleString()} vB</div>
+                    <div className="text-right text-muted-foreground">{satsToTxc(t.fee)}</div>
+                    <div className="text-right">{satsToTxc(t.value)} TXC</div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
