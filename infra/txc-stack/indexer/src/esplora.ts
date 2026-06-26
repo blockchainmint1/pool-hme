@@ -3,7 +3,19 @@
 
 import Fastify from "fastify";
 import { db, getTipHeight } from "./db.js";
-import { getRawTx, rpc, RpcError, txcToSats, voutAddress, type RpcTx } from "./rpc.js";
+import {
+  getBlockCount,
+  getBlockHash,
+  getBlockVerbose,
+  getRawMempool,
+  getRawTx,
+  rpc,
+  RpcError,
+  txcToSats,
+  voutAddress,
+  type RpcBlock,
+  type RpcTx,
+} from "./rpc.js";
 
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
@@ -495,6 +507,241 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
   }
   return out;
 }
+
+// ---------- Esplora block + tx + mempool REST ----------
+// Implements the bare /blocks, /block/:hash, /block-height/:h, /mempool,
+// /fee-estimates, /tx/:txid, /tx/:txid/status, /tx/:txid/outspends paths.
+// Nginx maps both bare `/api/*` and `/api/v1/*` to these.
+
+function toEsploraBlockSummary(b: RpcBlock): unknown {
+  return {
+    id: b.hash,
+    height: b.height,
+    version: b.version,
+    timestamp: b.time,
+    tx_count: b.nTx,
+    size: b.size,
+    weight: b.weight,
+    merkle_root: b.merkleroot,
+    previousblockhash: b.previousblockhash ?? null,
+    mediantime: b.mediantime,
+    nonce: b.nonce,
+    bits: parseInt(b.bits, 16),
+    difficulty: b.difficulty,
+  };
+}
+
+// GET /blocks/tip/height — current chain height (text/plain integer)
+app.get("/blocks/tip/height", async (_req, reply) => {
+  const h = await getBlockCount();
+  return reply.type("text/plain").send(String(h));
+});
+
+// GET /blocks/tip/hash — tip hash (text/plain)
+app.get("/blocks/tip/hash", async (_req, reply) => {
+  const h = await getBlockCount();
+  const hash = await getBlockHash(h);
+  return reply.type("text/plain").send(hash);
+});
+
+// GET /blocks  -or-  /blocks/:start_height — last 10 blocks starting from tip or given height
+app.get<{ Params: { start?: string } }>("/blocks/:start", async ({ params }, reply) => {
+  return listBlocks(Number(params.start), reply);
+});
+app.get("/blocks", async (_req, reply) => listBlocks(undefined, reply));
+
+async function listBlocks(start: number | undefined, reply: import("fastify").FastifyReply) {
+  const tip = await getBlockCount();
+  const top = start === undefined || Number.isNaN(start) ? tip : Math.min(start, tip);
+  const out: unknown[] = [];
+  for (let i = 0; i < 10 && top - i >= 0; i++) {
+    const hash = await getBlockHash(top - i);
+    const blk = await getBlockVerbose(hash);
+    out.push(toEsploraBlockSummary(blk));
+  }
+  return reply.send(out);
+}
+
+// GET /block-height/:height — returns the block hash for a height (text/plain)
+app.get<{ Params: { height: string } }>("/block-height/:height", async ({ params }, reply) => {
+  const h = Number(params.height);
+  if (!Number.isInteger(h) || h < 0) return reply.code(400).type("text/plain").send("invalid height");
+  try {
+    const hash = await getBlockHash(h);
+    return reply.type("text/plain").send(hash);
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+});
+
+// GET /block/:hash — block summary by hash
+app.get<{ Params: { hash: string } }>("/block/:hash", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
+  try {
+    const blk = await getBlockVerbose(params.hash);
+    return reply.send(toEsploraBlockSummary(blk));
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+});
+
+// GET /block/:hash/txids — list of txids in the block
+app.get<{ Params: { hash: string } }>("/block/:hash/txids", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
+  try {
+    const blk = await getBlockVerbose(params.hash);
+    return reply.send(blk.tx.map((t) => t.txid));
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+});
+
+// GET /block/:hash/txs[/:start_index] — paginated txs (25 per page)
+app.get<{ Params: { hash: string; start?: string } }>(
+  "/block/:hash/txs/:start",
+  async ({ params }, reply) => blockTxs(params.hash, Number(params.start), reply),
+);
+app.get<{ Params: { hash: string } }>("/block/:hash/txs", async ({ params }, reply) =>
+  blockTxs(params.hash, 0, reply),
+);
+async function blockTxs(hash: string, start: number, reply: import("fastify").FastifyReply) {
+  if (!/^[0-9a-fA-F]{64}$/.test(hash)) return reply.code(400).send("invalid hash");
+  const s = Number.isInteger(start) && start >= 0 ? start : 0;
+  try {
+    const blk = await getBlockVerbose(hash);
+    const slice = blk.tx.slice(s, s + 25);
+    const cache = new Map<string, RpcTx>();
+    const out: unknown[] = [];
+    for (const tx of slice) out.push(await toEsploraTx(tx, cache));
+    return reply.send(out);
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+}
+
+// GET /tx/:txid — full Esplora tx
+app.get<{ Params: { txid: string } }>("/tx/:txid", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return reply.code(400).send("invalid txid");
+  try {
+    const tx = await getRawTx(params.txid);
+    const cache = new Map<string, RpcTx>();
+    return reply.send(await toEsploraTx(tx, cache));
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+});
+
+// GET /tx/:txid/status — confirmation status only
+app.get<{ Params: { txid: string } }>("/tx/:txid/status", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return reply.code(400).send("invalid txid");
+  try {
+    const tx = await getRawTx(params.txid);
+    const tip = getTipHeight();
+    if (tx.blockhash && tx.confirmations) {
+      return reply.send({
+        confirmed: true,
+        block_height: tip - tx.confirmations + 1,
+        block_hash: tx.blockhash,
+        block_time: tx.blocktime,
+      });
+    }
+    return reply.send({ confirmed: false });
+  } catch {
+    return reply.code(404).type("text/plain").send("not found");
+  }
+});
+
+// GET /tx/:txid/outspends — which outputs are spent and where
+app.get<{ Params: { txid: string } }>("/tx/:txid/outspends", async ({ params }, reply) => {
+  if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return reply.code(400).send("invalid txid");
+  const rows = db
+    .prepare("SELECT vout, spent_txid, spent_height FROM outputs WHERE txid = ? ORDER BY vout")
+    .all(params.txid) as { vout: number; spent_txid: string | null; spent_height: number | null }[];
+  if (rows.length === 0) {
+    // Fall back to RPC for non-indexed (very recent) txs — return unspent placeholders.
+    try {
+      const tx = await getRawTx(params.txid);
+      return reply.send(tx.vout.map(() => ({ spent: false })));
+    } catch {
+      return reply.code(404).type("text/plain").send("not found");
+    }
+  }
+  const tip = getTipHeight();
+  return reply.send(
+    rows.map((r) =>
+      r.spent_txid
+        ? {
+            spent: true,
+            txid: r.spent_txid,
+            vin: 0,
+            status: r.spent_height
+              ? { confirmed: true, block_height: r.spent_height }
+              : { confirmed: false },
+          }
+        : { spent: false },
+    ),
+  );
+});
+
+// GET /mempool — summary of unconfirmed pool
+app.get("/mempool", async (_req, reply) => {
+  try {
+    const txids = await getRawMempool();
+    // Cheap summary; mempool.space frontend mostly uses this for the count.
+    return reply.send({
+      count: txids.length,
+      vsize: 0,
+      total_fee: 0,
+      fee_histogram: [],
+    });
+  } catch {
+    return reply.send({ count: 0, vsize: 0, total_fee: 0, fee_histogram: [] });
+  }
+});
+
+// GET /mempool/txids — raw txid list
+app.get("/mempool/txids", async (_req, reply) => {
+  try {
+    const txids = await getRawMempool();
+    return reply.send(txids);
+  } catch {
+    return reply.send([]);
+  }
+});
+
+// GET /mempool/recent — last few mempool entries
+app.get("/mempool/recent", async (_req, reply) => {
+  try {
+    const txids = (await getRawMempool()).slice(0, 10);
+    const out: unknown[] = [];
+    for (const txid of txids) {
+      try {
+        const tx = await getRawTx(txid);
+        out.push({
+          txid,
+          fee: 0,
+          vsize: tx.vsize,
+          value: tx.vout.reduce((a, v) => a + txcToSats(v.value), 0),
+        });
+      } catch {
+        /* skip */
+      }
+    }
+    return reply.send(out);
+  } catch {
+    return reply.send([]);
+  }
+});
+
+// GET /fee-estimates — Esplora fee estimator. TexitCoin doesn't really need fee
+// markets, so we return a flat minimal fee map.
+app.get("/fee-estimates", async (_req, reply) => {
+  const flat = 1; // sat/vB
+  return reply.send({
+    "1": flat, "2": flat, "3": flat, "4": flat, "6": flat,
+    "10": flat, "20": flat, "144": flat, "504": flat, "1008": flat,
+  });
+});
 
 export async function startHttp(): Promise<void> {
   await app.listen({ host: "0.0.0.0", port: PORT });
