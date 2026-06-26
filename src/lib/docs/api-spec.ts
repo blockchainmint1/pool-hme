@@ -98,9 +98,9 @@ export const WS_GROUPS: EndpointGroup[] = [
   {
     id: "ws-connect",
     title: "Connecting",
-    description: "Connect to the mempool-style WebSocket. Same subprotocol as mempool.space.",
+    description: "Connect to the mempool-style WebSocket. Same subprotocol as mempool.space. Base URL: https://api.mempool.texitcoin.org",
     endpoints: [
-      { method: "WS", path: "wss://mempool2.texitcoin.org/api/v1/ws", summary: "Open a WebSocket connection." },
+      { method: "WS", path: "wss://api.mempool.texitcoin.org/api/v1/ws", summary: "Open a WebSocket connection." },
     ],
   },
   {
