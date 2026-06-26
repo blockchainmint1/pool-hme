@@ -105,7 +105,7 @@ function EndpointRow({
         }`}>
           {method}
         </span>
-        <code className="font-mono text-xs flex-1 break-all">{path}</code>
+        <code className="font-mono text-xs flex-1 break-all">{fullUrl}</code>
         <button
           onClick={async () => { await navigator.clipboard.writeText(curl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
           className="text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border border-border hover:border-primary"
