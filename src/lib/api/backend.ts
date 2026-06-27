@@ -46,3 +46,35 @@ export async function proxy(
     },
   });
 }
+
+/**
+ * Proxy a POST to the TXC backend. Used for Esplora-compatible transaction
+ * broadcast aliases on the frontend domain.
+ */
+export async function proxyPost(path: string, request: Request): Promise<Response> {
+  const url = `${BACKEND_URL}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": request.headers.get("content-type") || "text/plain",
+        Accept: "application/json, text/plain, */*",
+      },
+      body: await request.text(),
+    });
+  } catch (e) {
+    console.error("Backend POST failed", { path, error: e });
+    return errorResponse("Upstream unavailable", 502);
+  }
+
+  const ct = res.headers.get("content-type") || "text/plain";
+  const body = await res.arrayBuffer();
+  return new Response(body, {
+    status: res.status,
+    headers: {
+      "Content-Type": ct,
+      ...CORS_HEADERS,
+    },
+  });
+}
