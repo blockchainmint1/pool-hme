@@ -21,16 +21,27 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as MempoolIndexRouteImport } from './routes/mempool.index'
 import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
+import { Route as ApiTxRouteImport } from './routes/api/tx'
+import { Route as ApiFeeEstimatesRouteImport } from './routes/api/fee-estimates'
 import { Route as AddressAddrRouteImport } from './routes/address.$addr'
+import { Route as ApiMempoolIndexRouteImport } from './routes/api/mempool.index'
+import { Route as ApiBlocksIndexRouteImport } from './routes/api/blocks.index'
 import { Route as MempoolBlockIndexRouteImport } from './routes/mempool.block.$index'
 import { Route as ApiV1SupplyRouteImport } from './routes/api/v1/supply'
 import { Route as ApiV1RichlistRouteImport } from './routes/api/v1/richlist'
 import { Route as ApiV1PriceRouteImport } from './routes/api/v1/price'
+import { Route as ApiV1FeeEstimatesRouteImport } from './routes/api/v1/fee-estimates'
 import { Route as ApiV1DifficultyAdjustmentRouteImport } from './routes/api/v1/difficulty-adjustment'
+import { Route as ApiTxTxidRouteImport } from './routes/api/tx.$txid'
+import { Route as ApiMempoolTxidsRouteImport } from './routes/api/mempool.txids'
+import { Route as ApiBlocksStartHeightRouteImport } from './routes/api/blocks.$startHeight'
+import { Route as ApiBlockHeightHeightRouteImport } from './routes/api/block-height.$height'
+import { Route as ApiV1TxIndexRouteImport } from './routes/api/v1/tx.index'
 import { Route as ApiV1MempoolIndexRouteImport } from './routes/api/v1/mempool.index'
 import { Route as ApiV1BlocksIndexRouteImport } from './routes/api/v1/blocks.index'
 import { Route as ApiV1TxTxidRouteImport } from './routes/api/v1/tx.$txid'
 import { Route as ApiV1MiningHashrateRouteImport } from './routes/api/v1/mining.hashrate'
+import { Route as ApiV1MempoolTxidsRouteImport } from './routes/api/v1/mempool.txids'
 import { Route as ApiV1MempoolRecentRouteImport } from './routes/api/v1/mempool.recent'
 import { Route as ApiV1FeesRecommendedRouteImport } from './routes/api/v1/fees.recommended'
 import { Route as ApiV1FeesMempoolBlocksRouteImport } from './routes/api/v1/fees.mempool-blocks'
@@ -38,6 +49,11 @@ import { Route as ApiV1BlocksStartHeightRouteImport } from './routes/api/v1/bloc
 import { Route as ApiV1BlockHashRouteImport } from './routes/api/v1/block.$hash'
 import { Route as ApiV1BlockHeightHeightRouteImport } from './routes/api/v1/block-height.$height'
 import { Route as ApiV1AddressAddrRouteImport } from './routes/api/v1/address.$addr'
+import { Route as ApiTxTxidStatusRouteImport } from './routes/api/tx.$txid.status'
+import { Route as ApiTxTxidOutspendsRouteImport } from './routes/api/tx.$txid.outspends'
+import { Route as ApiTxTxidHexRouteImport } from './routes/api/tx.$txid.hex'
+import { Route as ApiBlocksTipHeightRouteImport } from './routes/api/blocks.tip.height'
+import { Route as ApiBlocksTipHashRouteImport } from './routes/api/blocks.tip.hash'
 import { Route as ApiV1TxTxidStatusRouteImport } from './routes/api/v1/tx.$txid.status'
 import { Route as ApiV1TxTxidOutspendsRouteImport } from './routes/api/v1/tx.$txid.outspends'
 import { Route as ApiV1TxTxidHexRouteImport } from './routes/api/v1/tx.$txid.hex'
@@ -110,9 +126,29 @@ const BlockHashRoute = BlockHashRouteImport.update({
   path: '/block/$hash',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTxRoute = ApiTxRouteImport.update({
+  id: '/api/tx',
+  path: '/api/tx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFeeEstimatesRoute = ApiFeeEstimatesRouteImport.update({
+  id: '/api/fee-estimates',
+  path: '/api/fee-estimates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AddressAddrRoute = AddressAddrRouteImport.update({
   id: '/address/$addr',
   path: '/address/$addr',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMempoolIndexRoute = ApiMempoolIndexRouteImport.update({
+  id: '/api/mempool/',
+  path: '/api/mempool/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBlocksIndexRoute = ApiBlocksIndexRouteImport.update({
+  id: '/api/blocks/',
+  path: '/api/blocks/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MempoolBlockIndexRoute = MempoolBlockIndexRouteImport.update({
@@ -135,12 +171,42 @@ const ApiV1PriceRoute = ApiV1PriceRouteImport.update({
   path: '/api/v1/price',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1FeeEstimatesRoute = ApiV1FeeEstimatesRouteImport.update({
+  id: '/api/v1/fee-estimates',
+  path: '/api/v1/fee-estimates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1DifficultyAdjustmentRoute =
   ApiV1DifficultyAdjustmentRouteImport.update({
     id: '/api/v1/difficulty-adjustment',
     path: '/api/v1/difficulty-adjustment',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiTxTxidRoute = ApiTxTxidRouteImport.update({
+  id: '/$txid',
+  path: '/$txid',
+  getParentRoute: () => ApiTxRoute,
+} as any)
+const ApiMempoolTxidsRoute = ApiMempoolTxidsRouteImport.update({
+  id: '/api/mempool/txids',
+  path: '/api/mempool/txids',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBlocksStartHeightRoute = ApiBlocksStartHeightRouteImport.update({
+  id: '/api/blocks/$startHeight',
+  path: '/api/blocks/$startHeight',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBlockHeightHeightRoute = ApiBlockHeightHeightRouteImport.update({
+  id: '/api/block-height/$height',
+  path: '/api/block-height/$height',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1TxIndexRoute = ApiV1TxIndexRouteImport.update({
+  id: '/api/v1/tx/',
+  path: '/api/v1/tx/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1MempoolIndexRoute = ApiV1MempoolIndexRouteImport.update({
   id: '/api/v1/mempool/',
   path: '/api/v1/mempool/',
@@ -159,6 +225,11 @@ const ApiV1TxTxidRoute = ApiV1TxTxidRouteImport.update({
 const ApiV1MiningHashrateRoute = ApiV1MiningHashrateRouteImport.update({
   id: '/api/v1/mining/hashrate',
   path: '/api/v1/mining/hashrate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MempoolTxidsRoute = ApiV1MempoolTxidsRouteImport.update({
+  id: '/api/v1/mempool/txids',
+  path: '/api/v1/mempool/txids',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MempoolRecentRoute = ApiV1MempoolRecentRouteImport.update({
@@ -194,6 +265,31 @@ const ApiV1BlockHeightHeightRoute = ApiV1BlockHeightHeightRouteImport.update({
 const ApiV1AddressAddrRoute = ApiV1AddressAddrRouteImport.update({
   id: '/api/v1/address/$addr',
   path: '/api/v1/address/$addr',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTxTxidStatusRoute = ApiTxTxidStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => ApiTxTxidRoute,
+} as any)
+const ApiTxTxidOutspendsRoute = ApiTxTxidOutspendsRouteImport.update({
+  id: '/outspends',
+  path: '/outspends',
+  getParentRoute: () => ApiTxTxidRoute,
+} as any)
+const ApiTxTxidHexRoute = ApiTxTxidHexRouteImport.update({
+  id: '/hex',
+  path: '/hex',
+  getParentRoute: () => ApiTxTxidRoute,
+} as any)
+const ApiBlocksTipHeightRoute = ApiBlocksTipHeightRouteImport.update({
+  id: '/api/blocks/tip/height',
+  path: '/api/blocks/tip/height',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBlocksTipHashRoute = ApiBlocksTipHashRouteImport.update({
+  id: '/api/blocks/tip/hash',
+  path: '/api/blocks/tip/hash',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1TxTxidStatusRoute = ApiV1TxTxidStatusRouteImport.update({
@@ -264,14 +360,28 @@ export interface FileRoutesByFullPath {
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/fee-estimates': typeof ApiFeeEstimatesRoute
+  '/api/tx': typeof ApiTxRouteWithChildren
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool/': typeof MempoolIndexRoute
+  '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
+  '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
+  '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
+  '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
+  '/api/blocks/': typeof ApiBlocksIndexRoute
+  '/api/mempool/': typeof ApiMempoolIndexRoute
+  '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
+  '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
+  '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
+  '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
+  '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -279,10 +389,12 @@ export interface FileRoutesByFullPath {
   '/api/v1/fees/mempool-blocks': typeof ApiV1FeesMempoolBlocksRoute
   '/api/v1/fees/recommended': typeof ApiV1FeesRecommendedRoute
   '/api/v1/mempool/recent': typeof ApiV1MempoolRecentRoute
+  '/api/v1/mempool/txids': typeof ApiV1MempoolTxidsRoute
   '/api/v1/mining/hashrate': typeof ApiV1MiningHashrateRoute
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks/': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
+  '/api/v1/tx/': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
@@ -305,14 +417,28 @@ export interface FileRoutesByTo {
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/fee-estimates': typeof ApiFeeEstimatesRoute
+  '/api/tx': typeof ApiTxRouteWithChildren
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool': typeof MempoolIndexRoute
+  '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
+  '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
+  '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
+  '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
+  '/api/blocks': typeof ApiBlocksIndexRoute
+  '/api/mempool': typeof ApiMempoolIndexRoute
+  '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
+  '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
+  '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
+  '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
+  '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -320,10 +446,12 @@ export interface FileRoutesByTo {
   '/api/v1/fees/mempool-blocks': typeof ApiV1FeesMempoolBlocksRoute
   '/api/v1/fees/recommended': typeof ApiV1FeesRecommendedRoute
   '/api/v1/mempool/recent': typeof ApiV1MempoolRecentRoute
+  '/api/v1/mempool/txids': typeof ApiV1MempoolTxidsRoute
   '/api/v1/mining/hashrate': typeof ApiV1MiningHashrateRoute
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool': typeof ApiV1MempoolIndexRoute
+  '/api/v1/tx': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
@@ -348,14 +476,28 @@ export interface FileRoutesById {
   '/mining': typeof MiningRoute
   '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/fee-estimates': typeof ApiFeeEstimatesRoute
+  '/api/tx': typeof ApiTxRouteWithChildren
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool/': typeof MempoolIndexRoute
+  '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
+  '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
+  '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
+  '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
   '/api/v1/richlist': typeof ApiV1RichlistRoute
   '/api/v1/supply': typeof ApiV1SupplyRoute
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
+  '/api/blocks/': typeof ApiBlocksIndexRoute
+  '/api/mempool/': typeof ApiMempoolIndexRoute
+  '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
+  '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
+  '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
+  '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
+  '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
@@ -363,10 +505,12 @@ export interface FileRoutesById {
   '/api/v1/fees/mempool-blocks': typeof ApiV1FeesMempoolBlocksRoute
   '/api/v1/fees/recommended': typeof ApiV1FeesRecommendedRoute
   '/api/v1/mempool/recent': typeof ApiV1MempoolRecentRoute
+  '/api/v1/mempool/txids': typeof ApiV1MempoolTxidsRoute
   '/api/v1/mining/hashrate': typeof ApiV1MiningHashrateRoute
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks/': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
+  '/api/v1/tx/': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
@@ -392,14 +536,28 @@ export interface FileRouteTypes {
     | '/mining'
     | '/richlist'
     | '/address/$addr'
+    | '/api/fee-estimates'
+    | '/api/tx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool/'
+    | '/api/block-height/$height'
+    | '/api/blocks/$startHeight'
+    | '/api/mempool/txids'
+    | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
+    | '/api/v1/fee-estimates'
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
     | '/mempool/block/$index'
+    | '/api/blocks/'
+    | '/api/mempool/'
+    | '/api/blocks/tip/hash'
+    | '/api/blocks/tip/height'
+    | '/api/tx/$txid/hex'
+    | '/api/tx/$txid/outspends'
+    | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -407,10 +565,12 @@ export interface FileRouteTypes {
     | '/api/v1/fees/mempool-blocks'
     | '/api/v1/fees/recommended'
     | '/api/v1/mempool/recent'
+    | '/api/v1/mempool/txids'
     | '/api/v1/mining/hashrate'
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks/'
     | '/api/v1/mempool/'
+    | '/api/v1/tx/'
     | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
@@ -433,14 +593,28 @@ export interface FileRouteTypes {
     | '/mining'
     | '/richlist'
     | '/address/$addr'
+    | '/api/fee-estimates'
+    | '/api/tx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool'
+    | '/api/block-height/$height'
+    | '/api/blocks/$startHeight'
+    | '/api/mempool/txids'
+    | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
+    | '/api/v1/fee-estimates'
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
     | '/mempool/block/$index'
+    | '/api/blocks'
+    | '/api/mempool'
+    | '/api/blocks/tip/hash'
+    | '/api/blocks/tip/height'
+    | '/api/tx/$txid/hex'
+    | '/api/tx/$txid/outspends'
+    | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -448,10 +622,12 @@ export interface FileRouteTypes {
     | '/api/v1/fees/mempool-blocks'
     | '/api/v1/fees/recommended'
     | '/api/v1/mempool/recent'
+    | '/api/v1/mempool/txids'
     | '/api/v1/mining/hashrate'
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks'
     | '/api/v1/mempool'
+    | '/api/v1/tx'
     | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
@@ -475,14 +651,28 @@ export interface FileRouteTypes {
     | '/mining'
     | '/richlist'
     | '/address/$addr'
+    | '/api/fee-estimates'
+    | '/api/tx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool/'
+    | '/api/block-height/$height'
+    | '/api/blocks/$startHeight'
+    | '/api/mempool/txids'
+    | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
+    | '/api/v1/fee-estimates'
     | '/api/v1/price'
     | '/api/v1/richlist'
     | '/api/v1/supply'
     | '/mempool/block/$index'
+    | '/api/blocks/'
+    | '/api/mempool/'
+    | '/api/blocks/tip/hash'
+    | '/api/blocks/tip/height'
+    | '/api/tx/$txid/hex'
+    | '/api/tx/$txid/outspends'
+    | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
@@ -490,10 +680,12 @@ export interface FileRouteTypes {
     | '/api/v1/fees/mempool-blocks'
     | '/api/v1/fees/recommended'
     | '/api/v1/mempool/recent'
+    | '/api/v1/mempool/txids'
     | '/api/v1/mining/hashrate'
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks/'
     | '/api/v1/mempool/'
+    | '/api/v1/tx/'
     | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
@@ -518,12 +710,22 @@ export interface RootRouteChildren {
   MiningRoute: typeof MiningRoute
   RichlistRoute: typeof RichlistRoute
   AddressAddrRoute: typeof AddressAddrRoute
+  ApiFeeEstimatesRoute: typeof ApiFeeEstimatesRoute
+  ApiTxRoute: typeof ApiTxRouteWithChildren
   BlockHashRoute: typeof BlockHashRoute
   TxTxidRoute: typeof TxTxidRoute
+  ApiBlockHeightHeightRoute: typeof ApiBlockHeightHeightRoute
+  ApiBlocksStartHeightRoute: typeof ApiBlocksStartHeightRoute
+  ApiMempoolTxidsRoute: typeof ApiMempoolTxidsRoute
   ApiV1DifficultyAdjustmentRoute: typeof ApiV1DifficultyAdjustmentRoute
+  ApiV1FeeEstimatesRoute: typeof ApiV1FeeEstimatesRoute
   ApiV1PriceRoute: typeof ApiV1PriceRoute
   ApiV1RichlistRoute: typeof ApiV1RichlistRoute
   ApiV1SupplyRoute: typeof ApiV1SupplyRoute
+  ApiBlocksIndexRoute: typeof ApiBlocksIndexRoute
+  ApiMempoolIndexRoute: typeof ApiMempoolIndexRoute
+  ApiBlocksTipHashRoute: typeof ApiBlocksTipHashRoute
+  ApiBlocksTipHeightRoute: typeof ApiBlocksTipHeightRoute
   ApiV1AddressAddrRoute: typeof ApiV1AddressAddrRouteWithChildren
   ApiV1BlockHeightHeightRoute: typeof ApiV1BlockHeightHeightRoute
   ApiV1BlockHashRoute: typeof ApiV1BlockHashRouteWithChildren
@@ -531,10 +733,12 @@ export interface RootRouteChildren {
   ApiV1FeesMempoolBlocksRoute: typeof ApiV1FeesMempoolBlocksRoute
   ApiV1FeesRecommendedRoute: typeof ApiV1FeesRecommendedRoute
   ApiV1MempoolRecentRoute: typeof ApiV1MempoolRecentRoute
+  ApiV1MempoolTxidsRoute: typeof ApiV1MempoolTxidsRoute
   ApiV1MiningHashrateRoute: typeof ApiV1MiningHashrateRoute
   ApiV1TxTxidRoute: typeof ApiV1TxTxidRouteWithChildren
   ApiV1BlocksIndexRoute: typeof ApiV1BlocksIndexRoute
   ApiV1MempoolIndexRoute: typeof ApiV1MempoolIndexRoute
+  ApiV1TxIndexRoute: typeof ApiV1TxIndexRoute
   ApiV1BlocksTipHashRoute: typeof ApiV1BlocksTipHashRoute
   ApiV1BlocksTipHeightRoute: typeof ApiV1BlocksTipHeightRoute
   ApiV1MiningPoolsWindowRoute: typeof ApiV1MiningPoolsWindowRoute
@@ -627,11 +831,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlockHashRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tx': {
+      id: '/api/tx'
+      path: '/api/tx'
+      fullPath: '/api/tx'
+      preLoaderRoute: typeof ApiTxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/fee-estimates': {
+      id: '/api/fee-estimates'
+      path: '/api/fee-estimates'
+      fullPath: '/api/fee-estimates'
+      preLoaderRoute: typeof ApiFeeEstimatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/address/$addr': {
       id: '/address/$addr'
       path: '/address/$addr'
       fullPath: '/address/$addr'
       preLoaderRoute: typeof AddressAddrRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mempool/': {
+      id: '/api/mempool/'
+      path: '/api/mempool'
+      fullPath: '/api/mempool/'
+      preLoaderRoute: typeof ApiMempoolIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/blocks/': {
+      id: '/api/blocks/'
+      path: '/api/blocks'
+      fullPath: '/api/blocks/'
+      preLoaderRoute: typeof ApiBlocksIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mempool/block/$index': {
@@ -662,11 +894,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PriceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/fee-estimates': {
+      id: '/api/v1/fee-estimates'
+      path: '/api/v1/fee-estimates'
+      fullPath: '/api/v1/fee-estimates'
+      preLoaderRoute: typeof ApiV1FeeEstimatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/difficulty-adjustment': {
       id: '/api/v1/difficulty-adjustment'
       path: '/api/v1/difficulty-adjustment'
       fullPath: '/api/v1/difficulty-adjustment'
       preLoaderRoute: typeof ApiV1DifficultyAdjustmentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tx/$txid': {
+      id: '/api/tx/$txid'
+      path: '/$txid'
+      fullPath: '/api/tx/$txid'
+      preLoaderRoute: typeof ApiTxTxidRouteImport
+      parentRoute: typeof ApiTxRoute
+    }
+    '/api/mempool/txids': {
+      id: '/api/mempool/txids'
+      path: '/api/mempool/txids'
+      fullPath: '/api/mempool/txids'
+      preLoaderRoute: typeof ApiMempoolTxidsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/blocks/$startHeight': {
+      id: '/api/blocks/$startHeight'
+      path: '/api/blocks/$startHeight'
+      fullPath: '/api/blocks/$startHeight'
+      preLoaderRoute: typeof ApiBlocksStartHeightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/block-height/$height': {
+      id: '/api/block-height/$height'
+      path: '/api/block-height/$height'
+      fullPath: '/api/block-height/$height'
+      preLoaderRoute: typeof ApiBlockHeightHeightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/tx/': {
+      id: '/api/v1/tx/'
+      path: '/api/v1/tx'
+      fullPath: '/api/v1/tx/'
+      preLoaderRoute: typeof ApiV1TxIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/mempool/': {
@@ -695,6 +969,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/mining/hashrate'
       fullPath: '/api/v1/mining/hashrate'
       preLoaderRoute: typeof ApiV1MiningHashrateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/mempool/txids': {
+      id: '/api/v1/mempool/txids'
+      path: '/api/v1/mempool/txids'
+      fullPath: '/api/v1/mempool/txids'
+      preLoaderRoute: typeof ApiV1MempoolTxidsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/mempool/recent': {
@@ -744,6 +1025,41 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/address/$addr'
       fullPath: '/api/v1/address/$addr'
       preLoaderRoute: typeof ApiV1AddressAddrRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tx/$txid/status': {
+      id: '/api/tx/$txid/status'
+      path: '/status'
+      fullPath: '/api/tx/$txid/status'
+      preLoaderRoute: typeof ApiTxTxidStatusRouteImport
+      parentRoute: typeof ApiTxTxidRoute
+    }
+    '/api/tx/$txid/outspends': {
+      id: '/api/tx/$txid/outspends'
+      path: '/outspends'
+      fullPath: '/api/tx/$txid/outspends'
+      preLoaderRoute: typeof ApiTxTxidOutspendsRouteImport
+      parentRoute: typeof ApiTxTxidRoute
+    }
+    '/api/tx/$txid/hex': {
+      id: '/api/tx/$txid/hex'
+      path: '/hex'
+      fullPath: '/api/tx/$txid/hex'
+      preLoaderRoute: typeof ApiTxTxidHexRouteImport
+      parentRoute: typeof ApiTxTxidRoute
+    }
+    '/api/blocks/tip/height': {
+      id: '/api/blocks/tip/height'
+      path: '/api/blocks/tip/height'
+      fullPath: '/api/blocks/tip/height'
+      preLoaderRoute: typeof ApiBlocksTipHeightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/blocks/tip/hash': {
+      id: '/api/blocks/tip/hash'
+      path: '/api/blocks/tip/hash'
+      fullPath: '/api/blocks/tip/hash'
+      preLoaderRoute: typeof ApiBlocksTipHashRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/tx/$txid/status': {
@@ -839,6 +1155,32 @@ const MempoolRouteChildren: MempoolRouteChildren = {
 const MempoolRouteWithChildren =
   MempoolRoute._addFileChildren(MempoolRouteChildren)
 
+interface ApiTxTxidRouteChildren {
+  ApiTxTxidHexRoute: typeof ApiTxTxidHexRoute
+  ApiTxTxidOutspendsRoute: typeof ApiTxTxidOutspendsRoute
+  ApiTxTxidStatusRoute: typeof ApiTxTxidStatusRoute
+}
+
+const ApiTxTxidRouteChildren: ApiTxTxidRouteChildren = {
+  ApiTxTxidHexRoute: ApiTxTxidHexRoute,
+  ApiTxTxidOutspendsRoute: ApiTxTxidOutspendsRoute,
+  ApiTxTxidStatusRoute: ApiTxTxidStatusRoute,
+}
+
+const ApiTxTxidRouteWithChildren = ApiTxTxidRoute._addFileChildren(
+  ApiTxTxidRouteChildren,
+)
+
+interface ApiTxRouteChildren {
+  ApiTxTxidRoute: typeof ApiTxTxidRouteWithChildren
+}
+
+const ApiTxRouteChildren: ApiTxRouteChildren = {
+  ApiTxTxidRoute: ApiTxTxidRouteWithChildren,
+}
+
+const ApiTxRouteWithChildren = ApiTxRoute._addFileChildren(ApiTxRouteChildren)
+
 interface ApiV1AddressAddrRouteChildren {
   ApiV1AddressAddrBalanceHistoryRoute: typeof ApiV1AddressAddrBalanceHistoryRoute
   ApiV1AddressAddrTxsRoute: typeof ApiV1AddressAddrTxsRoute
@@ -893,12 +1235,22 @@ const rootRouteChildren: RootRouteChildren = {
   MiningRoute: MiningRoute,
   RichlistRoute: RichlistRoute,
   AddressAddrRoute: AddressAddrRoute,
+  ApiFeeEstimatesRoute: ApiFeeEstimatesRoute,
+  ApiTxRoute: ApiTxRouteWithChildren,
   BlockHashRoute: BlockHashRoute,
   TxTxidRoute: TxTxidRoute,
+  ApiBlockHeightHeightRoute: ApiBlockHeightHeightRoute,
+  ApiBlocksStartHeightRoute: ApiBlocksStartHeightRoute,
+  ApiMempoolTxidsRoute: ApiMempoolTxidsRoute,
   ApiV1DifficultyAdjustmentRoute: ApiV1DifficultyAdjustmentRoute,
+  ApiV1FeeEstimatesRoute: ApiV1FeeEstimatesRoute,
   ApiV1PriceRoute: ApiV1PriceRoute,
   ApiV1RichlistRoute: ApiV1RichlistRoute,
   ApiV1SupplyRoute: ApiV1SupplyRoute,
+  ApiBlocksIndexRoute: ApiBlocksIndexRoute,
+  ApiMempoolIndexRoute: ApiMempoolIndexRoute,
+  ApiBlocksTipHashRoute: ApiBlocksTipHashRoute,
+  ApiBlocksTipHeightRoute: ApiBlocksTipHeightRoute,
   ApiV1AddressAddrRoute: ApiV1AddressAddrRouteWithChildren,
   ApiV1BlockHeightHeightRoute: ApiV1BlockHeightHeightRoute,
   ApiV1BlockHashRoute: ApiV1BlockHashRouteWithChildren,
@@ -906,10 +1258,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1FeesMempoolBlocksRoute: ApiV1FeesMempoolBlocksRoute,
   ApiV1FeesRecommendedRoute: ApiV1FeesRecommendedRoute,
   ApiV1MempoolRecentRoute: ApiV1MempoolRecentRoute,
+  ApiV1MempoolTxidsRoute: ApiV1MempoolTxidsRoute,
   ApiV1MiningHashrateRoute: ApiV1MiningHashrateRoute,
   ApiV1TxTxidRoute: ApiV1TxTxidRouteWithChildren,
   ApiV1BlocksIndexRoute: ApiV1BlocksIndexRoute,
   ApiV1MempoolIndexRoute: ApiV1MempoolIndexRoute,
+  ApiV1TxIndexRoute: ApiV1TxIndexRoute,
   ApiV1BlocksTipHashRoute: ApiV1BlocksTipHashRoute,
   ApiV1BlocksTipHeightRoute: ApiV1BlocksTipHeightRoute,
   ApiV1MiningPoolsWindowRoute: ApiV1MiningPoolsWindowRoute,
