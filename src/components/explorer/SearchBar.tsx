@@ -27,7 +27,9 @@ export function SearchBar({ variant = "header", autoFocus = false }: Props) {
         const hash = await esplora.blockByHeight(Number(q));
         navigate({ to: "/block/$hash", params: { hash } });
       } else if (kind === "address") {
-        navigate({ to: "/address/$addr", params: { addr: q } });
+        // bech32 addresses are canonically lowercase
+        const addr = /^txc1/i.test(q) ? q.toLowerCase() : q;
+        navigate({ to: "/address/$addr", params: { addr } });
       } else if (kind === "hash") {
         navigate({ to: "/block/$hash", params: { hash: q.toLowerCase() } });
       } else if (kind === "txid") {
@@ -62,7 +64,7 @@ export function SearchBar({ variant = "header", autoFocus = false }: Props) {
           autoFocus={autoFocus}
           value={value}
           onChange={(e) => { setValue(e.target.value); setErr(null); }}
-          placeholder="Search block height, hash, txid, or address (T…)"
+          placeholder="Search block height, hash, txid, or address (T… or txc1…)"
           className={
             isHero
               ? "w-full pl-10 pr-28 py-3.5 rounded-md surface-2 border border-border focus:border-primary focus:outline-none font-mono text-sm"

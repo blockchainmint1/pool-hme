@@ -79,5 +79,7 @@ export function classifySearch(raw: string): SearchKind {
     return s.startsWith("0000") ? "hash" : "txid";
   }
   if (/^T[1-9A-HJ-NP-Za-km-z]{25,40}$/.test(s)) return "address";
+  // bech32 segwit (e.g. txc1q…) — HRP + "1" + data chars from bech32 alphabet
+  if (/^txc1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,100}$/i.test(s)) return "address";
   return "unknown";
 }

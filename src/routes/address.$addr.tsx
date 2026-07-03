@@ -74,6 +74,7 @@ function AddressPage() {
   const bal = info.data ? addressBalanceSats(info.data) : null;
 
   const addrType = useMemo(() => {
+    if (/^txc1/i.test(addr)) return addr.length > 44 ? "P2WSH" : "P2WPKH";
     if (addr.startsWith("T") && addr.length < 36) return "P2PKH";
     if (addr.startsWith("3")) return "P2SH";
     return "Unknown";
