@@ -102,6 +102,52 @@ export const getBlockVerbose = (hash: string) => rpc<RpcBlock>("getblock", [hash
 export const getRawTx = (txid: string) => rpc<RpcTx>("getrawtransaction", [txid, true]);
 export const getRawMempool = () => rpc<string[]>("getrawmempool");
 
+// Verbose mempool: { txid: { vsize, weight, fee (TXC), fees: { base, modified, ancestor, descendant }, ... } }
+export interface RpcMempoolEntry {
+  vsize: number;
+  weight?: number;
+  size?: number;
+  time: number;
+  fee?: number; // TXC (legacy)
+  fees?: {
+    base: number; // TXC
+    modified: number;
+    ancestor: number;
+    descendant: number;
+  };
+  depends?: string[];
+}
+export const getRawMempoolVerbose = () =>
+  rpc<Record<string, RpcMempoolEntry>>("getrawmempool", [true]);
+
+export interface RpcMempoolInfo {
+  loaded: boolean;
+  size: number;
+  bytes: number;
+  usage: number;
+  total_fee?: number; // TXC (newer Core)
+  maxmempool: number;
+  mempoolminfee: number; // TXC/kvB
+  minrelaytxfee: number; // TXC/kvB
+}
+export const getMempoolInfo = () => rpc<RpcMempoolInfo>("getmempoolinfo");
+
+export interface RpcSmartFee {
+  feerate?: number; // TXC/kvB
+  blocks?: number;
+  errors?: string[];
+}
+export const estimateSmartFee = (target: number) =>
+  rpc<RpcSmartFee>("estimatesmartfee", [target, "CONSERVATIVE"]);
+
+/** Convert a TXC/kvB feerate (Core convention) to sat/vB. */
+export function feerateTxcKvbToSatVb(txcPerKvB: number | undefined): number | null {
+  if (!txcPerKvB || !Number.isFinite(txcPerKvB) || txcPerKvB <= 0) return null;
+  // TXC per kvB → sats per kvB → sats per vB
+  return (txcPerKvB * 1e8) / 1000;
+}
+
+
 export function voutAddress(v: RpcVout): string | null {
   if (v.scriptPubKey.address) return v.scriptPubKey.address;
   const arr = v.scriptPubKey.addresses;

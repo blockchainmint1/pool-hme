@@ -8,6 +8,10 @@ import {
   getBlockHash,
   getBlockVerbose,
   getRawMempool,
+  getRawMempoolVerbose,
+  getMempoolInfo,
+  estimateSmartFee,
+  feerateTxcKvbToSatVb,
   getRawTx,
   rpc,
   RpcError,
@@ -728,18 +732,52 @@ app.get<{ Params: { txid: string } }>("/tx/:txid/outspends", async ({ params }, 
   );
 });
 
-// GET /mempool — summary of unconfirmed pool
+// GET /mempool — real summary of the unconfirmed pool.
+// Uses getrawmempool verbose to sum vsize + fees across every entry, and
+// builds an Esplora-style fee_histogram: buckets of [feerate_satvb, vsize]
+// sorted by feerate DESC (highest paying first) so the mempool viz can walk
+// it top-down to project the next few blocks.
 app.get("/mempool", async (_req, reply) => {
   try {
-    const txids = await getRawMempool();
-    // Cheap summary; mempool.space frontend mostly uses this for the count.
+    const entries = await getRawMempoolVerbose();
+    let count = 0;
+    let vsize = 0;
+    let totalFeeSats = 0;
+    // Group into fee-rate buckets in sat/vB.
+    const buckets: Array<{ feerate: number; vsize: number }> = [];
+    for (const [, e] of Object.entries(entries)) {
+      const feeTxc = e.fees?.base ?? e.fee ?? 0;
+      const feeSats = Math.round(feeTxc * 1e8);
+      const vs = e.vsize || e.size || 0;
+      if (vs <= 0) continue;
+      count++;
+      vsize += vs;
+      totalFeeSats += feeSats;
+      const rate = feeSats / vs; // sat/vB
+      buckets.push({ feerate: rate, vsize: vs });
+    }
+    // Sort DESC by feerate, then merge into coarse buckets so the payload
+    // stays small (mempool.space frontends expect ~O(bands), not O(txs)).
+    buckets.sort((a, b) => b.feerate - a.feerate);
+    const bands = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0];
+    const histogram: [number, number][] = [];
+    let bi = 0;
+    for (const band of bands) {
+      let sum = 0;
+      while (bi < buckets.length && buckets[bi].feerate >= band) {
+        sum += buckets[bi].vsize;
+        bi++;
+      }
+      if (sum > 0) histogram.push([band, sum]);
+    }
     return reply.send({
-      count: txids.length,
-      vsize: 0,
-      total_fee: 0,
-      fee_histogram: [],
+      count,
+      vsize,
+      total_fee: totalFeeSats,
+      fee_histogram: histogram,
     });
-  } catch {
+  } catch (err) {
+    console.error("[indexer] /mempool failed:", (err as Error).message);
     return reply.send({ count: 0, vsize: 0, total_fee: 0, fee_histogram: [] });
   }
 });
@@ -754,39 +792,82 @@ app.get("/mempool/txids", async (_req, reply) => {
   }
 });
 
-// GET /mempool/recent — last few mempool entries
+// GET /mempool/recent — last N mempool entries with REAL fee/vsize.
+// Fees come from getrawmempool verbose (Core computes them from prevouts,
+// including chains of unconfirmed txs) so we don't have to resolve inputs
+// ourselves.
 app.get("/mempool/recent", async (_req, reply) => {
   try {
-    const txids = (await getRawMempool()).slice(0, 10);
+    const entries = await getRawMempoolVerbose();
+    // Sort by mempool arrival time DESC and take the top 10.
+    const rows = Object.entries(entries)
+      .map(([txid, e]) => ({ txid, e }))
+      .sort((a, b) => (b.e.time ?? 0) - (a.e.time ?? 0))
+      .slice(0, 10);
     const out: unknown[] = [];
-    for (const txid of txids) {
+    for (const { txid, e } of rows) {
+      const feeTxc = e.fees?.base ?? e.fee ?? 0;
+      const feeSats = Math.round(feeTxc * 1e8);
+      let value = 0;
       try {
         const tx = await getRawTx(txid);
-        out.push({
-          txid,
-          fee: 0,
-          vsize: tx.vsize,
-          value: tx.vout.reduce((a, v) => a + txcToSats(v.value), 0),
-        });
+        value = tx.vout.reduce((a, v) => a + txcToSats(v.value), 0);
       } catch {
-        /* skip */
+        /* keep value=0 if tx dropped between calls */
       }
+      out.push({ txid, fee: feeSats, vsize: e.vsize || e.size || 0, value });
     }
     return reply.send(out);
-  } catch {
+  } catch (err) {
+    console.error("[indexer] /mempool/recent failed:", (err as Error).message);
     return reply.send([]);
   }
 });
 
-// GET /fee-estimates — Esplora fee estimator. TexitCoin doesn't really need fee
-// markets, so we return a flat minimal fee map.
+// GET /fee-estimates — Esplora fee estimator.
+// Calls estimatesmartfee for each Esplora confirmation target and returns
+// the result in sat/vB. Falls back to the node's mempoolminfee / minrelaytxfee
+// (whichever is higher) when Core has no estimate for that target (common on
+// low-traffic chains). Cached briefly to avoid hammering RPC.
+const FEE_TARGETS = [1, 2, 3, 4, 6, 10, 20, 144, 504, 1008] as const;
+const FEE_TTL_MS = Number(process.env.FEE_TTL_MS ?? 30_000);
+let feeCache: { at: number; body: Record<string, number> } | null = null;
 app.get("/fee-estimates", async (_req, reply) => {
-  const flat = 1; // sat/vB
-  return reply.send({
-    "1": flat, "2": flat, "3": flat, "4": flat, "6": flat,
-    "10": flat, "20": flat, "144": flat, "504": flat, "1008": flat,
-  });
+  const now = Date.now();
+  if (feeCache && now - feeCache.at < FEE_TTL_MS) {
+    reply.header("cache-control", `public, max-age=${Math.floor(FEE_TTL_MS / 1000)}`);
+    return reply.send(feeCache.body);
+  }
+  try {
+    const info = await getMempoolInfo().catch(() => null);
+    const floor =
+      feerateTxcKvbToSatVb(
+        Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0),
+      ) ?? 1;
+    const out: Record<string, number> = {};
+    for (const t of FEE_TARGETS) {
+      let rate: number | null = null;
+      try {
+        const est = await estimateSmartFee(t);
+        rate = feerateTxcKvbToSatVb(est.feerate);
+      } catch {
+        /* fall back below */
+      }
+      // Round to 2 decimals, never below the relay floor.
+      const val = Math.max(rate ?? floor, floor);
+      out[String(t)] = Math.round(val * 100) / 100;
+    }
+    feeCache = { at: now, body: out };
+    reply.header("cache-control", `public, max-age=${Math.floor(FEE_TTL_MS / 1000)}`);
+    return reply.send(out);
+  } catch (err) {
+    console.error("[indexer] /fee-estimates failed:", (err as Error).message);
+    // Very last-resort: 1 sat/vB across the board. Better than crashing wallets.
+    const flat = 1;
+    return reply.send(Object.fromEntries(FEE_TARGETS.map((t) => [String(t), flat])));
+  }
 });
+
 
 export async function startHttp(): Promise<void> {
   await app.listen({ host: "0.0.0.0", port: PORT });
