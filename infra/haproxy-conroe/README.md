@@ -43,12 +43,28 @@ running box — edit here, commit, re-run `restore.sh`.
 
 ## Burn-in on EC2
 
+### Prerequisites
+
+```bash
+# AWS CLI installed and configured for us-east-2
+aws configure
+
+# EC2 Instance Connect CLI installed (for easy reconnect)
+# macOS:   brew install ec2-instance-connect-cli
+# Ubuntu:  sudo apt install ec2-instance-connect-cli
+```
+
+Required IAM permissions: `ec2:RunInstances`, `ec2:DescribeImages`,
+`ec2:DescribeSecurityGroups`, `ec2:CreateSecurityGroup`,
+`ec2:AuthorizeSecurityGroupIngress`, `ec2:DescribeInstances`,
+`ec2:TerminateInstances`, and `ec2-instance-connect:SendSSHPublicKey`.
+
+### Spin it up
+
 ```bash
 # from your laptop
 cd infra/haproxy-conroe
 
-# one-time: aws configure  (us-east-2)
-# IAM needs EC2 + EC2 Instance Connect (SendSSHPublicKey)
 ./build-on-ec2.sh
 # → prints the EC2 public IP and SSH command
 # → HAProxy is already running, pointed at the real upstream stratum
