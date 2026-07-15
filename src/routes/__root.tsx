@@ -157,43 +157,53 @@ function Footer() {
     <footer className="border-t border-border mt-16 surface/50">
       <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
         <div>
-          <div className="font-display tracking-wide mb-2">TXC.MEMPOOL</div>
-          <div className="text-xs text-muted-foreground">
-            Live block explorer for the TEXITcoin chain. Self-hosted node +
-            indexer + mempool backend — fully independent infrastructure.
+          <div className="font-display tracking-wide mb-2">TXC.POOL</div>
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            Part of the{" "}
+            <a
+              href="https://honest.money"
+              className="text-foreground underline decoration-dotted underline-offset-2 hover:text-primary"
+              target="_blank"
+              rel="noreferrer"
+            >
+              honest.money
+            </a>{" "}
+            ecosystem — sound-money infrastructure built by individuals, for individuals.
           </div>
         </div>
         <div>
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Explore</div>
           <ul className="space-y-1">
-            <li><Link to="/" className="hover:text-primary">Dashboard</Link></li>
+            <li><Link to="/" className="hover:text-primary">Pool</Link></li>
             <li><Link to="/mempool" className="hover:text-primary">Mempool</Link></li>
             <li><Link to="/blocks" className="hover:text-primary">Blocks</Link></li>
             <li><Link to="/mining" className="hover:text-primary">Mining</Link></li>
-            <li><Link to="/graphs" className="hover:text-primary">Graphs</Link></li>
             <li><Link to="/richlist" className="hover:text-primary">Richlist</Link></li>
           </ul>
         </div>
         <div>
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Ecosystem</div>
           <ul className="space-y-1">
-            <li><a href="https://texitcoin.org" className="hover:text-primary" target="_blank" rel="noreferrer">texitcoin.org</a></li>
             <li><a href="https://honest.money" className="hover:text-primary" target="_blank" rel="noreferrer">honest.money</a></li>
-            <li><a href="https://cryptopop.asia/api" className="hover:text-primary" target="_blank" rel="noreferrer">L2 docs (POP)</a></li>
-            <li><a href="https://imaginenation.com/api" className="hover:text-primary" target="_blank" rel="noreferrer">ImagineNation API</a></li>
+            <li><a href="https://texitcoin.org" className="hover:text-primary" target="_blank" rel="noreferrer">texitcoin.org</a></li>
+            <li><a href="https://texitcoin.org/build" className="hover:text-primary" target="_blank" rel="noreferrer">Build on TXC</a></li>
+            <li><Link to="/manifesto" className="hover:text-primary">Manifesto</Link></li>
           </ul>
         </div>
         <div>
-          <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Network</div>
-          <ul className="space-y-1 font-mono text-xs">
-            <li>P2PKH prefix: <span className="text-foreground">0x42 (T…)</span></li>
-            <li>Block time: <span className="text-foreground">~3 min</span></li>
-            <li>L2: <span className="text-foreground">Omni Layer</span></li>
+          <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Legal</div>
+          <ul className="space-y-1">
+            <li><Link to="/terms" className="hover:text-primary">Terms</Link></li>
+            <li><Link to="/privacy" className="hover:text-primary">Privacy</Link></li>
+            <li><Link to="/manifesto" className="hover:text-primary">Manifesto</Link></li>
+            <li><a href="https://texitcoin.org/build" className="hover:text-primary" target="_blank" rel="noreferrer">Build docs</a></li>
           </ul>
         </div>
       </div>
       <div className="border-t border-border py-3 text-center text-[11px] text-muted-foreground">
-        TEXITcoin · Mined in Texas, by individuals.
+        TEXITcoin · Mined in Texas, by individuals. Part of the{" "}
+        <a href="https://honest.money" className="underline decoration-dotted underline-offset-2 hover:text-primary" target="_blank" rel="noreferrer">honest.money</a>{" "}
+        ecosystem.
       </div>
     </footer>
   );
