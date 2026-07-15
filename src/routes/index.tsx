@@ -304,7 +304,7 @@ function PoolHero() {
         <h1 className="mt-3 font-pool-display text-4xl md:text-6xl leading-[1.02] text-pool-steel-hi max-w-3xl text-balance">
           Mine sound money.<br />
           <span className="text-pool-steel">One connection.</span>{" "}
-          <span className="text-pool-mint pool-hash-live">Five rewards.</span>
+          <span className="text-pool-mint pool-hash-live"></span>
         </h1>
         <p className="mt-4 text-sm md:text-base text-pool-steel max-w-2xl leading-relaxed">
           The TEXITcoin pool merges LTC, DOGE, ISK, TXC and ZCU into a single scrypt work
