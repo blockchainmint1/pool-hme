@@ -122,26 +122,14 @@ function Header() {
           </div>
         </Link>
         <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
-          {[
-            { to: "/", label: "Pool" },
-            { to: "/mempool", label: "Mempool" },
-            { to: "/blocks", label: "Blocks" },
-            { to: "/mining", label: "Mining" },
-            { to: "/graphs", label: "Graphs" },
-            { to: "/richlist", label: "Richlist" },
-            { to: "/docs", label: "API" },
-            { to: "/about", label: "About" },
-          ].map((l) => (
-            <Link
-              key={l.to}
-              to={l.to}
-              activeOptions={{ exact: l.to === "/" }}
-              className="px-3 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:surface-2 transition-colors"
-              activeProps={{ className: "px-3 py-1.5 rounded-sm text-foreground bg-surface-2" }}
-            >
-              {l.label}
-            </Link>
-          ))}
+          <Link
+            to="/"
+            activeOptions={{ exact: true }}
+            className="px-3 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:surface-2 transition-colors"
+            activeProps={{ className: "px-3 py-1.5 rounded-sm text-foreground bg-surface-2" }}
+          >
+            Pool
+          </Link>
         </nav>
         <div className="flex-1 flex justify-end items-center gap-2">
           <PriceTicker />
@@ -175,10 +163,9 @@ function Footer() {
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Explore</div>
           <ul className="space-y-1">
             <li><Link to="/" className="hover:text-primary">Pool</Link></li>
-            <li><Link to="/mempool" className="hover:text-primary">Mempool</Link></li>
-            <li><Link to="/blocks" className="hover:text-primary">Blocks</Link></li>
-            <li><Link to="/mining" className="hover:text-primary">Mining</Link></li>
-            <li><Link to="/richlist" className="hover:text-primary">Richlist</Link></li>
+            <li><a href="#workers" className="hover:text-primary">Workers</a></li>
+            <li><a href="#blocks" className="hover:text-primary">Found blocks</a></li>
+            <li><a href="#connect" className="hover:text-primary">Connect a miner</a></li>
           </ul>
         </div>
         <div>

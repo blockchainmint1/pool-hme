@@ -73,13 +73,25 @@ const POOL = {
     { name: "Litecoin",     symbol: "LTC",  hour: 0, day: 2,   week: 14,   month: 46 },
   ],
   avgHashrate: { hour: 8.3, day: 7.7, week: 8.0, month: 7.1 },
+  // Solo-found blocks. LTC/DOGE are NOT included — on merge-mine we submit shares
+  // to LTC and receive auxpow credit; the pool does not solo-find LTC or DOGE
+  // blocks. Only TXC / ISK / ZCU are truly found by this pool.
   found: [
     { height: 326253, coin: "TXC",  ago: 92,   reward: 250,   effort: 87  },
     { height: 326244, coin: "ISK",  ago: 340,  reward: 1.2,   effort: 104 },
-    { height: 2843110, coin: "LTC", ago: 610,  reward: 6.25,  effort: 62  },
-    { height: 5721904, coin: "DOGE", ago: 812, reward: 10000, effort: 71  },
     { height: 326238, coin: "ZCU",  ago: 1145, reward: 5,     effort: 118 },
     { height: 326231, coin: "TXC",  ago: 1602, reward: 250,   effort: 96  },
+    { height: 326219, coin: "ISK",  ago: 2410, reward: 1.2,   effort: 78  },
+    { height: 326204, coin: "TXC",  ago: 3380, reward: 250,   effort: 112 },
+  ],
+  // Miner-version breakdown (scrypt). Snapshot from the stratum's active
+  // connection table; will move to a live server function once the stratum
+  // moves to stratum.pool.texitcoin.org.
+  workers: [
+    { version: "xminer-1.2.7",     count: 1042, hashrateThs: 8.2,     avgGhs: 7.9,   percent: 97.3 },
+    { version: "farm-proxy/0.9.0", count: 60,   hashrateThs: 0.0244,  avgGhs: 0.406, percent: 0.29 },
+    { version: "cpuminer/2.5.1",   count: 5,    hashrateThs: 0.0096,  avgGhs: 1.9,   percent: 0.11 },
+    { version: "xminer-1.2.6-hf4", count: 3,    hashrateThs: 0.0298,  avgGhs: 9.9,   percent: 0.35 },
   ],
 };
 
