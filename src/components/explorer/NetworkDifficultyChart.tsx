@@ -46,8 +46,8 @@ export function NetworkDifficultyChart() {
       if (!res.ok) throw new Error(`hashrate ${res.status}`);
       return res.json();
     },
-    refetchInterval: 5 * 60_000,
-    staleTime: 5 * 60_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
     retry: 0,
   });
 
