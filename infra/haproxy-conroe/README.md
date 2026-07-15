@@ -47,7 +47,8 @@ running box — edit here, commit, re-run `restore.sh`.
 # from your laptop
 cd infra/haproxy-conroe
 
-# one-time: aws configure  (us-east-2, key with EC2 permissions)
+# one-time: aws configure  (us-east-2)
+# IAM needs EC2 + EC2 Instance Connect (SendSSHPublicKey)
 ./build-on-ec2.sh
 # → prints the EC2 public IP and SSH command
 # → HAProxy is already running, pointed at the real upstream stratum
