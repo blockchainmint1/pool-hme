@@ -294,7 +294,7 @@ Plan: run **HAProxy in TCP mode** on a small Linux box at the Conroe
 site (Intel N100 mini-PC, Protectli, or even a Raspberry Pi 5 to start).
 All 1200 L9s point at the on-site proxy's LAN IP on :3433. HAProxy
 opens a small pool of upstream TCP connections to
-`stratum.pool.texitcoin.org:3433` and multiplexes shares over them.
+`stratum.pool.honest.money:3433` and multiplexes shares over them.
 
 Why this helps under the leased-CPE constraint:
 
@@ -323,7 +323,7 @@ backend stratum_out
     option tcp-check
     timeout server 10m
     timeout connect 5s
-    server pool1 stratum.pool.texitcoin.org:3433 check inter 5s
+    server pool1 stratum.pool.honest.money:3433 check inter 5s
 ```
 
 #### Action items (revised, leased-space constraint)
@@ -344,7 +344,7 @@ backend stratum_out
    ourselves. Not blocking, but changes the long-term topology if they
    say yes.
 5. **Cutover alignment (§8b).** Do the HAProxy deploy and username
-   split *before* re-homing Conroe to `stratum.pool.texitcoin.org:3433`,
+   split *before* re-homing Conroe to `stratum.pool.honest.money:3433`,
    otherwise the cutover will look like it broke things when the
    underlying issue is still Conroe's LAN/WAN path.
 6. **ZCU `getblocktemplate` is broken** (`Zero Chill Units error
