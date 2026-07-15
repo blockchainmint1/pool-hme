@@ -70,15 +70,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "TXC Mempool — TEXITcoin Block Explorer" },
-      { name: "description", content: "Real-time TEXITcoin (TXC) block explorer, mempool visualization, fee estimator, Omni-Layer token decoder, and mining stats." },
+      { title: "TXC Pool — TEXITcoin Mining Pool" },
+      { name: "description", content: "TEXITcoin (TXC) mining pool dashboard: live hashrate, worker stats, payouts, and stratum connection info for pool.texitcoin.org." },
       { name: "author", content: "TEXITcoin" },
-      { property: "og:title", content: "TXC Mempool — TEXITcoin Block Explorer" },
-      { property: "og:description", content: "Real-time TEXITcoin (TXC) block explorer, mempool visualization, fee estimator, Omni-Layer token decoder, and mining stats." },
+      { property: "og:title", content: "TXC Pool — TEXITcoin Mining Pool" },
+      { property: "og:description", content: "TEXITcoin (TXC) mining pool dashboard: live hashrate, worker stats, payouts, and stratum connection info for pool.texitcoin.org." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "TXC Mempool — TEXITcoin Block Explorer" },
-      { name: "twitter:description", content: "Real-time TEXITcoin (TXC) block explorer, mempool visualization, fee estimator, Omni-Layer token decoder, and mining stats." },
+      { name: "twitter:title", content: "TXC Pool — TEXITcoin Mining Pool" },
+      { name: "twitter:description", content: "TEXITcoin (TXC) mining pool dashboard: live hashrate, worker stats, payouts, and stratum connection info for pool.texitcoin.org." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e23c0e1-ae81-4e85-8c9c-5b9c9a47003f/id-preview-f9d7e95b--a356bfa6-5f63-4466-b99d-f11202767549.lovable.app-1779994450550.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e23c0e1-ae81-4e85-8c9c-5b9c9a47003f/id-preview-f9d7e95b--a356bfa6-5f63-4466-b99d-f11202767549.lovable.app-1779994450550.png" },
     ],
@@ -118,7 +118,7 @@ function Header() {
             T
           </div>
           <div className="font-display tracking-wide text-base hidden sm:block">
-            TXC<span className="text-primary">.</span>MEMPOOL
+            TXC POOL
           </div>
         </Link>
         <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
@@ -157,7 +157,7 @@ function Footer() {
     <footer className="border-t border-border mt-16 surface/50">
       <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
         <div>
-          <div className="font-display tracking-wide mb-2">TXC.POOL</div>
+          <div className="font-display tracking-wide mb-2">TXC POOL</div>
           <div className="text-xs text-muted-foreground leading-relaxed">
             Part of the{" "}
             <a
@@ -201,7 +201,7 @@ function Footer() {
         </div>
       </div>
       <div className="border-t border-border py-3 text-center text-[11px] text-muted-foreground">
-        TEXITcoin · Mined in Texas, by individuals. Part of the{" "}
+        TXC Pool · Mined in Texas, by individuals. Part of the{" "}
         <a href="https://honest.money" className="underline decoration-dotted underline-offset-2 hover:text-primary" target="_blank" rel="noreferrer">honest.money</a>{" "}
         ecosystem.
       </div>
