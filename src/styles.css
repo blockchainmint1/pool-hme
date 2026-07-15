@@ -113,6 +113,19 @@
 
   --shadow-card: 0 10px 30px -15px oklch(0 0 0 / 50%);
   --shadow-glow-red: 0 0 30px -5px oklch(0.62 0.22 25 / 40%);
+
+  /* ---- honest.money pool face: black + graphite + steel ---- */
+  --pool-obsidian: oklch(0.11 0.004 250);
+  --pool-graphite: oklch(0.18 0.006 250);
+  --pool-graphite-2: oklch(0.23 0.008 250);
+  --pool-steel: oklch(0.62 0.020 250);
+  --pool-steel-hi: oklch(0.82 0.015 250);
+  --pool-hairline: oklch(1 0 0 / 7%);
+  --pool-mint: oklch(0.85 0.15 165);       /* hashrate signal — sparingly */
+  --pool-amber: oklch(0.82 0.15 78);       /* payout signal */
+
+  --font-pool-display: "Space Grotesk", "Oswald", system-ui, sans-serif;
+  --font-pool-body: "DM Sans", "Inter", system-ui, sans-serif;
 }
 
 .dark {
