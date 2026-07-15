@@ -124,7 +124,19 @@ cat <<EOF
 
 ==> HAProxy burn-in box is up.
 
-    ssh ubuntu@$IP   # via EC2 Instance Connect (aws ec2-instance-connect ssh ...)
+    instance-id: $IID
+    az:          $AZ
+    public-ip:   $IP
+
+    # reconnect via EC2 Instance Connect (requires ec2-instance-connect-cli)
+    mssh ubuntu@$IID --region $REGION
+
+    # or push a fresh key manually and ssh:
+    #   ssh-keygen -t ed25519 -N "" -f /tmp/haproxy-conroe-temp -C temp
+    #   aws ec2-instance-connect send-ssh-public-key \
+    #     --region $REGION --instance-id $IID --availability-zone $AZ \
+    #     --instance-os-user ubuntu --ssh-public-key file:///tmp/haproxy-conroe-temp.pub
+    #   ssh -i /tmp/haproxy-conroe-temp ubuntu@$IP
 
     # tail live traffic:
     sudo tail -f /var/log/haproxy.log
