@@ -1,0 +1,7 @@
+---
+# Overridable defaults. Real values live in group_vars/all.yml.
+stratum_install_dir: /var/stratum
+stratum_user: ubuntu
+stratum_group: www-data
+stratum_limit_nofile: 1048576
+stratum_algos: []

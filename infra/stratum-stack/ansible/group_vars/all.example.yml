@@ -1,0 +1,43 @@
+---
+# Non-secret configuration. Copy to all.yml and edit.
+
+stratum_install_dir: /var/stratum
+stratum_user: ubuntu
+stratum_group: www-data
+
+# Source repo for the stratum binary (fork of yiimp's stratum).
+# Change this to whichever fork you're running.
+stratum_source_repo: "https://github.com/tpruvot/yiimp.git"
+stratum_source_ref: "main"
+stratum_build_jobs: 4
+
+# Algos to deploy — each maps to templates/<algo>.conf.j2 and its own
+# systemd unit stratum-aws-<algo>.service.
+stratum_algos:
+  - scrypt
+  - pawelhash
+
+# ---- Upstream (yiimp DB) ----
+sql_host: localhost
+sql_database: yiimpfrontend
+sql_username: stratum
+# sql_password → vault.yml
+
+# ---- Per-algo tuning ----
+# Values reflect the current post-incident state (see README table).
+scrypt_tcp_port: 3433
+scrypt_ssl_port: 3434
+scrypt_difficulty_start: 0.25
+scrypt_diff_min: 65536
+scrypt_diff_max: 16777216
+scrypt_max_ttf: 4000000
+
+pawelhash_tcp_port: 5833
+pawelhash_ssl_port: 5834
+pawelhash_difficulty_start: 0.25
+pawelhash_diff_min: 1
+pawelhash_diff_max: 4194304
+pawelhash_max_ttf: 4000000
+
+# systemd hardening/tuning
+stratum_limit_nofile: 1048576

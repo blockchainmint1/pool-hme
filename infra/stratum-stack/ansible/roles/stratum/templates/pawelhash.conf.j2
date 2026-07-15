@@ -1,0 +1,24 @@
+; Managed by Ansible — do not edit on the box.
+
+[TCP]
+server = {{ inventory_hostname }}
+port = {{ pawelhash_tcp_port }}
+password = {{ stratum_upstream_password }}
+
+[SSL]
+server = {{ inventory_hostname }}
+port = {{ pawelhash_ssl_port }}
+password = {{ stratum_upstream_password }}
+
+[SQL]
+host = {{ sql_host }}
+database = {{ sql_database }}
+username = {{ sql_username }}
+password = {{ sql_password }}
+
+[STRATUM]
+algo = pawelhash
+difficulty = {{ pawelhash_difficulty_start }}
+diff_min = {{ pawelhash_diff_min }}
+diff_max = {{ pawelhash_diff_max }}
+max_ttf = {{ pawelhash_max_ttf }}

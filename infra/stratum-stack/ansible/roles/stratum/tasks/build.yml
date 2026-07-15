@@ -1,0 +1,50 @@
+---
+- name: Install build deps
+  apt:
+    name:
+      - build-essential
+      - libssl-dev
+      - libgmp-dev
+      - libmysqlclient-dev
+      - libcurl4-openssl-dev
+      - git
+      - pkg-config
+    state: present
+    update_cache: true
+
+- name: Ensure install dir exists
+  file:
+    path: "{{ stratum_install_dir }}"
+    state: directory
+    owner: "{{ stratum_user }}"
+    group: "{{ stratum_group }}"
+    mode: "0755"
+
+- name: Clone stratum source
+  git:
+    repo: "{{ stratum_source_repo }}"
+    dest: "{{ stratum_install_dir }}/src"
+    version: "{{ stratum_source_ref }}"
+    force: true
+  become_user: "{{ stratum_user }}"
+  register: stratum_src
+
+- name: Build stratum binary
+  shell: |
+    cd {{ stratum_install_dir }}/src/stratum
+    make -j{{ stratum_build_jobs | default(4) }}
+  args:
+    creates: "{{ stratum_install_dir }}/src/stratum/stratum"
+  when: stratum_src.changed
+  become_user: "{{ stratum_user }}"
+
+- name: Install stratum binary
+  copy:
+    src: "{{ stratum_install_dir }}/src/stratum/stratum"
+    dest: "{{ stratum_install_dir }}/stratum"
+    remote_src: true
+    owner: "{{ stratum_user }}"
+    group: "{{ stratum_group }}"
+    mode: "0755"
+  when: stratum_src.changed
+  notify: restart stratum

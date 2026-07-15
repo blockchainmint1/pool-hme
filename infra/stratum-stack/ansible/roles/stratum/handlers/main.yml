@@ -1,0 +1,10 @@
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: restart stratum
+  systemd:
+    name: "stratum-aws-{{ item }}.service"
+    state: restarted
+  loop: "{{ stratum_algos }}"
