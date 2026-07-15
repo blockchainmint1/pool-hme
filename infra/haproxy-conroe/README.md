@@ -90,9 +90,13 @@ That's it. Same config as the EC2 burn-in box, no drift.
 ## Rollback
 
 HAProxy is a sidecar, not a shared resource. If it dies, flip miners
-back to `stratum.pool.texitcoin.org:3433` (or the current
-`pool.texitcoin.org:3433`) and the fleet keeps mining — you're just back
-to the double-NAT problem, not offline.
+back to `stratum.pool.honest.money:3433` and the fleet keeps mining —
+you're just back to the double-NAT problem, not offline.
+
+## Frontend
+
+The mining frontend / dashboard lives at `pool.honest.money`. This box
+only proxies stratum traffic; it does not serve the web frontend.
 
 ## Change management
 
