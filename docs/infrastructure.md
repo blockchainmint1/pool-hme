@@ -191,3 +191,92 @@ Learning goals while we still have limited access:
 - Do not lose the context that this has already consumed ~12 hours of
   troubleshooting; prefer recording exact paths, command output, and conclusions
   here rather than re-discovering them in chat.
+
+#### Root cause (confirmed 2026-07-15 ~13:08 UTC)
+
+**The Conroe L9s are behind a single stratum proxy at `209.34.50.105`.**
+Socket census on port 3433:
+
+```
+977 209.34.50.105    ← Conroe (proxied)
+ 48 97.154.36.156
+ 21 99.107.246.68
+  1 98.199.83.99
+  1 70.105.29.38
+  1 65.130.245.188
+  1 47.27.209.30
+  1 38.158.167.79
+```
+
+Because ~93% of the fleet arrives as **one TCP connection / one user**
+(`ltc1q8gwep085vk...`), Yiimp's per-worker `speed` accounting for that user
+collapses to a near-zero value (`speed 0.000009` spammed once per second)
+and any dashboard reading per-worker hashrate looks broken.
+
+Actual work is fine. Log-event distribution in the last 5000 lines is:
+
+```
+~1667 TXC aux submit
+~1667 ISK aux submit
+~1666 DOGE aux submit
+```
+
+= ~500 shares/sec of merged-mining aux submissions landing at the pool. That
+is why TXC and ISK blocks are still being produced. **No hashpower was ever
+lost.** What broke at the Conroe scale-up was the reporting/attribution
+pipeline, not the mining pipeline.
+
+#### Action items
+
+1. **Reconfigure the Conroe L9s to connect directly**, one L9 per socket,
+   each with its own worker suffix (`ltc1q…worker1`, `worker2`, …). This
+   restores per-worker vardiff, hashrate, and payout accounting. Align this
+   with the takeover cutover (§8b) — point them at
+   `stratum.pool.texitcoin.org:3433` when we flip DNS.
+2. **ZCU `getblocktemplate` is broken** (`Zero Chill Units error
+   getblocktemplate result`). Separate ticket, low priority per operator.
+
+#### Log vocabulary lesson (do not repeat)
+
+This build of the stratum does **not** emit `mining.subscribe`,
+`mining.authorize`, or `share accepted/rejected` lines. Grepping for those
+returned 0 and misled us for hours. In this build:
+
+- Accepted shares appear as `<COIN> aux submit …` lines (one per aux chain).
+- Client connect appears as `[ip] <user>, <algo>, using N workers`.
+- Per-user reported speed appears as `[ip] <user>, <algo>, speed <n>`.
+
+When diagnosing a new build, first enumerate the event vocabulary:
+
+```bash
+sudo tail -n 5000 /var/stratum/scrypt.log \
+  | awk '{print $2, $3, $4}' | sort | uniq -c | sort -rn | head -20
+```
+
+#### Correct peer-IP census command
+
+```bash
+sudo ss -Htn state established sport = :3433 \
+  | awk '{print $4}' | sed 's/:[0-9]*$//' \
+  | sort | uniq -c | sort -rn | head -10
+```
+
+(The earlier `awk 'NR>1{split($5,…)}'` version parsed the wrong column on
+this box's `ss` output and reported everything as blank.)
+
+#### Yiimp DB — `workers` has no `hashrate` column
+
+Per-worker `workers` row stores `difficulty`, not `hashrate`. Pool-wide
+hashrate history is in the `hashrate` table:
+
+```sql
+SELECT FROM_UNIXTIME(time) t,
+       ROUND(hashrate/1e12,2)     TH_s,
+       ROUND(hashrate_bad/1e12,2) TH_bad
+FROM hashrate WHERE algo='scrypt'
+ORDER BY time DESC LIMIT 12;
+```
+
+To confirm columns on any table before querying:
+`SHOW COLUMNS FROM <table>;`
+
