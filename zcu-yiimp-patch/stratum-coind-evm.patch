@@ -1,0 +1,81 @@
+Subject: [PATCH] stratum: accept EVM (0x…40-hex) wallet addresses for auxpow children
+
+Yiimp's `coind_validate_address()` assumes a bitcoin-style base58 / bech32
+address: it calls `validateaddress` on the coind, then `base58_decode`s
+the wallet into `script_pubkey`, then falls back to the RPC's
+`scriptPubKey` field. An EVM auxpow child (ZCU) served via a
+bitcoind-compat adapter cannot satisfy any of those paths, so the coin
+is marked invalid and never enters the aux merge-mine rotation.
+
+For a pure-aux child (auxpow=1) stratum does NOT build the child
+coinbase itself — the adapter's createauxblock / submitauxblock handles
+the EVM side. Stratum only needs to:
+
+  1. recognise a `0x` + 40-hex string as a valid payout target,
+  2. store the 20-byte payload in `coind->script_pubkey`
+     (hex form, 40 chars — matches how script_pubkey is used elsewhere),
+  3. skip the RPC validation dance and return true.
+
+Apply on the live tree, then rebuild + reinstall:
+
+    cd /home/ubuntu/aws/LIVE/LIVE-FINAL/stratum
+    sudo patch -p1 < /path/to/stratum-coind-evm.patch
+    sudo make -j$(nproc)
+    sudo install -m755 stratum /var/stratum/stratum
+    sudo systemctl restart stratum-scrypt
+
+---
+ stratum/coind.cpp | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+--- a/stratum/coind.cpp
++++ b/stratum/coind.cpp
+@@ -108,10 +108,44 @@ static void coind_error(YAAMP_COIND *coind, const char *s)
+ 	// (context lines — adjust if your local hunk anchor differs)
+ }
+ 
++// --- EVM aux-child support ------------------------------------------------
++// Detect a 0x-prefixed 40-hex EVM address (e.g. 0xe3Aa…Bdfe).
++// Case-insensitive on the hex nibbles; checksum casing is not enforced
++// because EIP-55 checksums are advisory and coind adapters are free to
++// normalise them.
++static bool is_evm_address(const char *s)
++{
++	if (!s || strlen(s) != 42) return false;
++	if (s[0] != '0' || (s[1] != 'x' && s[1] != 'X')) return false;
++	for (int i = 2; i < 42; i++) {
++		char c = s[i];
++		if (!((c >= '0' && c <= '9') ||
++		      (c >= 'a' && c <= 'f') ||
++		      (c >= 'A' && c <= 'F'))) return false;
++	}
++	return true;
++}
++// --------------------------------------------------------------------------
++
+ bool coind_validate_address(YAAMP_COIND *coind)
+ {
+ 	if(!coind->wallet[0]) return false;
+ 
++	// EVM aux-child fast path: no base58, no validateaddress RPC.
++	// The bitcoind-compat adapter (createauxblock / submitauxblock) is
++	// responsible for the EVM-side coinbase payout to this address; we
++	// only need to stash the 20-byte payload so downstream code that
++	// touches coind->script_pubkey has a non-empty value.
++	if (is_evm_address(coind->wallet)) {
++		// store the 40 hex chars (drop the 0x) — this matches how the
++		// rest of the codebase treats script_pubkey (hex string).
++		strncpy(coind->script_pubkey, coind->wallet + 2,
++		        sizeof(coind->script_pubkey) - 1);
++		coind->script_pubkey[sizeof(coind->script_pubkey) - 1] = '\0';
++		coind->pubkey[0]  = '\0';
++		coind->account[0] = '\0';
++		coind->p2sh_address = false;
++		stratumlog("%s EVM wallet %s accepted (aux child, adapter handles coinbase)\n",
++		           coind->symbol, coind->wallet);
++		return true;
++	}
++
+ 	char params[YAAMP_SMALLBUFSIZE];
+ 	sprintf(params, "[\"%s\"]", coind->wallet);
+ 
