@@ -93,7 +93,7 @@ Run against the box over SSH:
 | `difficulty` (start) | 0.25 | Legacy default, vardiff ramps from here |
 | `diff_min` | 65536 | Was 15000 — caused 82% futex contention w/ 1200 L9s |
 | `diff_max` | 16777216 | Was 4194304 — 30% of L9s were pegged at ceiling |
-| `max_ttf` | 4000000 | 1 share per ~1s at target difficulty |
+| `max_ttf` | 40000 | ~40s target time-to-find per share (observed ~65s on L9s at avg 1.7M diff — vardiff behaving correctly) |
 | `LimitNOFILE` | 1048576 | Default 1024 exhausted at ~900 connections |
 
 Change history lives in git; do not edit these values on the box.

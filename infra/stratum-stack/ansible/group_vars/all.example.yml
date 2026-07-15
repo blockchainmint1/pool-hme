@@ -30,14 +30,14 @@ scrypt_ssl_port: 3434
 scrypt_difficulty_start: 0.25
 scrypt_diff_min: 65536
 scrypt_diff_max: 16777216
-scrypt_max_ttf: 4000000
+scrypt_max_ttf: 40000       # ~40s target time-to-find per share (L9-tuned)
 
 pawelhash_tcp_port: 5833
 pawelhash_ssl_port: 5834
 pawelhash_difficulty_start: 0.25
 pawelhash_diff_min: 1
 pawelhash_diff_max: 4194304
-pawelhash_max_ttf: 4000000
+pawelhash_max_ttf: 40000
 
 # systemd hardening/tuning
 stratum_limit_nofile: 1048576
