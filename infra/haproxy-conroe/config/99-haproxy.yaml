@@ -1,0 +1,16 @@
+# /etc/netplan/99-haproxy.yaml
+# Static LAN IP for the HAProxy box. Miners point at 10.0.0.10:3433.
+# Adjust `enp1s0` to match `ip -o link show` on the actual hardware.
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp1s0:
+      dhcp4: false
+      addresses:
+        - 10.0.0.10/24
+      routes:
+        - to: default
+          via: 10.0.0.1
+      nameservers:
+        addresses: [1.1.1.1, 9.9.9.9]
