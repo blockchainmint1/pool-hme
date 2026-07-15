@@ -777,9 +777,6 @@ function WorkersTable() {
     </div>
   );
 }
-    </div>
-  );
-}
 
 function CoinBadge({ symbol }: { symbol: string }) {
   const colorMap: Record<string, string> = {
