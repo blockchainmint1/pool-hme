@@ -55,11 +55,14 @@ cd infra/haproxy-conroe
 ```
 
 Point **one** test miner (not all 1200) at the EC2 public IP on :3433 for
-30 minutes. Watch:
+30 minutes. Watch (use `mssh` or push a fresh Instance Connect key first):
 
 ```bash
-ssh ubuntu@<ec2-ip> 'sudo tail -f /var/log/haproxy.log'
-ssh ubuntu@<ec2-ip> 'sudo /opt/haproxy-conroe/watch-sessions.sh'
+# with ec2-instance-connect-cli installed
+mssh ubuntu@<instance-id> --region us-east-2 --command 'sudo tail -f /var/log/haproxy.log'
+mssh ubuntu@<instance-id> --region us-east-2 --command 'sudo /opt/haproxy-conroe/watch-sessions.sh'
+
+# or push a fresh key and ssh normally (see script output for the exact command)
 ```
 
 You should see the miner establish, submit shares, and Yiimp credit them
