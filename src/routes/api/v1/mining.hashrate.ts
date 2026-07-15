@@ -94,12 +94,17 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           return errorResponse("no block data returned from backend", 502);
         }
 
-        // Current = average over the most recent populated chunk.
+        // Current = average over the most recent handful of blocks, so the
+        // "now" number actually moves as new blocks land instead of being
+        // smoothed across a 15-block window (~45 min at target).
         const newestChunk = populated.reduce((a, b) =>
           Math.max(...a.map((x) => x.height)) > Math.max(...b.map((x) => x.height)) ? a : b,
         );
-        const currentHashrate = hashrateFromBlocks(newestChunk);
-        const currentDifficulty = newestChunk[0]?.difficulty ?? 0;
+        const recent = [...newestChunk]
+          .sort((a, b) => b.height - a.height)
+          .slice(0, 6);
+        const currentHashrate = hashrateFromBlocks(recent);
+        const currentDifficulty = recent[0]?.difficulty ?? newestChunk[0]?.difficulty ?? 0;
 
         const body = {
           window: windowParam,
@@ -111,10 +116,12 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           difficulty: difficultyFromChunks(populated),
           formula: "hashrate = difficulty * 2^32 / avg_block_time_sec",
           sampleSizePerPoint: 15,
+          currentSampleSize: recent.length,
         };
 
-        // Edge-cache: 1d window churns; 1y is basically static.
-        const cacheSeconds = windowParam === "1d" ? 60 : windowParam === "1w" ? 300 : 1800;
+        // Keep the "current" number fresh regardless of window — a new block
+        // lands every ~3 min on TXC, so anything longer feels frozen.
+        const cacheSeconds = 60;
 
         return new Response(JSON.stringify(body), {
           status: 200,
