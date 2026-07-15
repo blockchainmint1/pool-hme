@@ -566,13 +566,11 @@ function CodeCopy({
 // ---------------------------------------------------------------------------
 function PayoutCard() {
   const nextPayout = useMemo(() => nextHalfHourEpoch(), []);
-  const [remainingSec, setRemainingSec] = useState(() =>
-    Math.max(0, nextPayout - Math.floor(Date.now() / 1000)),
-  );
+  const [remainingSec, setRemainingSec] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => {
-      setRemainingSec(Math.max(0, nextPayout - Math.floor(Date.now() / 1000)));
-    }, 1000);
+    const tick = () => setRemainingSec(Math.max(0, nextPayout - Math.floor(Date.now() / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [nextPayout]);
 
