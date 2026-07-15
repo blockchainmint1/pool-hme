@@ -83,10 +83,14 @@ moves to `stratum.pool.texitcoin.org`.
 
 - `scrypt.conf.j2` sets initial `difficulty = 0.25`, `diff_min = 65536`.
 - Vardiff is supposed to bump each worker up to `diff_min` on connect.
-- **Open issue (2026-07-15):** no `mining.set_difficulty` lines in
-  `scrypt.log`. Every L9 appears stuck at the initial 0.25, so every share
-  is well below the parent target and gets rejected via the
-  `aux submit skip target parent_diff=…` codepath.
+- **Confirmed 2026-07-15:** vardiff is working in the DB even if
+  `mining.set_difficulty` is not showing clearly in `scrypt.log`.
+- Snapshot from the stratum host during the Conroe L9 incident:
+  `workers=1050`, `avg_d=578074`, `min_d=131072`, `max_d=1048576`,
+  `at_start_diff=0`.
+- `aux submit skip target parent_diff=… child_diff=…` is normal merged-mining
+  filtering for shares that are not strong enough to submit as aux blocks. Do
+  not treat that line by itself as a rejected miner share.
 - Do **not** hand-edit difficulty on the box. Adjust `scrypt.conf.j2` and
   re-run:
   ```bash
@@ -108,13 +112,17 @@ sudo ss -tn state established sport = :3433 | awk 'NR>1{split($5,a,":");print a[
 # Vardiff snapshot from the DB (from the box):
 sudo bash -c '
   CONF=/var/stratum/config/scrypt.conf
-  # extract mysql creds from CONF, then:
-  mysql ... -e "
-    SELECT COUNT(*) AS n,
-           AVG(difficulty) AS avg_d,
-           MIN(difficulty) AS min_d,
-           MAX(difficulty) AS max_d,
-           SUM(CASE WHEN difficulty <= 1 THEN 1 ELSE 0 END) AS at_start_diff
+  [ -f "$CONF" ] || CONF=/var/stratum/scrypt.conf
+  U=$(awk -F"= *" "/^username/{print \$2; exit}" "$CONF")
+  P=$(awk -F"= *" "/^password/{print \$2}" "$CONF" | tail -1)
+  D=$(awk -F"= *" "/^database/{print \$2; exit}" "$CONF")
+  mysql -u "$U" -p"$P" "$D" -e "
+    SELECT
+      COUNT(*) AS workers,
+      ROUND(AVG(difficulty)) AS avg_d,
+      MIN(difficulty) AS min_d,
+      MAX(difficulty) AS max_d,
+      SUM(CASE WHEN difficulty <= 1 THEN 1 ELSE 0 END) AS at_start_diff
     FROM workers WHERE algo=\"scrypt\";"
 '
 ```
@@ -135,3 +143,21 @@ sudo bash -c '
 - [Terms of Service](../src/routes/terms.tsx) — plain-language pool rules
 - [Privacy](../src/routes/privacy.tsx) — data we collect / don't
 - Build docs for the TEXITcoin chain and Omni L2: <https://texitcoin.org/build>
+
+## 9. Incident notes
+
+### 2026-07-15 — Conroe L9 scale-up incident
+
+- Yesterday the scrypt pool was operating normally.
+- A large additional batch of Antminer L9s was brought online in Conroe; the
+  problem started after that scale-up.
+- Current status as recorded during troubleshooting: **TXC and ISK blocks are
+  still being made**.
+- **ZCU has still not produced blocks**, but this is explicitly lower priority
+  and should be handled later after the main L9/throughput issue is stable.
+- Current working conclusion: this is not simply an initial-difficulty/vardiff
+  problem. The DB shows all connected L9 workers have been assigned real
+  vardiff values and none remain at the `0.25` start difficulty.
+- Do not lose the context that this has already consumed ~12 hours of
+  troubleshooting; prefer recording exact paths, command output, and conclusions
+  here rather than re-discovering them in chat.
