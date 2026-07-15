@@ -213,7 +213,8 @@ Because ~93% of the fleet arrives as **one TCP connection / one user**
 collapses to a near-zero value (`speed 0.000009` spammed once per second)
 and any dashboard reading per-worker hashrate looks broken.
 
-Actual work is fine. Log-event distribution in the last 5000 lines is:
+Log-event distribution in the last 5000 lines was entirely aux-submit
+evaluations (one per aux chain per share):
 
 ```
 ~1667 TXC aux submit
@@ -221,20 +222,44 @@ Actual work is fine. Log-event distribution in the last 5000 lines is:
 ~1666 DOGE aux submit
 ```
 
-= ~500 shares/sec of merged-mining aux submissions landing at the pool. That
-is why TXC and ISK blocks are still being produced. **No hashpower was ever
-lost.** What broke at the Conroe scale-up was the reporting/attribution
-pipeline, not the mining pipeline.
+Blocks land because ~9.5 TH/s on the current network is enough to solve
+TXC and ISK regularly. But — see the correction below — this is not the
+"nothing lost, just reporting" story it initially looked like.
+
+#### Correction — real hashpower shortfall (confirmed 2026-07-15 ~13:15 UTC)
+
+The `hashrate` table is Yiimp's own accepted-work total, not a UI artifact.
+Pool-wide hashrate history for scrypt:
+
+```
+10:15  6.88 TH/s
+10:30  7.98
+...
+12:45  7.63
+13:00  9.57   ← Conroe scale-up shows here
+```
+
+- Expected from 1200 × ~16 GH/s L9s: **~19.2 TH/s**.
+- Actual credited: **~9.5 TH/s** (about half).
+- Conroe delta: **+1.5 TH/s** for a batch that should have added ~16 TH/s.
+  Conroe is contributing roughly 10% of its capacity.
+
+So the reporting bug is real (per-worker `speed` collapses under the proxy),
+**but** work is also being lost. The proxy at `209.34.50.105` is
+bottlenecking / dropping / colliding real work from the Conroe fleet, not
+just misattributing it.
 
 #### Action items
 
-1. **Reconfigure the Conroe L9s to connect directly**, one L9 per socket,
-   each with its own worker suffix (`ltc1q…worker1`, `worker2`, …). This
-   restores per-worker vardiff, hashrate, and payout accounting. Align this
-   with the takeover cutover (§8b) — point them at
-   `stratum.pool.texitcoin.org:3433` when we flip DNS.
+1. **Kill the proxy path in Conroe.** Reconfigure each L9 to connect
+   directly, one socket per unit, unique worker suffix (`ltc1q…worker1`,
+   `worker2`, …). This is the single biggest lever and it restores both
+   the hashpower and the per-worker accounting at once. Line up with the
+   takeover cutover (§8b) — point Conroe at
+   `stratum.pool.texitcoin.org:3433` when DNS flips.
 2. **ZCU `getblocktemplate` is broken** (`Zero Chill Units error
    getblocktemplate result`). Separate ticket, low priority per operator.
+
 
 #### Log vocabulary lesson (do not repeat)
 
