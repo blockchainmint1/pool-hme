@@ -129,6 +129,7 @@ function PoolHome() {
           <RailLink href="#algos"     icon={CircuitBoard}  label="Algos" />
           <RailLink href="#stats"     icon={Activity}      label="Pool stats" />
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
+          <RailLink href="#workers"   icon={Cpu}           label="Workers" />
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
@@ -179,11 +180,20 @@ function PoolHome() {
             </div>
           </section>
 
+          <section id="workers" className="space-y-3">
+            <SectionHeader
+              eyebrow="Connected miners"
+              title="Workers by version."
+              hint="scrypt · live from stratum"
+            />
+            <WorkersTable />
+          </section>
+
           <section id="blocks" className="space-y-3">
             <SectionHeader
               eyebrow="Found by the pool"
               title="Recent blocks."
-              hint="all algos · newest first"
+              hint="TXC · ISK · ZCU · newest first"
             />
             <FoundBlocks />
           </section>
@@ -682,15 +692,91 @@ function FoundBlocks() {
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
         <div className="text-[11px] font-mono text-pool-steel">
-          Effort under 100% = block found faster than expected.
+          Effort under 100% = block found faster than expected. LTC / DOGE are merge-mined
+          via auxpow (share credit, not solo-found blocks) and are not listed here.
         </div>
-        <Link
-          to="/blocks"
-          className="inline-flex items-center gap-1 text-[11px] font-mono text-pool-steel-hi hover:text-pool-mint"
-        >
-          all blocks <ChevronRight className="size-3.5" />
-        </Link>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Workers table — miner-version breakdown, modeled on pool.txc
+// ---------------------------------------------------------------------------
+function WorkersTable() {
+  const totalCount = POOL.workers.reduce((s, w) => s + w.count, 0);
+  const totalThs = POOL.workers.reduce((s, w) => s + w.hashrateThs, 0);
+  const totalAvgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
+
+  const fmtHash = (ths: number) => {
+    if (ths >= 1) return `${ths.toFixed(2)} TH/s`;
+    const ghs = ths * 1000;
+    if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
+    return `${(ghs * 1000).toFixed(1)} MH/s`;
+  };
+  const fmtAvg = (ghs: number) => {
+    if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
+    return `${(ghs * 1000).toFixed(1)} MH/s`;
+  };
+
+  return (
+    <div className="pool-kpi-panel rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
+              <th className="text-left  px-5 py-3 font-normal">Version</th>
+              <th className="text-right px-3 py-3 font-normal">Count</th>
+              <th className="text-right px-3 py-3 font-normal">Percent</th>
+              <th className="text-right px-3 py-3 font-normal">Hashrate*</th>
+              <th className="text-right px-5 py-3 font-normal">Avg</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {POOL.workers.map((w) => (
+              <tr
+                key={w.version}
+                className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
+              >
+                <td className="px-5 py-3 text-pool-steel-hi font-semibold">{w.version}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                  {w.count.toLocaleString()}
+                </td>
+                <td className="px-3 py-3 text-right text-pool-steel tabular-nums">
+                  {w.percent.toFixed(2)}%
+                </td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                  {fmtHash(w.hashrateThs)}
+                </td>
+                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">
+                  {fmtAvg(w.avgGhs)}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
+              <td className="px-5 py-3 text-pool-steel-hi">Total</td>
+              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
+                {totalCount.toLocaleString()}
+              </td>
+              <td className="px-3 py-3 text-right text-pool-steel">—</td>
+              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
+                {fmtHash(totalThs)}
+              </td>
+              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">
+                {fmtAvg(totalAvgGhs)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
+        * approximate from the last 5 minutes of submitted shares.
+        <span className="ml-2 text-pool-amber">farm-proxy/0.9.0</span> connections aggregate
+        multiple miners behind a single stratum session — under investigation.
+      </div>
+    </div>
+  );
+}
     </div>
   );
 }
