@@ -1,211 +1,769 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useMempoolFeed } from "@/lib/txc/ws";
-import { esplora } from "@/lib/txc/esplora";
-import { MempoolBlocksViz } from "@/components/explorer/MempoolBlocksViz";
-import { ConfirmedBlocksStrip } from "@/components/explorer/ConfirmedBlocksStrip";
-import { FeeGauge } from "@/components/explorer/FeeGauge";
-import { StatTile } from "@/components/explorer/StatTile";
-import { SearchBar } from "@/components/explorer/SearchBar";
-import { NetworkDifficultyChart } from "@/components/explorer/NetworkDifficultyChart";
-import { formatBytes, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
-import { Activity, Clock, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  ArrowUpRight,
+  Cpu,
+  Gauge,
+  Copy,
+  Check,
+  ChevronRight,
+  ShieldCheck,
+  Zap,
+  CircuitBoard,
+  Wallet,
+  BookOpen,
+  Radio,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "TXC Mempool — Live TEXITcoin Block Explorer" },
-      { name: "description", content: "Live TEXITcoin mempool, projected blocks, fee estimator, and recent blocks." },
-      { property: "og:title", content: "TXC Mempool — Live TEXITcoin Block Explorer" },
-      { property: "og:description", content: "Live TEXITcoin mempool, projected blocks, fee estimator, and recent blocks." },
+      { title: "TEXITcoin Pool — Sound-money mining, made simple" },
+      {
+        name: "description",
+        content:
+          "TXC-ISK merged mining pool for the TEXITcoin network. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
+      },
+      { property: "og:title", content: "TEXITcoin Pool" },
+      {
+        property: "og:description",
+        content:
+          "Merged mining pool on the TEXITcoin network. Live hashrate, active miners, and 30-min payouts.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "TEXITcoin Pool" },
+      {
+        name: "twitter:description",
+        content:
+          "Merged mining pool on the TEXITcoin network. Live hashrate, active miners, and 30-min payouts.",
+      },
     ],
   }),
-  component: Dashboard,
+  component: PoolHome,
 });
 
-function Dashboard() {
-  const feed = useMempoolFeed();
-  const diff = useQuery({
-    queryKey: ["mempool", "difficulty"],
-    queryFn: () => esplora.difficultyAdjustment(),
-    refetchInterval: 60_000,
-    retry: 0,
-  });
+// ---------------------------------------------------------------------------
+// Placeholder pool data — shaped to match pool.texitcoin.org today.
+// When the real ASICs move to stratum.pool.texitcoin.org this becomes a
+// server-function fetch; the UI stays the same.
+// ---------------------------------------------------------------------------
 
-  const dot =
-    feed.status === "live"
-      ? "bg-success"
-      : feed.status === "polling"
-      ? "bg-warning"
-      : "bg-muted-foreground";
+const POOL = {
+  hashrateThs: 7.9,
+  miners: 697,
+  fee: 0, // percent
+  blocks24h: 84,
+  region: "US · Texas",
+  stratum: "stratum+tcp://pool.texitcoin.org:3433",
+  stratumFuture: "stratum+tcp://stratum.pool.texitcoin.org:3433",
+  algos: [
+    { symbol: "LTC",  name: "Litecoin",     port: 3433, note: "dedicated port for LTC",  miners: 697, fee: 0 },
+    { symbol: "DOGE", name: "Dogecoin",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
+    { symbol: "ISK",  name: "Iskander",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
+    { symbol: "TXC",  name: "TEXITcoin",    port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
+    { symbol: "ZCU",  name: "Zero Chill U", port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
+  ],
+  stats: [
+    { name: "Zero Chill U", symbol: "ZCU", hour: 5,  day: 309, week: 3158, month: 13742 },
+    { name: "TEXITcoin",    symbol: "TXC", hour: 20, day: 294, week: 3025, month: 3227 },
+    { name: "Iskander",     symbol: "ISK", hour: 30, day: 297, week: 2986, month: 3188 },
+    { name: "Dogecoin",     symbol: "DOGE", hour: 0, day: 4,   week: 19,   month: 93 },
+    { name: "Litecoin",     symbol: "LTC",  hour: 0, day: 2,   week: 14,   month: 46 },
+  ],
+  avgHashrate: { hour: 8.3, day: 7.7, week: 8.0, month: 7.1 },
+  found: [
+    { height: 326253, coin: "TXC",  ago: 92,   reward: 250,   effort: 87  },
+    { height: 326244, coin: "ISK",  ago: 340,  reward: 1.2,   effort: 104 },
+    { height: 2843110, coin: "LTC", ago: 610,  reward: 6.25,  effort: 62  },
+    { height: 5721904, coin: "DOGE", ago: 812, reward: 10000, effort: 71  },
+    { height: 326238, coin: "ZCU",  ago: 1145, reward: 5,     effort: 118 },
+    { height: 326231, coin: "TXC",  ago: 1602, reward: 250,   effort: 96  },
+  ],
+};
 
+function formatThs(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(2)} PH/s`;
+  return `${n.toFixed(2)} TH/s`;
+}
+function ago(sec: number) {
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  return `${Math.round(sec / 3600)}h ago`;
+}
+
+// ---------------------------------------------------------------------------
+
+function PoolHome() {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Hero / search */}
-      <section className="rounded-xl surface border border-border p-6 md:p-10 shadow-card relative overflow-hidden">
-        <div className="relative">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-            <span className={`size-2 rounded-full ${dot} animate-pulse-dot`} />
-            {feed.status === "live" && "Live · WebSocket"}
-            {feed.status === "polling" && "Live · polling 10s"}
-            {feed.status === "connecting" && "Connecting…"}
-            {feed.status === "offline" && "Offline"}
-            {feed.tipHeight != null && (
-              <span className="ml-2 font-mono text-foreground">
-                tip {formatNumber(feed.tipHeight)}
-              </span>
-            )}
+    <div className="font-pool-body pool-grid-bg -mt-[1px]">
+      {/* preview banner */}
+      <div className="border-b border-pool-hairline pool-graphite">
+        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-widest">
+          <div className="flex items-center gap-2 text-pool-steel">
+            <span className="size-1.5 rounded-full bg-pool-amber animate-pulse-dot" />
+            preview build · stratum lands soon on{" "}
+            <span className="text-pool-steel-hi">stratum.pool.texitcoin.org</span>
           </div>
-          <h1 className="font-display text-4xl md:text-5xl font-bold mt-2 text-balance">
-            TEXITcoin <span className="text-primary">mempool</span>, right now.
-          </h1>
-          <p className="mt-2 text-sm md:text-base text-muted-foreground max-w-2xl">
-            Real-time view of the TXC chain — projected next blocks, fees,
-            Omni-Layer token activity, and the address/tx/block you came here to find.
-          </p>
-          <div className="mt-6">
-            <SearchBar variant="hero" />
+          <div className="hidden md:block text-pool-steel">honest.money · TXC ecosystem</div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-12 gap-6">
+        {/* Left rail nav — dashboard shell */}
+        <aside className="hidden lg:block col-span-3 xl:col-span-2 space-y-1 sticky top-20 self-start">
+          <RailLink href="#overview"  icon={Gauge}         label="Overview" active />
+          <RailLink href="#algos"     icon={CircuitBoard}  label="Algos" />
+          <RailLink href="#stats"     icon={Activity}      label="Pool stats" />
+          <RailLink href="#connect"   icon={Radio}         label="Connect" />
+          <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
+          <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
+          <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
+          <div className="mt-6 pool-tick rounded-md p-3">
+            <div className="text-[10px] uppercase tracking-widest text-pool-steel">Status</div>
+            <div className="mt-1 flex items-center gap-2 text-xs font-mono">
+              <span className="size-2 rounded-full bg-pool-mint animate-pulse-dot" />
+              <span className="text-pool-steel-hi">Pool online</span>
+            </div>
+            <div className="mt-3 text-[10px] uppercase tracking-widest text-pool-steel">Region</div>
+            <div className="mt-1 text-xs font-mono text-pool-steel-hi">{POOL.region}</div>
           </div>
-        </div>
-      </section>
+        </aside>
 
-      <NetworkDifficultyChart />
+        <div className="col-span-12 lg:col-span-9 xl:col-span-10 space-y-10">
+          <PoolHero />
 
-      {/* Mempool + confirmed strips */}
-      <section className="grid lg:grid-cols-2 gap-6">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-              <Zap className="size-4 text-primary" /> Mempool · projected blocks
-            </h2>
-            <Link to="/mempool" className="text-[11px] text-muted-foreground hover:text-primary font-medium">
-              {feed.mempool ? `${formatNumber(feed.mempool.count)} txs waiting →` : "view mempool →"}
-            </Link>
-          </div>
-          <MempoolBlocksViz blocks={feed.mempoolBlocks} />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-              <Activity className="size-4 text-accent" /> Recent confirmed blocks
-            </h2>
-            <a href="/blocks" className="text-[11px] text-muted-foreground hover:text-primary font-medium">
-              view all →
-            </a>
-          </div>
-          <ConfirmedBlocksStrip blocks={feed.blocks} />
-        </div>
-      </section>
+          <section id="algos" className="space-y-3">
+            <SectionHeader
+              eyebrow="Merged mining"
+              title="One hash, five chains."
+              hint="scrypt · one connection, five rewards"
+            />
+            <AlgoTable />
+          </section>
 
-      {/* Stats + fees */}
-      <section className="grid md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatTile
-          label="Tip height"
-          value={feed.tipHeight != null ? formatNumber(feed.tipHeight) : "—"}
-          hint={feed.blocks[0] ? timeAgo(feed.blocks[0].timestamp) : ""}
-        />
-        <StatTile
-          label="Mempool size"
-          value={feed.mempool ? formatNumber(feed.mempool.count) + " tx" : "—"}
-          hint={feed.mempool ? formatBytes(feed.mempool.vsize) : ""}
-        />
-        <StatTile
-          label="Difficulty"
-          value={feed.blocks[0]?.difficulty ? feed.blocks[0].difficulty.toExponential(3) : "—"}
-          hint={
-            diff.data
-              ? `${diff.data.progressPercent.toFixed(1)}% · ${diff.data.remainingBlocks} blocks left`
-              : ""
-          }
-        />
-        <StatTile
-          label="Next retarget"
-          value={
-            diff.data
-              ? `${diff.data.difficultyChange >= 0 ? "+" : ""}${diff.data.difficultyChange.toFixed(2)}%`
-              : "—"
-          }
-          hint={diff.data && diff.data.remainingTime > 0 ? `in ~${Math.round(diff.data.remainingTime / 3600)}h` : ""}
-        />
-        <StatTile
-          label="Mined in"
-          value="Texas"
-          hint="by individuals · 3-min blocks"
-        />
-      </section>
+          <section id="stats" className="space-y-3">
+            <SectionHeader
+              eyebrow="Pool activity"
+              title="Coins mined by the pool."
+              hint="rolling windows · scrypt"
+            />
+            <PoolStatsTable />
+          </section>
 
-      <section className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          <FeeGauge fees={feed.fees} />
-        </div>
-        <div className="lg:col-span-2 rounded-md surface-2 border border-border p-4">
-          <h3 className="font-display text-base uppercase tracking-wide mb-2">
-            What you're looking at
-          </h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            The colored boxes on the left are <strong className="text-foreground">projected blocks</strong> —
-            transactions currently in the mempool, bucketed by fee rate. The strip on
-            the right is the most recent <strong className="text-foreground">confirmed blocks</strong>.
-            Click any block to see its txs, click any tx to see inputs/outputs, and
-            paste a TXC address (starting with <span className="font-mono">T</span>) in
-            the search bar to see history. <strong className="text-foreground">Omni-Layer</strong> token
-            operations (POP, ImagineNation tokens, anything using <span className="font-mono">"omni"</span> OP_RETURN)
-            are decoded automatically on the transaction page.
-          </p>
-        </div>
-      </section>
+          <section id="connect" className="grid lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3 space-y-3">
+              <SectionHeader
+                eyebrow="Point a rig"
+                title="Connect in ~30 seconds."
+                hint="LTC wallet + DOGE payout link"
+              />
+              <ConnectCard />
+            </div>
+            <div className="lg:col-span-2 space-y-3">
+              <SectionHeader eyebrow="Fair share" title="Payouts." hint="every 30 minutes" />
+              <PayoutCard />
+            </div>
+          </section>
 
-      <RecentTransactions />
+          <section id="blocks" className="space-y-3">
+            <SectionHeader
+              eyebrow="Found by the pool"
+              title="Recent blocks."
+              hint="all algos · newest first"
+            />
+            <FoundBlocks />
+          </section>
+
+          <section id="learn" className="space-y-3">
+            <SectionHeader
+              eyebrow="Learn & build"
+              title="TEXITcoin, from first principles."
+              hint="chain spec · Omni L2 · APIs"
+            />
+            <LearnBand />
+          </section>
+        </div>
+      </div>
     </div>
   );
 }
 
-function RecentTransactions() {
-  const recent = useQuery({
-    queryKey: ["mempool", "recent", "home"],
-    queryFn: () => esplora.mempoolRecent(),
-    refetchInterval: 10_000,
-    retry: 0,
-  });
-
+// ---------------------------------------------------------------------------
+// Rail link
+// ---------------------------------------------------------------------------
+function RailLink({
+  href,
+  icon: Icon,
+  label,
+  active,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+}) {
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          <Clock className="size-4 text-accent" /> Recent transactions
-        </h2>
-        <Link to="/mempool" className="text-[11px] text-muted-foreground hover:text-primary font-medium">
-          view all in mempool →
-        </Link>
-      </div>
-      {recent.isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      ) : !recent.data?.length ? (
-        <div className="surface-2 border border-border rounded-md p-6 text-sm text-muted-foreground text-center">
-          No recent unconfirmed transactions.
+    <a
+      href={href}
+      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors border ${
+        active
+          ? "pool-tick text-pool-steel-hi border-pool-hairline"
+          : "text-pool-steel border-transparent hover:text-pool-steel-hi hover:pool-graphite"
+      }`}
+    >
+      <Icon className="size-4" />
+      <span>{label}</span>
+    </a>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section header
+// ---------------------------------------------------------------------------
+function SectionHeader({
+  eyebrow,
+  title,
+  hint,
+}: {
+  eyebrow: string;
+  title: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
+          {eyebrow}
         </div>
-      ) : (
-        <div className="grid gap-1.5">
-          {recent.data.slice(0, 12).map((t) => {
-            const feeRate = t.vsize > 0 ? t.fee / t.vsize : 0;
-            return (
-              <Link
-                key={t.txid}
-                to="/tx/$txid"
-                params={{ txid: t.txid }}
-                className="surface-2 border border-border rounded-md px-3 py-2 hover:border-primary/60 transition-colors flex items-center justify-between gap-3 text-xs"
-              >
-                <span className="font-mono truncate">{shortHash(t.txid, 14, 14)}</span>
-                <div className="flex items-center gap-4 flex-shrink-0 font-mono">
-                  <span className="text-muted-foreground hidden sm:inline">{t.vsize} vB</span>
-                  <span className="text-accent">{feeRate.toFixed(2)} sat/vB</span>
-                  <span className="text-foreground">{satsToTxc(t.value)} TXC</span>
-                </div>
-              </Link>
-            );
-          })}
+        <h2 className="font-pool-display text-2xl md:text-3xl text-pool-steel-hi mt-1">
+          {title}
+        </h2>
+      </div>
+      {hint && (
+        <div className="text-[11px] font-mono uppercase tracking-widest text-pool-steel">
+          {hint}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hero — big live hashrate + KPI band
+// ---------------------------------------------------------------------------
+function PoolHero() {
+  // gently drift the hashrate to feel live
+  const [ths, setThs] = useState(POOL.hashrateThs);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setThs((prev) => {
+        const drift = (Math.random() - 0.5) * 0.18;
+        const next = Math.max(6.4, Math.min(9.4, prev + drift));
+        return Number(next.toFixed(2));
+      });
+    }, 3200);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <section id="overview" className="pool-kpi-panel rounded-lg overflow-hidden">
+      <div className="relative p-6 md:p-10 pool-scanline">
+        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] text-pool-steel">
+          <span className="size-1.5 rounded-full bg-pool-mint animate-pulse-dot" />
+          Live · TXC–ISK merged pool
+          <span className="mx-2 text-pool-hairline">·</span>
+          scrypt
+          <span className="mx-2 text-pool-hairline">·</span>
+          fee <span className="text-pool-steel-hi">0%</span>
+        </div>
+
+        <h1 className="mt-3 font-pool-display text-4xl md:text-6xl leading-[1.02] text-pool-steel-hi max-w-3xl text-balance">
+          Mine sound money.<br />
+          <span className="text-pool-steel">One connection.</span>{" "}
+          <span className="text-pool-mint pool-hash-live">Five rewards.</span>
+        </h1>
+        <p className="mt-4 text-sm md:text-base text-pool-steel max-w-2xl leading-relaxed">
+          The TEXITcoin pool merges LTC, DOGE, ISK, TXC and ZCU into a single scrypt work
+          unit. Point one worker, get paid on the two coins that pay — while TXC and its
+          siblings secure themselves for free.
+        </p>
+
+        {/* Big live hashrate */}
+        <div className="mt-8 grid md:grid-cols-5 gap-4">
+          <div className="md:col-span-2 pool-tick rounded-md p-5">
+            <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+              Network hashrate · pool
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-pool-display font-semibold text-5xl md:text-6xl text-pool-steel-hi pool-hash-live tabular-nums">
+                {ths.toFixed(2)}
+              </span>
+              <span className="font-mono text-pool-steel text-sm">TH/s</span>
+            </div>
+            <div className="mt-2 text-[11px] font-mono text-pool-steel">
+              rolling · scrypt · updated live
+            </div>
+          </div>
+
+          <Kpi label="Active miners" value={POOL.miners.toLocaleString()} hint="workers online" />
+          <Kpi label="Pool fee" value="0%" hint="no take · ever" />
+          <Kpi label="Blocks / 24h" value={POOL.blocks24h.toString()} hint="all algos combined" />
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <a
+            href="#connect"
+            className="inline-flex items-center gap-2 rounded-md bg-pool-mint text-pool-obsidian px-4 py-2.5 text-sm font-semibold hover:opacity-90 transition"
+          >
+            Connect a miner <ArrowUpRight className="size-4" />
+          </a>
+          <a
+            href="https://pool.texitcoin.org/site/dogeRegister"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-pool-hairline pool-tick text-pool-steel-hi px-4 py-2.5 text-sm font-medium hover:pool-graphite-2 transition"
+          >
+            Register LTC/DOGE <ChevronRight className="size-4" />
+          </a>
+          <span className="text-[11px] font-mono text-pool-steel ml-auto">
+            <ShieldCheck className="inline size-3.5 -mt-0.5 mr-1 text-pool-mint" />
+            self-hosted · no custody · no logs
+          </span>
+        </div>
+      </div>
     </section>
+  );
+}
+
+function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="pool-tick rounded-md p-5">
+      <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+        {label}
+      </div>
+      <div className="mt-2 font-pool-display font-semibold text-3xl text-pool-steel-hi tabular-nums">
+        {value}
+      </div>
+      {hint && <div className="mt-1 text-[11px] font-mono text-pool-steel">{hint}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Algo table — the "Pool Status" analog
+// ---------------------------------------------------------------------------
+function AlgoTable() {
+  return (
+    <div className="pool-kpi-panel rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
+              <th className="text-left px-5 py-3 font-normal">Coin</th>
+              <th className="text-left px-3 py-3 font-normal">Symbol</th>
+              <th className="text-left px-3 py-3 font-normal">Port</th>
+              <th className="text-left px-3 py-3 font-normal">Miners</th>
+              <th className="text-left px-3 py-3 font-normal">Hashrate</th>
+              <th className="text-left px-3 py-3 font-normal">Fee</th>
+              <th className="text-left px-3 py-3 font-normal">Merged via</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {POOL.algos.map((a, i) => (
+              <tr
+                key={a.symbol}
+                className={`border-b border-pool-hairline last:border-b-0 ${
+                  i % 2 === 1 ? "pool-graphite/40" : ""
+                } hover:pool-graphite-2 transition-colors`}
+              >
+                <td className="px-5 py-3 text-pool-steel-hi">{a.name}</td>
+                <td className="px-3 py-3 text-pool-steel">{a.symbol}</td>
+                <td className="px-3 py-3">
+                  {a.port ? (
+                    <span className="text-pool-mint">{a.port}</span>
+                  ) : (
+                    <span className="text-pool-steel">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">{a.miners.toLocaleString()}</td>
+                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
+                  {formatThs(POOL.hashrateThs)}
+                </td>
+                <td className="px-3 py-3 text-pool-steel-hi">{a.fee}%</td>
+                <td className="px-3 py-3 text-pool-steel">{a.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
+        Payouts are settled on LTC + DOGE. TXC / ISK / ZCU are mined for chain security and
+        distributed under their own economics — see the{" "}
+        <Link to="/manifesto" className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint">
+          manifesto
+        </Link>
+        .
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pool stats table — coins × time-windows
+// ---------------------------------------------------------------------------
+function PoolStatsTable() {
+  return (
+    <div className="pool-kpi-panel rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
+              <th className="text-left px-5 py-3 font-normal">Coin</th>
+              <th className="text-left px-3 py-3 font-normal">Symbol</th>
+              <th className="text-right px-3 py-3 font-normal">1 h</th>
+              <th className="text-right px-3 py-3 font-normal">24 h</th>
+              <th className="text-right px-3 py-3 font-normal">7 d</th>
+              <th className="text-right px-5 py-3 font-normal">30 d</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {POOL.stats.map((s) => (
+              <tr
+                key={s.symbol}
+                className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
+              >
+                <td className="px-5 py-3 text-pool-steel-hi">{s.name}</td>
+                <td className="px-3 py-3 text-pool-steel">{s.symbol}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.hour.toLocaleString()}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.day.toLocaleString()}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.week.toLocaleString()}</td>
+                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">{s.month.toLocaleString()}</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
+              <td className="px-5 py-3 text-pool-steel-hi">Avg hashrate</td>
+              <td className="px-3 py-3 text-pool-steel">TH/s</td>
+              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.hour.toFixed(1)}</td>
+              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.day.toFixed(1)}</td>
+              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.week.toFixed(1)}</td>
+              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.month.toFixed(1)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connect card — copy-able stratum config
+// ---------------------------------------------------------------------------
+function ConnectCard() {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1400);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  const cmd = `-o ${POOL.stratum} -u <LTC_WALLET_ADDRESS> -p dogelink=<MINER_PASSWORD_TOKEN>`;
+
+  return (
+    <div className="pool-kpi-panel rounded-lg p-5 space-y-5">
+      <div className="space-y-1">
+        <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+          Stratum connection · LTC/DOGE merged mining
+        </div>
+        <div className="text-pool-steel-hi text-sm">Paste this into your miner:</div>
+      </div>
+
+      <CodeCopy
+        id="cmd"
+        value={cmd}
+        copied={copiedKey === "cmd"}
+        onCopy={() => copy("cmd", cmd)}
+      />
+
+      <ol className="space-y-2 text-sm text-pool-steel">
+        <li className="flex gap-3">
+          <span className="font-mono text-pool-steel-hi">1.</span>
+          <span>
+            <a
+              href="https://pool.texitcoin.org/site/dogeRegister"
+              target="_blank"
+              rel="noreferrer"
+              className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint"
+            >
+              Register LTC/DOGE
+            </a>{" "}
+            before mining. You'll receive a{" "}
+            <span className="font-mono text-pool-steel-hi">dogelink</span> token.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="font-mono text-pool-steel-hi">2.</span>
+          <span>
+            Use your <span className="text-pool-steel-hi">LTC wallet address only</span> as
+            the stratum username — never your DOGE address.
+          </span>
+        </li>
+        <li className="flex gap-3">
+          <span className="font-mono text-pool-steel-hi">3.</span>
+          <span>
+            Pass the <span className="font-mono">dogelink=…</span> token as the stratum
+            password.
+          </span>
+        </li>
+      </ol>
+
+      <div className="rounded-md border border-pool-hairline pool-graphite p-3 text-[12px] font-mono text-pool-steel">
+        <span className="text-pool-amber uppercase tracking-widest text-[10px] mr-2">
+          coming soon
+        </span>
+        migrating to{" "}
+        <span className="text-pool-steel-hi">{POOL.stratumFuture}</span> once the pool's own
+        rigs go live. The current endpoint will keep working through the cutover.
+      </div>
+    </div>
+  );
+}
+
+function CodeCopy({
+  value,
+  copied,
+  onCopy,
+}: {
+  id: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="relative rounded-md border border-pool-hairline pool-obsidian">
+      <pre className="overflow-x-auto px-4 py-3 pr-14 text-[12px] leading-relaxed font-mono text-pool-steel-hi whitespace-pre">
+        {value}
+      </pre>
+      <button
+        onClick={onCopy}
+        aria-label="Copy"
+        className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-sm border border-pool-hairline pool-tick px-2 py-1 text-[11px] font-mono text-pool-steel hover:text-pool-steel-hi transition"
+      >
+        {copied ? <Check className="size-3.5 text-pool-mint" /> : <Copy className="size-3.5" />}
+        {copied ? "copied" : "copy"}
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payout card + countdown
+// ---------------------------------------------------------------------------
+function PayoutCard() {
+  const nextPayout = useMemo(() => nextHalfHourEpoch(), []);
+  const [remainingSec, setRemainingSec] = useState(() =>
+    Math.max(0, nextPayout - Math.floor(Date.now() / 1000)),
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemainingSec(Math.max(0, nextPayout - Math.floor(Date.now() / 1000)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [nextPayout]);
+
+  const mm = String(Math.floor(remainingSec / 60)).padStart(2, "0");
+  const ss = String(remainingSec % 60).padStart(2, "0");
+
+  return (
+    <div id="payouts" className="pool-kpi-panel rounded-lg p-5 space-y-4">
+      <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+        Next payout
+      </div>
+      <div className="font-pool-display font-semibold text-5xl text-pool-steel-hi tabular-nums pool-hash-live">
+        {mm}
+        <span className="text-pool-steel">:</span>
+        {ss}
+      </div>
+      <ul className="space-y-2 text-sm text-pool-steel">
+        <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
+          <span>Interval</span>
+          <span className="text-pool-steel-hi font-mono">every 30 min</span>
+        </li>
+        <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
+          <span>Threshold</span>
+          <span className="text-pool-steel-hi font-mono">≥ 0.001</span>
+        </li>
+        <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
+          <span>Sunday sweep</span>
+          <span className="text-pool-steel-hi font-mono">≥ 0.0001</span>
+        </li>
+        <li className="flex items-center justify-between">
+          <span>Payout coins</span>
+          <span className="text-pool-steel-hi font-mono">LTC · DOGE</span>
+        </li>
+      </ul>
+      <div className="text-[11px] font-mono text-pool-steel leading-relaxed">
+        TXC / ISK / ZCU are mined for chain security and are not part of the pool payout —
+        by design, so the pool never becomes a distribution bottleneck for TEXITcoin itself.
+      </div>
+    </div>
+  );
+}
+
+function nextHalfHourEpoch() {
+  const now = new Date();
+  const m = now.getUTCMinutes();
+  const bump = m < 30 ? 30 - m : 60 - m;
+  const then = new Date(now);
+  then.setUTCMinutes(m + bump, 0, 0);
+  return Math.floor(then.getTime() / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Found blocks
+// ---------------------------------------------------------------------------
+function FoundBlocks() {
+  return (
+    <div className="pool-kpi-panel rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
+              <th className="text-left px-5 py-3 font-normal">Coin</th>
+              <th className="text-left px-3 py-3 font-normal">Height</th>
+              <th className="text-left px-3 py-3 font-normal">Age</th>
+              <th className="text-right px-3 py-3 font-normal">Reward</th>
+              <th className="text-right px-5 py-3 font-normal">Effort</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {POOL.found.map((b) => {
+              const effortColor =
+                b.effort <= 100 ? "text-pool-mint" : b.effort <= 120 ? "text-pool-amber" : "text-primary";
+              return (
+                <tr
+                  key={`${b.coin}-${b.height}`}
+                  className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
+                >
+                  <td className="px-5 py-3">
+                    <span className="inline-flex items-center gap-2">
+                      <CoinBadge symbol={b.coin} />
+                      <span className="text-pool-steel-hi">{b.coin}</span>
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
+                    {b.height.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3 text-pool-steel">{ago(b.ago)}</td>
+                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                    {b.reward.toLocaleString()} <span className="text-pool-steel">{b.coin}</span>
+                  </td>
+                  <td className={`px-5 py-3 text-right tabular-nums ${effortColor}`}>{b.effort}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
+        <div className="text-[11px] font-mono text-pool-steel">
+          Effort under 100% = block found faster than expected.
+        </div>
+        <Link
+          to="/blocks"
+          className="inline-flex items-center gap-1 text-[11px] font-mono text-pool-steel-hi hover:text-pool-mint"
+        >
+          all blocks <ChevronRight className="size-3.5" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function CoinBadge({ symbol }: { symbol: string }) {
+  const colorMap: Record<string, string> = {
+    TXC:  "bg-pool-amber",
+    LTC:  "bg-pool-steel",
+    DOGE: "bg-pool-amber",
+    ISK:  "bg-pool-mint",
+    ZCU:  "bg-pool-mint",
+  };
+  return (
+    <span
+      className={`inline-flex size-6 rounded-full items-center justify-center text-[10px] font-mono font-semibold text-pool-obsidian ${
+        colorMap[symbol] ?? "bg-pool-steel"
+      }`}
+    >
+      {symbol.slice(0, 1)}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Learn band
+// ---------------------------------------------------------------------------
+function LearnBand() {
+  return (
+    <div className="grid md:grid-cols-3 gap-4">
+      <LearnCard
+        icon={Zap}
+        title="Chain spec"
+        body="3-min blocks, scrypt PoW, T-prefix addresses, Omni-Layer L2."
+        cta="texitcoin.org/build"
+        href="https://texitcoin.org/build"
+      />
+      <LearnCard
+        icon={CircuitBoard}
+        title="Merged mining"
+        body="One scrypt hash contributes to LTC, DOGE, ISK, TXC and ZCU simultaneously."
+        cta="How it works"
+        href="https://en.bitcoin.it/wiki/Merged_mining_specification"
+      />
+      <LearnCard
+        icon={ShieldCheck}
+        title="Manifesto"
+        body="Sound money is a right. This pool exists so anyone with a rig can secure it."
+        cta="Read the manifesto"
+        to="/manifesto"
+      />
+    </div>
+  );
+}
+
+function LearnCard({
+  icon: Icon,
+  title,
+  body,
+  cta,
+  href,
+  to,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  body: string;
+  cta: string;
+  href?: string;
+  to?: string;
+}) {
+  const inner = (
+    <div className="group pool-kpi-panel rounded-lg p-5 h-full flex flex-col hover:border-pool-hairline transition-colors">
+      <Icon className="size-5 text-pool-mint" />
+      <div className="mt-3 font-pool-display text-lg text-pool-steel-hi">{title}</div>
+      <p className="mt-1 text-sm text-pool-steel flex-1 leading-relaxed">{body}</p>
+      <div className="mt-4 inline-flex items-center gap-1 text-[12px] font-mono text-pool-steel-hi group-hover:text-pool-mint">
+        {cta} <ArrowUpRight className="size-3.5" />
+      </div>
+    </div>
+  );
+  if (to) return <Link to={to}>{inner}</Link>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {inner}
+    </a>
   );
 }
