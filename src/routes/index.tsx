@@ -23,21 +23,21 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "TXC-ISK merged mining pool for the TEXITcoin network. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
       },
-      { property: "og:title", content: "TEXITcoin Pool" },
+      { property: "og:title", content: "TEXITcoin Pool — Sound-money mining, made simple" },
       {
         property: "og:description",
         content:
-          "Merged mining pool on the TEXITcoin network. Live hashrate, active miners, and 30-min payouts.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "TEXITcoin Pool" },
+      { name: "twitter:title", content: "TEXITcoin Pool — Sound-money mining, made simple" },
       {
         name: "twitter:description",
         content:
-          "Merged mining pool on the TEXITcoin network. Live hashrate, active miners, and 30-min payouts.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
       },
     ],
   }),
