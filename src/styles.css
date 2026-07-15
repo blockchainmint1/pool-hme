@@ -113,6 +113,19 @@
 
   --shadow-card: 0 10px 30px -15px oklch(0 0 0 / 50%);
   --shadow-glow-red: 0 0 30px -5px oklch(0.62 0.22 25 / 40%);
+
+  /* ---- honest.money pool face: black + graphite + steel ---- */
+  --pool-obsidian: oklch(0.11 0.004 250);
+  --pool-graphite: oklch(0.18 0.006 250);
+  --pool-graphite-2: oklch(0.23 0.008 250);
+  --pool-steel: oklch(0.62 0.020 250);
+  --pool-steel-hi: oklch(0.82 0.015 250);
+  --pool-hairline: oklch(1 0 0 / 7%);
+  --pool-mint: oklch(0.85 0.15 165);       /* hashrate signal — sparingly */
+  --pool-amber: oklch(0.82 0.15 78);       /* payout signal */
+
+  --font-pool-display: "Space Grotesk", "Oswald", system-ui, sans-serif;
+  --font-pool-body: "DM Sans", "Inter", system-ui, sans-serif;
 }
 
 .dark {
@@ -174,6 +187,56 @@
   .fill-fee-4 { fill: var(--color-fee-4); }
   .fill-fee-5 { fill: var(--color-fee-5); }
   .fill-fee-6 { fill: var(--color-fee-6); }
+
+  /* ---- Pool face utilities (honest.money black/graphite/steel) ---- */
+  .font-pool-display { font-family: var(--font-pool-display); letter-spacing: -0.01em; }
+  .font-pool-body { font-family: var(--font-pool-body); }
+  .pool-obsidian { background-color: var(--pool-obsidian); }
+  .pool-graphite { background-color: var(--pool-graphite); }
+  .pool-graphite-2 { background-color: var(--pool-graphite-2); }
+  .text-pool-steel { color: var(--pool-steel); }
+  .text-pool-steel-hi { color: var(--pool-steel-hi); }
+  .text-pool-mint { color: var(--pool-mint); }
+  .text-pool-amber { color: var(--pool-amber); }
+  .bg-pool-mint { background-color: var(--pool-mint); }
+  .bg-pool-amber { background-color: var(--pool-amber); }
+  .border-pool-hairline { border-color: var(--pool-hairline); }
+  .pool-grid-bg {
+    background-color: var(--pool-obsidian);
+    background-image:
+      linear-gradient(to right, oklch(1 0 0 / 3%) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 3%) 1px, transparent 1px),
+      radial-gradient(ellipse 60% 40% at 50% 0%, oklch(0.85 0.15 165 / 6%), transparent 60%);
+    background-size: 44px 44px, 44px 44px, 100% 100%;
+  }
+  .pool-scanline {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      oklch(1 0 0 / 2%) 2px,
+      oklch(1 0 0 / 2%) 3px
+    );
+  }
+  .pool-kpi-panel {
+    background:
+      linear-gradient(180deg, oklch(0.20 0.008 250 / 0.9), oklch(0.14 0.005 250 / 0.9));
+    border: 1px solid var(--pool-hairline);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 4%),
+      0 20px 40px -30px oklch(0 0 0 / 0.9);
+  }
+  .pool-tick {
+    background:
+      linear-gradient(180deg, oklch(0.24 0.008 250), oklch(0.16 0.006 250));
+    border: 1px solid var(--pool-hairline);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
+  }
+  @keyframes pool-hash-shimmer {
+    0%, 100% { opacity: 1; text-shadow: 0 0 12px oklch(0.85 0.15 165 / 0.35); }
+    50% { opacity: 0.92; text-shadow: 0 0 18px oklch(0.85 0.15 165 / 0.55); }
+  }
+  .pool-hash-live { animation: pool-hash-shimmer 3.6s ease-in-out infinite; }
 
   @keyframes block-pop {
     0% { transform: scale(0.85); opacity: 0; }
