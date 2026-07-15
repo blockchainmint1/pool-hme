@@ -144,6 +144,36 @@ sudo bash -c '
 - [Privacy](../src/routes/privacy.tsx) — data we collect / don't
 - Build docs for the TEXITcoin chain and Omni L2: <https://texitcoin.org/build>
 
+## 8b. Takeover plan (in progress)
+
+We are in the process of taking **full control** of the entire stack:
+
+1. **The box** — `pool2.iskandercoin.com` (AWS EC2). Goal: own the AWS
+   account / SSH keys / systemd units / Ansible repo outright. Until then,
+   treat every change as reversible and log it here.
+2. **The pool** — stratum binary, coin daemons, Yiimp DB, payout logic.
+   All config source-of-truth moves into `infra/stratum-stack/` in this
+   repo (or a sibling repo we control). Nothing lives only on the box.
+3. **The miners** — 1200 L9s currently pointed at
+   `stratum+tcp://pool.texitcoin.org:3433`. At cutover we will reconfigure
+   them to a **new stratum IP / hostname we control** (target:
+   `stratum.pool.texitcoin.org`), so we can retire the current host on our
+   own schedule.
+4. **The front-end** — `pool.texitcoin.org` becomes *this* TanStack app
+   (currently served at `pool.honest.money` preview). It will talk to the
+   back end via server functions / server routes in `src/routes/api/`.
+
+Learning goals while we still have limited access:
+- Enumerate every config file, cron job, systemd unit, and daemon on the
+  box. Record here.
+- Snapshot the Yiimp DB schema (coins, workers, shares, blocks, payments,
+  accounts) and check it in under `docs/schema/`.
+- Identify every external endpoint / IP the stratum talks to (coin RPCs,
+  DNS seeds, monitoring) so we can reproduce them in the new environment.
+- Diff the various `/var/stratum/` binaries (`live1`, `live3`, `LIVE2`,
+  `TXC3`, `aws`, `3h-logs*`) — figure out which source tree each came
+  from and where that source lives.
+
 ## 9. Incident notes
 
 ### 2026-07-15 — Conroe L9 scale-up incident
