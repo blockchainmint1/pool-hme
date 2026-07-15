@@ -47,18 +47,22 @@ running box — edit here, commit, re-run `restore.sh`.
 # from your laptop
 cd infra/haproxy-conroe
 
-# one-time: aws configure  (us-east-2, key with EC2 permissions)
+# one-time: aws configure  (us-east-2)
+# IAM needs EC2 + EC2 Instance Connect (SendSSHPublicKey)
 ./build-on-ec2.sh
 # → prints the EC2 public IP and SSH command
 # → HAProxy is already running, pointed at the real upstream stratum
 ```
 
 Point **one** test miner (not all 1200) at the EC2 public IP on :3433 for
-30 minutes. Watch:
+30 minutes. Watch (use `mssh` or push a fresh Instance Connect key first):
 
 ```bash
-ssh ubuntu@<ec2-ip> 'sudo tail -f /var/log/haproxy.log'
-ssh ubuntu@<ec2-ip> 'sudo /opt/haproxy-conroe/watch-sessions.sh'
+# with ec2-instance-connect-cli installed
+mssh ubuntu@<instance-id> --region us-east-2 --command 'sudo tail -f /var/log/haproxy.log'
+mssh ubuntu@<instance-id> --region us-east-2 --command 'sudo /opt/haproxy-conroe/watch-sessions.sh'
+
+# or push a fresh key and ssh normally (see script output for the exact command)
 ```
 
 You should see the miner establish, submit shares, and Yiimp credit them
