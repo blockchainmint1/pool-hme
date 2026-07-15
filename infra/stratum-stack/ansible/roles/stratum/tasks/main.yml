@@ -1,0 +1,9 @@
+---
+- import_tasks: build.yml
+  tags: [build]
+
+- import_tasks: config.yml
+  tags: [config]
+
+- import_tasks: systemd.yml
+  tags: [systemd]

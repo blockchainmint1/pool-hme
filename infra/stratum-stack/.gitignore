@@ -1,0 +1,7 @@
+.env
+ansible/inventory.ini
+ansible/group_vars/all.yml
+ansible/group_vars/vault.yml
+*.bak
+*.bak.*
+*.retry

@@ -1,0 +1,9 @@
+---
+- name: Deploy yiimp stratum
+  hosts: stratum
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  roles:
+    - role: stratum

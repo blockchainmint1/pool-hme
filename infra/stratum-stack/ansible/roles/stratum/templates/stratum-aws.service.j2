@@ -1,0 +1,21 @@
+[Unit]
+Description=AWS {{ algo | capitalize }} Stratum
+After=network.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ stratum_install_dir }}
+User={{ stratum_user }}
+Group={{ stratum_group }}
+ExecStart={{ stratum_install_dir }}/stratum {{ algo }}
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+StandardOutput=append:{{ stratum_install_dir }}/{{ algo }}.log
+StandardError=append:{{ stratum_install_dir }}/{{ algo }}.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+---
+# Copy to vault.yml, then: ansible-vault encrypt ansible/group_vars/vault.yml
+# NEVER commit the unencrypted version.
+
+sql_password: "REPLACE_ME"
+
+# Upstream pool password (matches [TCP]/[SSL] password= in each *.conf).
+# One value per algo if they differ, else a single value.
+stratum_upstream_password: "REPLACE_ME"

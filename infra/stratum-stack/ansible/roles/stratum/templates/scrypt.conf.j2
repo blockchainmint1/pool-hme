@@ -1,0 +1,25 @@
+; Managed by Ansible — do not edit on the box.
+; Source: infra/stratum-stack/ansible/roles/stratum/templates/scrypt.conf.j2
+
+[TCP]
+server = {{ inventory_hostname }}
+port = {{ scrypt_tcp_port }}
+password = {{ stratum_upstream_password }}
+
+[SSL]
+server = {{ inventory_hostname }}
+port = {{ scrypt_ssl_port }}
+password = {{ stratum_upstream_password }}
+
+[SQL]
+host = {{ sql_host }}
+database = {{ sql_database }}
+username = {{ sql_username }}
+password = {{ sql_password }}
+
+[STRATUM]
+algo = scrypt
+difficulty = {{ scrypt_difficulty_start }}
+diff_min = {{ scrypt_diff_min }}
+diff_max = {{ scrypt_diff_max }}
+max_ttf = {{ scrypt_max_ttf }}
