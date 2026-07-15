@@ -1,0 +1,137 @@
+# HME Pool — Infrastructure & Settings Reference
+
+> Living doc. When we discover where something lives, or change a setting,
+> update this file in the same commit. If it isn't in here, assume we'll
+> forget it by next week.
+>
+> Part of the [honest.money](https://honest.money) ecosystem · TEXITcoin pool ops.
+
+---
+
+## 1. Sites of truth
+
+| Concern                              | Where it actually lives                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| Pool frontend (this repo)            | TanStack Start app · `src/routes/`                                             |
+| Stratum server host                  | `ubuntu@pool2.iskandercoin.com` (AWS EC2 · `ip-172-31-83-232`)                 |
+| Stratum binaries & runtime files     | `/var/stratum/` on the host                                                    |
+| Stratum config (rendered)            | `/var/stratum/config/scrypt.conf` (fallback: `/var/stratum/scrypt.conf`)       |
+| Stratum config (source of truth)     | Ansible: `infra/stratum-stack/` · template `scrypt.conf.j2`                    |
+| Stratum log                          | `/var/stratum/scrypt.log`                                                      |
+| Systemd unit                         | `stratum-aws-scrypt.service`                                                   |
+| Stratum port (scrypt / LTC)          | `3433`                                                                         |
+| Public stratum URL (today)           | `stratum+tcp://pool.texitcoin.org:3433`                                        |
+| Public stratum URL (future)          | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                |
+| Yiimp frontend DB                    | MySQL `yiimpfrontend` on the same host                                         |
+| Yiimp DB user                        | `stratum` (password in `~/.my.cnf` / Ansible vault — not here)                 |
+| Vardiff report script (workstation)  | `./infra/stratum-stack/scripts/vardiff-report.sh` (NOT on the box)             |
+
+## 2. `/var/stratum/` file map
+
+Everything here is a binary or a runtime artifact. Never `sed` a live file —
+render from Ansible and reload the unit.
+
+| File                              | Purpose                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `stratum`                         | Current active stratum binary (running under systemd)                   |
+| `stratum.bak.YYYYMMDD-HHMMSS`     | Timestamped rollback copies                                             |
+| `stratum.4c-r1.prev`              | Last previous build (4-coin r1 line)                                    |
+| `live1`, `live3`, `live3-V`       | Prior live builds kept for quick swap                                   |
+| `LIVE2`, `TXC3`                   | Named build snapshots (TXC3 = TEXITcoin-aware build)                    |
+| `aws`                             | AWS-tuned build                                                         |
+| `3h-logs`, `3h-logs-updated`      | Build variants with 3-hour log rotation                                 |
+| `config/scrypt.conf`              | Rendered runtime config (from Ansible)                                  |
+| `scrypt.log`                      | Live log; grep here for `set_difficulty`, `aux submit`, `SCRYPT summary diag` |
+
+## 3. Scrypt merged-mining coin set
+
+All five share a single scrypt work unit. Only TXC / ISK / ZCU are actually
+*found* by this pool — LTC and DOGE come in as auxpow credit.
+
+| Symbol | Name        | Role                                    |
+| ------ | ----------- | --------------------------------------- |
+| LTC    | Litecoin    | Parent chain · miners register wallet   |
+| DOGE   | Dogecoin    | Merge-mined via LTC · miners register wallet |
+| ISK    | Iskander    | Merge-mined · pool-found                |
+| TXC    | TEXITcoin   | Merge-mined · pool-found · primary coin |
+| ZCU    | Zero Chill U | Merge-mined · pool-found               |
+
+DB check for which coins are actually enabled:
+
+```sql
+SELECT id, name, symbol, algo, enable, auto_ready, rpcencoding, rpchost, rpcport
+FROM coins
+WHERE algo='scrypt' AND (enable=1 OR auto_ready=1)
+ORDER BY symbol;
+```
+
+## 4. Miner fleet
+
+| Item              | Value                                          |
+| ----------------- | ---------------------------------------------- |
+| Model             | Antminer L9                                    |
+| Count             | 1200 units                                     |
+| Containers        | 6                                              |
+| Location          | Single site (TX)                               |
+| Expected clients on stratum | ~1050 concurrent (from `SCRYPT summary diag`) |
+
+Miner-version distribution and per-worker hashrate: pulled from the stratum
+active connection table; will move to a live server function once the stratum
+moves to `stratum.pool.texitcoin.org`.
+
+## 5. Difficulty / vardiff (current known state)
+
+- `scrypt.conf.j2` sets initial `difficulty = 0.25`, `diff_min = 65536`.
+- Vardiff is supposed to bump each worker up to `diff_min` on connect.
+- **Open issue (2026-07-15):** no `mining.set_difficulty` lines in
+  `scrypt.log`. Every L9 appears stuck at the initial 0.25, so every share
+  is well below the parent target and gets rejected via the
+  `aux submit skip target parent_diff=…` codepath.
+- Do **not** hand-edit difficulty on the box. Adjust `scrypt.conf.j2` and
+  re-run:
+  ```bash
+  ansible-playbook infra/stratum-stack/playbook.yml --tags config,systemd
+  ```
+
+## 6. Useful diagnostic one-liners
+
+```bash
+# Is the stratum sending difficulty at all?
+sudo grep -E 'set_difficulty|mining\.set_difficulty' /var/stratum/scrypt.log | tail -10
+
+# What does the pool think its client count / accepted hashrate is?
+sudo grep 'SCRYPT summary diag' /var/stratum/scrypt.log | tail -3
+
+# Which miners are actually connected on port 3433?
+sudo ss -tn state established sport = :3433 | awk 'NR>1{split($5,a,":");print a[1]}' | sort | uniq -c | sort -rn | head
+
+# Vardiff snapshot from the DB (from the box):
+sudo bash -c '
+  CONF=/var/stratum/config/scrypt.conf
+  # extract mysql creds from CONF, then:
+  mysql ... -e "
+    SELECT COUNT(*) AS n,
+           AVG(difficulty) AS avg_d,
+           MIN(difficulty) AS min_d,
+           MAX(difficulty) AS max_d,
+           SUM(CASE WHEN difficulty <= 1 THEN 1 ELSE 0 END) AS at_start_diff
+    FROM workers WHERE algo=\"scrypt\";"
+'
+```
+
+## 7. Change-management rules
+
+1. **No `sed` on the live box.** Edit the Ansible template, run the playbook.
+2. **No rebuilds without a snapshot.** Copy the current binary to
+   `stratum.bak.YYYYMMDD-HHMMSS` before replacing.
+3. **Restart, don't reload, after a coin-list change.** Cold `stop → sleep 5
+   → start` clears cached auxpow state; `systemctl reload` does not.
+4. **Log everything unusual in this file.** If we spent more than 15 minutes
+   finding a path or a setting, it belongs here.
+
+## 8. Related project docs
+
+- [Manifesto](../src/routes/manifesto.tsx) — why this pool exists
+- [Terms of Service](../src/routes/terms.tsx) — plain-language pool rules
+- [Privacy](../src/routes/privacy.tsx) — data we collect / don't
+- Build docs for the TEXITcoin chain and Omni L2: <https://texitcoin.org/build>
