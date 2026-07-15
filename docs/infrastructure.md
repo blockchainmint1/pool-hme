@@ -20,8 +20,8 @@
 | Stratum log                          | `/var/stratum/scrypt.log`                                                      |
 | Systemd unit                         | `stratum-aws-scrypt.service`                                                   |
 | Stratum port (scrypt / LTC)          | `3433`                                                                         |
-| Public stratum URL (today)           | `stratum+tcp://pool.texitcoin.org:3433`                                        |
-| Public stratum URL (future)          | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                |
+| Public stratum URL                   | `stratum+tcp://stratum.pool.honest.money:3433`                                 |
+| Old public stratum URL (being retired) | `stratum+tcp://pool.texitcoin.org:3433`                                        |
 | Yiimp frontend DB                    | MySQL `yiimpfrontend` on the same host                                         |
 | Yiimp DB user                        | `stratum` (password in `~/.my.cnf` / Ansible vault — not here)                 |
 | Vardiff report script (workstation)  | `./infra/stratum-stack/scripts/vardiff-report.sh` (NOT on the box)             |
@@ -77,7 +77,7 @@ ORDER BY symbol;
 
 Miner-version distribution and per-worker hashrate: pulled from the stratum
 active connection table; will move to a live server function once the stratum
-moves to `stratum.pool.texitcoin.org`.
+moves to `stratum.pool.honest.money`.
 
 ## 5. Difficulty / vardiff (current known state)
 
@@ -156,12 +156,10 @@ We are in the process of taking **full control** of the entire stack:
    repo (or a sibling repo we control). Nothing lives only on the box.
 3. **The miners** — 1200 L9s currently pointed at
    `stratum+tcp://pool.texitcoin.org:3433`. At cutover we will reconfigure
-   them to a **new stratum IP / hostname we control** (target:
-   `stratum.pool.texitcoin.org`), so we can retire the current host on our
-   own schedule.
-4. **The front-end** — `pool.texitcoin.org` becomes *this* TanStack app
-   (currently served at `pool.honest.money` preview). It will talk to the
-   back end via server functions / server routes in `src/routes/api/`.
+   them to `stratum+tcp://stratum.pool.honest.money:3433`, so we can retire
+   the current host on our own schedule.
+4. **The front-end** — `pool.honest.money` is *this* TanStack app. It talks
+   to the back end via server functions / server routes in `src/routes/api/`.
 
 Learning goals while we still have limited access:
 - Enumerate every config file, cron job, systemd unit, and daemon on the
@@ -296,7 +294,7 @@ Plan: run **HAProxy in TCP mode** on a small Linux box at the Conroe
 site (Intel N100 mini-PC, Protectli, or even a Raspberry Pi 5 to start).
 All 1200 L9s point at the on-site proxy's LAN IP on :3433. HAProxy
 opens a small pool of upstream TCP connections to
-`stratum.pool.texitcoin.org:3433` and multiplexes shares over them.
+`stratum.pool.honest.money:3433` and multiplexes shares over them.
 
 Why this helps under the leased-CPE constraint:
 
@@ -325,7 +323,7 @@ backend stratum_out
     option tcp-check
     timeout server 10m
     timeout connect 5s
-    server pool1 stratum.pool.texitcoin.org:3433 check inter 5s
+    server pool1 stratum.pool.honest.money:3433 check inter 5s
 ```
 
 #### Action items (revised, leased-space constraint)
@@ -346,7 +344,7 @@ backend stratum_out
    ourselves. Not blocking, but changes the long-term topology if they
    say yes.
 5. **Cutover alignment (§8b).** Do the HAProxy deploy and username
-   split *before* re-homing Conroe to `stratum.pool.texitcoin.org:3433`,
+   split *before* re-homing Conroe to `stratum.pool.honest.money:3433`,
    otherwise the cutover will look like it broke things when the
    underlying issue is still Conroe's LAN/WAN path.
 6. **ZCU `getblocktemplate` is broken** (`Zero Chill Units error
