@@ -3,7 +3,7 @@
 # build-on-ec2.sh — spin up an Ubuntu 24.04 EC2 box in us-east-2, apply the
 # haproxy-conroe config to it, and print the public IP for miner burn-in.
 #
-# Requires: aws CLI configured, an EC2 keypair name you own.
+# Uses EC2 Instance Connect: no permanent keypair, no .pem file to manage.
 #
 # Usage:
 #   ./build-on-ec2.sh                    # create + configure
@@ -12,12 +12,12 @@
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-east-2}"
-KEY_NAME="${EC2_KEY_NAME:?set EC2_KEY_NAME to your AWS keypair name}"
 INSTANCE_TYPE="${EC2_INSTANCE_TYPE:-t3.small}"
 TAG="haproxy-conroe-burnin"
 SG_NAME="haproxy-conroe-burnin-sg"
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
+TMP_KEY="$(mktemp -u /tmp/haproxy-conroe-ssh-XXXXXX)"
 
 destroy() {
   echo "==> destroying instances tagged $TAG in $REGION"
@@ -34,11 +34,19 @@ destroy() {
   exit 0
 }
 
+cleanup_key() {
+  rm -f "$TMP_KEY" "$TMP_KEY.pub"
+}
+trap cleanup_key EXIT
+
 if [[ "${1:-}" == "--destroy" ]]; then
   destroy
 fi
 
-echo "==> region: $REGION   type: $INSTANCE_TYPE   key: $KEY_NAME"
+# generate a temporary ed25519 key; Instance Connect pushes the public half
+ssh-keygen -t ed25519 -N "" -f "$TMP_KEY" -C "haproxy-conroe-temp" >/dev/null
+
+echo "==> region: $REGION   type: $INSTANCE_TYPE"
 
 echo "==> resolve latest Ubuntu 24.04 AMI"
 AMI=$(aws ec2 describe-images --region "$REGION" \
@@ -66,7 +74,7 @@ echo "    SG: $SG_ID"
 echo "==> launch instance"
 IID=$(aws ec2 run-instances --region "$REGION" \
   --image-id "$AMI" --instance-type "$INSTANCE_TYPE" \
-  --key-name "$KEY_NAME" --security-group-ids "$SG_ID" \
+  --security-group-ids "$SG_ID" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG}]" \
   --query 'Instances[0].InstanceId' --output text)
 echo "    instance: $IID  (waiting for running)"
@@ -76,26 +84,47 @@ IP=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$IID" \
   --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 echo "    public IP: $IP"
 
-echo "==> wait for SSH"
+AZ=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$IID" \
+  --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text)
+
+push_key() {
+  aws ec2-instance-connect send-ssh-public-key \
+    --region "$REGION" \
+    --instance-id "$IID" \
+    --availability-zone "$AZ" \
+    --instance-os-user ubuntu \
+    --ssh-public-key "file://${TMP_KEY}.pub" \
+    >/dev/null
+}
+
+ssh_cmd() {
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+      -o IdentitiesOnly=yes \
+      -i "$TMP_KEY" "ubuntu@$IP" "$@"
+}
+
+echo "==> wait for SSH via EC2 Instance Connect"
 for i in {1..30}; do
-  if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-       -i "$HOME/.ssh/${KEY_NAME}.pem" "ubuntu@$IP" 'true' 2>/dev/null; then
+  push_key
+  if ssh_cmd 'true' 2>/dev/null; then
     break
   fi
   sleep 5
 done
 
 echo "==> ship config and run restore.sh --skip-netplan"
-scp -o StrictHostKeyChecking=no -i "$HOME/.ssh/${KEY_NAME}.pem" \
-    -r "$SRC_DIR" "ubuntu@$IP:/tmp/haproxy-conroe"
-ssh -o StrictHostKeyChecking=no -i "$HOME/.ssh/${KEY_NAME}.pem" "ubuntu@$IP" \
-    'sudo bash /tmp/haproxy-conroe/restore.sh --skip-netplan'
+push_key
+scp -o StrictHostKeyChecking=no -o IdentitiesOnly=yes \
+    -i "$TMP_KEY" -r "$SRC_DIR" "ubuntu@$IP:/tmp/haproxy-conroe"
+
+push_key
+ssh_cmd 'sudo bash /tmp/haproxy-conroe/restore.sh --skip-netplan'
 
 cat <<EOF
 
 ==> HAProxy burn-in box is up.
 
-    ssh -i ~/.ssh/${KEY_NAME}.pem ubuntu@$IP
+    ssh ubuntu@$IP   # via EC2 Instance Connect (aws ec2-instance-connect ssh ...)
 
     # tail live traffic:
     sudo tail -f /var/log/haproxy.log
