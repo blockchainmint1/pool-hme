@@ -118,7 +118,7 @@ function Header() {
             T
           </div>
           <div className="font-display tracking-wide text-base hidden sm:block">
-            TXC POOL
+            HME POOL
           </div>
         </Link>
         <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
@@ -157,7 +157,7 @@ function Footer() {
     <footer className="border-t border-border mt-16 surface/50">
       <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
         <div>
-          <div className="font-display tracking-wide mb-2">TXC POOL</div>
+          <div className="font-display tracking-wide mb-2">HME POOL</div>
           <div className="text-xs text-muted-foreground leading-relaxed">
             Part of the{" "}
             <a
@@ -201,7 +201,7 @@ function Footer() {
         </div>
       </div>
       <div className="border-t border-border py-3 text-center text-[11px] text-muted-foreground">
-        TXC Pool · Mined in Texas, by individuals. Part of the{" "}
+        HME Pool · Mined in Texas, by individuals. Part of the{" "}
         <a href="https://honest.money" className="underline decoration-dotted underline-offset-2 hover:text-primary" target="_blank" rel="noreferrer">honest.money</a>{" "}
         ecosystem.
       </div>
