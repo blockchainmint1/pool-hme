@@ -185,13 +185,21 @@ app.get("/api/pool/algos", async () => {
 /**
  * One-shot dashboard payload. This is what the homepage should call.
  *
- * Combines: per-algo aggregate, live stratum client count (the *correct*
- * miner number), last block per coin, blocks 24h, and current effort.
+ * Combines: per-algo miner counts (from workers table, recent rows),
+ * current pool hashrate per algo (latest hashstats row), last block per
+ * coin, blocks 24h, current effort, and live stratum diag if available.
+ *
+ * NOTE: the yiimpfrontend `workers` table has NO `hashrate` column in
+ * this fork — hashrate lives in the `hashstats` time-series table.
  */
 app.get("/api/v1/pool/summary", async () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const dayAgo = nowSec - 86_400;
+
+  // Miner/worker counts from the workers table, filtered to recent rows
+  // (workers table keeps stale entries for hours).
   const [algoRows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT algo,
-            SUM(hashrate) AS hashrate_workers,
             COUNT(DISTINCT userid) AS db_miners,
             COUNT(*) AS db_workers
        FROM workers
@@ -199,8 +207,20 @@ app.get("/api/v1/pool/summary", async () => {
       GROUP BY algo`,
   );
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const dayAgo = nowSec - 86_400;
+  // Current pool hashrate per algo — latest row per algo in hashstats.
+  // hashstats.hashrate is in H/s.
+  const [hashRows] = await pool.query<mysql.RowDataPacket[]>(
+    `SELECT h.algo, h.hashrate, h.time
+       FROM hashstats h
+      WHERE h.id IN (SELECT MAX(id) FROM hashstats GROUP BY algo)`,
+  );
+  const hashByAlgo: Record<string, { hashrate_hs: number; time: number }> = {};
+  for (const r of hashRows) {
+    hashByAlgo[String(r.algo)] = {
+      hashrate_hs: Number(r.hashrate ?? 0),
+      time: Number(r.time ?? 0),
+    };
+  }
 
   const [dayBlocks] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT c.symbol, COUNT(*) AS n
@@ -243,8 +263,24 @@ app.get("/api/v1/pool/summary", async () => {
     .filter((r) => POOL_FOUND.has(String(r.symbol).toUpperCase()))
     .reduce((s, r) => s + Number(r.n), 0);
 
+  // Merge workers-table count with stratum-diag count. Prefer stratum
+  // (live/accurate); fall back to workers (recent 10 min) if diag is absent.
+  const algos = (algoRows as mysql.RowDataPacket[]).map((r) => {
+    const algo = String(r.algo);
+    const s = stratum[algo];
+    const h = hashByAlgo[algo];
+    return {
+      algo,
+      db_miners: Number(r.db_miners ?? 0),
+      db_workers: Number(r.db_workers ?? 0),
+      live_clients: s ? s.clients : Number(r.db_workers ?? 0),
+      hashrate_hs: h ? h.hashrate_hs : s ? s.accepted_ghs * 1e9 : 0,
+      hashrate_updated_at: h ? h.time : nowSec,
+    };
+  });
+
   return {
-    algos: algoRows,
+    algos,
     stratum_live: stratum,
     last_blocks: lastBlocks,
     blocks_24h_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n)])),
