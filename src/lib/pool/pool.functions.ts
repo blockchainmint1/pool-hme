@@ -38,6 +38,17 @@ export interface StratumLive {
   updated_at: number;
 }
 
+export interface PoolAlgoStats {
+  algo: string;
+  db_miners: number;
+  db_workers: number;
+  /** Live-preferred miner count (stratum diag when available, else workers-table recent count). */
+  live_clients: number;
+  /** Current pool hashrate for this algo, H/s. */
+  hashrate_hs: number;
+  hashrate_updated_at: number;
+}
+
 export interface PoolSummary {
   coins: PoolCoin[];
   /** Newest-first. Only pool-found chains (TXC / ISK / ZCU) — LTC/DOGE come in as auxpow. */
@@ -48,9 +59,11 @@ export interface PoolSummary {
   health: { ok: boolean; db: boolean };
   /** Live stratum client counts, per algo. This is the real "active miner" number. */
   stratumLive: Record<string, StratumLive>;
+  /** Per-algo aggregate (miners + current hashrate). */
+  algos: PoolAlgoStats[];
   /** Sum across all algos. */
   liveClients: number;
-  /** Sum of accepted_ghs across all algos (GH/s). */
+  /** Sum of current pool hashrate across all algos (GH/s). */
   liveHashrateGhs: number;
 }
 
