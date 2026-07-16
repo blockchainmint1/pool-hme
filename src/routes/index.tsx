@@ -358,6 +358,12 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 // Algo table — the "Pool Status" analog
 // ---------------------------------------------------------------------------
 function AlgoTable() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // All 5 coins share the scrypt algo (merged mining). Pull the scrypt
+  // aggregate once; every row displays the same live values.
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  const miners = scrypt?.live_clients ?? data.liveClients;
+  const ths = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -390,11 +396,13 @@ function AlgoTable() {
                     <span className="text-pool-steel">—</span>
                   )}
                 </td>
-                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">{a.miners.toLocaleString()}</td>
                 <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
-                  {formatThs(POOL.hashrateThs)}
+                  {miners > 0 ? miners.toLocaleString() : "—"}
                 </td>
-                <td className="px-3 py-3 text-pool-steel-hi">{a.fee}%</td>
+                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
+                  {formatThs(ths)}
+                </td>
+                <td className="px-3 py-3 text-pool-steel-hi">{POOL.fee}%</td>
                 <td className="px-3 py-3 text-pool-steel">{a.note}</td>
               </tr>
             ))}
@@ -412,6 +420,7 @@ function AlgoTable() {
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Pool stats table — coins × time-windows
