@@ -129,7 +129,53 @@
 }
 
 .dark {
-  /* same — dark-only app */
+  /* same — dark is the :root default */
+}
+
+/* Light theme — clean paper / graphite ink, retains signal-red primary */
+.light {
+  --background: oklch(0.985 0.003 250);
+  --foreground: oklch(0.18 0.02 250);
+  --surface: oklch(0.965 0.004 250);
+  --surface-2: oklch(0.935 0.005 250);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 250);
+
+  --primary: oklch(0.58 0.22 25);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.92 0.008 250);
+  --secondary-foreground: oklch(0.18 0.02 250);
+
+  --muted: oklch(0.93 0.006 250);
+  --muted-foreground: oklch(0.45 0.02 250);
+
+  --accent: oklch(0.55 0.14 220);
+  --accent-foreground: oklch(0.99 0 0);
+
+  --success: oklch(0.55 0.16 155);
+  --warning: oklch(0.68 0.16 70);
+  --sky-line: oklch(0.50 0.14 230);
+
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.18 0.02 250 / 12%);
+  --input: oklch(0.18 0.02 250 / 16%);
+  --ring: oklch(0.58 0.22 25 / 45%);
+
+  --shadow-card: 0 10px 30px -18px oklch(0.18 0.02 250 / 25%);
+  --shadow-glow-red: 0 0 30px -5px oklch(0.58 0.22 25 / 35%);
+
+  --pool-obsidian: oklch(0.96 0.003 250);
+  --pool-graphite: oklch(0.92 0.005 250);
+  --pool-graphite-2: oklch(0.88 0.006 250);
+  --pool-steel: oklch(0.42 0.020 250);
+  --pool-steel-hi: oklch(0.22 0.015 250);
+  --pool-hairline: oklch(0.18 0.02 250 / 10%);
 }
 
 @layer base {
@@ -139,6 +185,15 @@
   html {
     color-scheme: dark;
   }
+  html.light {
+    color-scheme: light;
+  }
+  html.light body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.58 0.22 25 / 6%), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, oklch(0.50 0.14 230 / 5%), transparent 60%);
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
