@@ -27,10 +27,10 @@ sql_username: stratum
 # Values reflect the current post-incident state (see README table).
 scrypt_tcp_port: 3433
 scrypt_ssl_port: 3434
-scrypt_difficulty_start: 0.25
-scrypt_diff_min: 65536
-scrypt_diff_max: 16777216
-scrypt_max_ttf: 40000       # ~40s target time-to-find per share (L9-tuned)
+scrypt_difficulty_start: 262144   # L9 fleet start — reached in <1s at 16 GH/s
+scrypt_diff_min: 16384            # floor for weak/cellular sessions
+scrypt_diff_max: 8388608          # ceiling — ~25s/share on an L9 at max_ttf=40s
+scrypt_max_ttf: 40000             # target time-to-find per share
 
 pawelhash_tcp_port: 5833
 pawelhash_ssl_port: 5834
