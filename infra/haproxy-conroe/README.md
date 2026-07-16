@@ -19,16 +19,10 @@ NAT + DHCP + HAProxy island.
                         │
         ┌────────┬──────┼──────┬────────┬────────┐
     Beelink-1  BL-2   BL-3   BL-4    BL-5    BL-6     (WAN: DHCP from landlord)
-    (each: WAN NIC + LAN 10.0.0.10/24)                (LAN: 10.0.0.10/24)
         │        │       │       │       │       │
      Cont-1   Cont-2  Cont-3  Cont-4  Cont-5   Cont-6
      ~200 L9s ~200    ~200    ~200    ~200    ~200
 ```
-
-**Every container uses the same LAN subnet `10.0.0.0/24`.** The subnets
-are physically separated and hidden behind NAT, so they don't collide.
-Admin access is by Tailscale hostname (`beelink-c1` … `beelink-c6`), not
-LAN IP.
 
 ### Why 6 boxes instead of 1
 
@@ -38,7 +32,26 @@ LAN IP.
   an N100; 1200 on one box was what killed the ER605s.
 - **Blast radius per container.** An attacker on the landlord's shared
   network cannot reach any L9 — miners are RFC1918 behind 6 separate NATs.
-- **Identical config across all 6.** Same `restore.sh`, no snowflakes.
+- **Identical script, one flag apart.** `restore.sh --container N`.
+
+## Addressing plan
+
+Each container is its own island behind NAT, so the LAN subnets don't
+*have to* be unique. But making them unique means `ssh 10.3.0.10`
+unambiguously means "container 3" — no "which 10.0.0.10 am I on?"
+mistakes.
+
+| Container | Beelink LAN   | Miner range           |
+| --------- | ------------- | --------------------- |
+| 1         | 10.1.0.10/24  | 10.1.0.100 – .254     |
+| 2         | 10.2.0.10/24  | 10.2.0.100 – .254     |
+| 3         | 10.3.0.10/24  | 10.3.0.100 – .254     |
+| 4         | 10.4.0.10/24  | 10.4.0.100 – .254     |
+| 5         | 10.5.0.10/24  | 10.5.0.100 – .254     |
+| 6         | 10.6.0.10/24  | 10.6.0.100 – .254     |
+
+Miners for container N are configured with pool
+`stratum+tcp://10.N.0.10:3433`.
 
 ### Why an EC2-first build
 
@@ -50,10 +63,10 @@ on the on-site mini-PCs.
 ```
 laptop (SG) ──ssh──► EC2 t3.small (us-east-2)        burn-in target
                      │
-                     │  restore.sh --skip-netplan    (EC2: no dual-NIC, no NAT)
+                     │  restore.sh --skip-netplan     (EC2: no dual-NIC, no NAT)
                      ▼
                      Beelink #1..#6 (Conroe, TX)     production
-                     │  restore.sh --with-tailscale
+                     │  restore.sh --container N
 ```
 
 ## Files
@@ -65,11 +78,11 @@ infra/haproxy-conroe/
 ├── restore.sh               # run on any fresh Ubuntu 24.04 → identical box
 ├── config/
 │   ├── haproxy.cfg          # frontend :3433 → upstream stratum
-│   ├── 99-haproxy.yaml      # netplan template: WAN=dhcp, LAN=10.0.0.10/24
+│   ├── 99-haproxy.yaml      # netplan template: WAN=dhcp, LAN=10.N.0.10/24
 │   ├── 99-haproxy.conf      # sysctl: conntrack + keepalives + ephemeral ports
 │   ├── 99-forward.conf      # sysctl: net.ipv4.ip_forward=1 (NAT)
 │   ├── haproxy.limits.conf  # systemd override: LimitNOFILE=1048576
-│   └── kea-dhcp4.conf       # DHCP scope 10.0.0.100-.254 for the container
+│   └── kea-dhcp4.conf       # DHCP scope 10.N.0.100-.254 for the container
 └── scripts/
     ├── smoke-test.sh        # verify :3433 accepts, upstream reachable
     └── watch-sessions.sh    # live count of miner→proxy and proxy→upstream flows
@@ -80,17 +93,21 @@ running box — edit here, commit, re-run `restore.sh`.
 
 ## What restore.sh does on-site
 
+Invoked as `sudo bash restore.sh --container N` (N = 1..6):
+
 1. Installs `haproxy`, `kea-dhcp4-server`, `iptables-persistent`, tooling.
 2. Detects the two NICs — WAN = whichever holds the default route (DHCP
    from landlord), LAN = the other one — and writes a netplan config
-   giving LAN a static `10.0.0.10/24`.
+   giving LAN a static `10.N.0.10/24`.
 3. Enables `ip_forward` and installs `iptables` MASQUERADE for
-   `10.0.0.0/24 → WAN`. Persisted via `netfilter-persistent`.
-4. Serves DHCP on the LAN NIC: `10.0.0.100 – 10.0.0.254`, gateway
-   `10.0.0.10`, DNS `1.1.1.1 / 9.9.9.9`.
+   `10.N.0.0/24 → WAN`. Persisted via `netfilter-persistent`.
+4. Serves DHCP on the LAN NIC: `10.N.0.100 – 10.N.0.254`, gateway
+   `10.N.0.10`, DNS `1.1.1.1 / 9.9.9.9`.
 5. UFW: WAN side default-deny; LAN side allows SSH + stratum (:3433) +
-   stats (:8404) + DHCP (:67). Tailscale interface allowed for SSH.
+   stats (:8404) + DHCP (:67). WAN gets no inbound ports at all.
 6. Starts HAProxy on `:3433`, backend `stratum.pool.honest.money:3433`.
+7. Writes `/opt/haproxy-conroe/CONTAINER` with the container number so
+   ops scripts know which island they're on.
 
 The Beelink is the **entire edge for its container**: firewall, NAT,
 DHCP server, and stratum proxy in one box.
@@ -99,7 +116,7 @@ DHCP server, and stratum proxy in one box.
 
 Same as before — EC2 has a single NIC so `restore.sh` is invoked with
 `--skip-netplan` (skips dual-NIC, NAT, DHCP; opens :22/:3433/:8404 to
-the world for burn-in only).
+the world for burn-in only). Already validated on EC2 `13.217.211.175`.
 
 ### Prerequisites
 
@@ -145,31 +162,55 @@ Tear down:
 For each of the 6 Beelinks:
 
 1. Install Ubuntu Server 24.04 LTS (defaults, OpenSSH enabled, no snaps).
+   Note the WAN NIC's MAC address — label the Beelink with it and its
+   container number.
 2. Plug **WAN NIC** into the SG2218 (landlord uplink). Plug **LAN NIC**
    into the container's miner switch.
-3. On first boot the WAN NIC will get an internet lease from the
-   landlord. Find its temporary IP on the landlord subnet (label the
-   Beelink's MAC ahead of time so you can identify it on the CPE lease
-   table), then:
+3. On first boot the WAN NIC picks up an internet lease from the
+   landlord. Find its temporary IP on the landlord CPE's lease table
+   (that's why you labelled the MAC), then from your laptop while
+   physically on-site (or through whatever access to the landlord
+   subnet you've arranged):
 
    ```bash
    scp -r infra/haproxy-conroe ubuntu@<wan-ip>:/tmp/
-   ssh ubuntu@<wan-ip> 'sudo bash /tmp/haproxy-conroe/restore.sh --with-tailscale'
-   ssh ubuntu@<wan-ip> 'sudo tailscale up --ssh --hostname=beelink-cN'
-   # visit the URL tailscaled prints, approve the node
+   ssh ubuntu@<wan-ip> "sudo bash /tmp/haproxy-conroe/restore.sh --container 1"
    ```
 
-4. From then on, ssh in over Tailscale:
+   Replace `--container 1` with the actual container number for this Beelink.
+
+4. After `restore.sh` finishes, from inside the container you can ssh
+   to the Beelink at its LAN IP:
 
    ```bash
-   ssh ubuntu@beelink-c1
+   ssh ubuntu@10.1.0.10        # container 1
+   ssh ubuntu@10.6.0.10        # container 6
    ```
 
 5. Power on the container's L9s. They'll DHCP from the Beelink into
-   `10.0.0.100+`, and their existing pool config (`stratum+tcp://10.0.0.10:3433`)
-   points at the local Beelink.
+   `10.N.0.100+`. Configure their pool as
+   `stratum+tcp://10.N.0.10:3433`.
 
-Same script, run 6 times. No per-container variables.
+Same script, one flag different per container. No hand-editing config files.
+
+### Remote admin from your laptop
+
+Without Tailscale, ssh from your laptop to a Beelink only works when
+you're on a network that can route to it — physically on-site, or via
+the landlord CPE's WAN IP if the CPE forwards a port to that Beelink.
+Two practical options:
+
+- **On-site laptop plugged into any miner switch** — you're on
+  `10.N.0.0/24` and `ssh ubuntu@10.N.0.10` works directly.
+- **Landlord CPE port forward** to one Beelink (say container 1). SSH
+  to that one over the public IP, then from container-1's Beelink
+  `ssh ubuntu@10.2.0.10` etc. — but only if the containers share a
+  routable mgmt path (they don't today; each Beelink's WAN is a
+  separate NAT hop). Simplest is: forward a different public port to
+  each Beelink's WAN IP.
+
+If remote admin becomes painful, revisit Tailscale later — one command
+per box, `sudo tailscale up`, and you're done. Not required today.
 
 ## Rollback
 
@@ -177,7 +218,8 @@ HAProxy is a sidecar per container, not a shared resource:
 
 - One Beelink down → point that container's miners at
   `stratum.pool.honest.money:3433` directly (or swap the Beelink out
-  with a spare). Other 5 containers unaffected.
+  with a spare configured for the same container number). Other 5
+  containers unaffected.
 - All 6 down → back to the double-NAT problem (miners direct to
   upstream through landlord CPE), not offline.
 
@@ -192,6 +234,5 @@ Same rules as `infra/stratum-stack/`:
 
 1. Edit files under `config/` in this repo.
 2. Commit.
-3. Re-run `restore.sh` against every Beelink (idempotent). A single
-   Ansible loop over `beelink-c1..c6` handles the fan-out.
+3. Re-run `restore.sh --container N` against every Beelink (idempotent).
 4. Never `sed` on a live box.

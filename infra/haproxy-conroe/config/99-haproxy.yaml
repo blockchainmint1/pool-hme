@@ -2,18 +2,19 @@
 #
 # One Beelink per container. Two NICs:
 #   WAN — DHCP client, plugged into the site's SG2218 (landlord uplink).
-#   LAN — static 10.0.0.10/24, plugged into the container's miner switch.
+#   LAN — static, plugged into the container's miner switch.
 #
-# The Beelink NATs the miners' 10.0.0.0/24 subnet out through the WAN NIC,
-# so miners see one gateway (10.0.0.10) and the landlord CPE sees one
-# device per container.
+# The Beelink NATs the miners' LAN subnet out through the WAN NIC, so
+# miners see one gateway (the Beelink's LAN IP) and the landlord CPE
+# sees one device per container.
 #
-# Every container Beelink uses the SAME LAN subnet (10.0.0.0/24). The
-# subnets are isolated behind NAT, so there is no L2/L3 collision. Admin
-# access is by Tailscale hostname (beelink-c1..c6), not LAN IP.
+# Each container has a UNIQUE LAN subnet (10.N.0.0/24 for N=1..6) so
+# admin access by direct IP is unambiguous. Subnets do not need to
+# be unique for correctness (each is NAT-isolated) — the uniqueness is
+# only there to keep humans from confusing which container they're on.
 #
-# `restore.sh` auto-detects the actual interface names and rewrites this
-# template before applying — the names below are placeholders.
+# `restore.sh --container N` auto-detects the interface names and fills
+# in the LAN CIDR before applying — the placeholders below are rewritten.
 network:
   version: 2
   renderer: networkd
@@ -25,6 +26,6 @@ network:
     __LAN__:
       dhcp4: false
       addresses:
-        - 10.0.0.10/24
+        - __LAN_CIDR__
       nameservers:
         addresses: [1.1.1.1, 9.9.9.9]
