@@ -426,6 +426,31 @@ function AlgoTable() {
 // Pool stats table — coins × time-windows
 // ---------------------------------------------------------------------------
 function PoolStatsTable() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Derive per-coin counts + last-found from the pool-found blocks list.
+  // Windows: 1h / 24h / 7d — computed from block timestamps.
+  const now = data.fetchedAt;
+  const buckets = { h1: 3600, h24: 86_400, d7: 7 * 86_400 };
+  type Row = { symbol: string; name: string; h1: number; h24: number; d7: number; last: number };
+  const rows: Record<string, Row> = {};
+  for (const b of data.blocks) {
+    const r = rows[b.symbol] ?? {
+      symbol: b.symbol,
+      name: b.name,
+      h1: 0,
+      h24: 0,
+      d7: 0,
+      last: 0,
+    };
+    const age = now - b.time;
+    if (age <= buckets.h1) r.h1 += 1;
+    if (age <= buckets.h24) r.h24 += 1;
+    if (age <= buckets.d7) r.d7 += 1;
+    if (b.time > r.last) r.last = b.time;
+    rows[b.symbol] = r;
+  }
+  const list = Object.values(rows).sort((a, b) => b.d7 - a.d7);
+
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -434,36 +459,41 @@ function PoolStatsTable() {
             <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
               <th className="text-left px-5 py-3 font-normal">Coin</th>
               <th className="text-left px-3 py-3 font-normal">Symbol</th>
-              <th className="text-right px-3 py-3 font-normal">1 h</th>
+              <th className="text-right px-3 py-3 font-normal">Blocks 1 h</th>
               <th className="text-right px-3 py-3 font-normal">24 h</th>
               <th className="text-right px-3 py-3 font-normal">7 d</th>
-              <th className="text-right px-5 py-3 font-normal">30 d</th>
+              <th className="text-right px-5 py-3 font-normal">Last found</th>
             </tr>
           </thead>
           <tbody className="font-mono">
-            {POOL.stats.map((s) => (
+            {list.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-6 text-center text-pool-steel">
+                  No pool-found blocks yet in the current window.
+                </td>
+              </tr>
+            )}
+            {list.map((r) => (
               <tr
-                key={s.symbol}
+                key={r.symbol}
                 className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
               >
-                <td className="px-5 py-3 text-pool-steel-hi">{s.name}</td>
-                <td className="px-3 py-3 text-pool-steel">{s.symbol}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.hour.toLocaleString()}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.day.toLocaleString()}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.week.toLocaleString()}</td>
-                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">{s.month.toLocaleString()}</td>
+                <td className="px-5 py-3 text-pool-steel-hi">{r.name}</td>
+                <td className="px-3 py-3 text-pool-steel">{r.symbol}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h1}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h24}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.d7}</td>
+                <td className="px-5 py-3 text-right text-pool-steel tabular-nums">
+                  {r.last ? ago(Math.max(0, now - r.last)) : "—"}
+                </td>
               </tr>
             ))}
-            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
-              <td className="px-5 py-3 text-pool-steel-hi">Avg hashrate</td>
-              <td className="px-3 py-3 text-pool-steel">TH/s</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.hour.toFixed(1)}</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.day.toFixed(1)}</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.week.toFixed(1)}</td>
-              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.month.toFixed(1)}</td>
-            </tr>
           </tbody>
         </table>
+      </div>
+      <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
+        Only TXC · ISK · ZCU are solo-found by this pool. LTC / DOGE credit via auxpow and
+        are not counted here.
       </div>
     </div>
   );
