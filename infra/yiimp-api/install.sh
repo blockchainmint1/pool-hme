@@ -36,7 +36,7 @@ rsync -a --delete \
   --exclude node_modules --exclude dist \
   "$SRC_DIR"/ "$INSTALL_DIR"/
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
-sudo -u "$SERVICE_USER" bash -c "cd $INSTALL_DIR && npm ci --omit=optional && npm run build"
+sudo -u "$SERVICE_USER" bash -c "cd $INSTALL_DIR && (npm ci --omit=optional 2>/dev/null || npm install --omit=optional) && npm run build"
 
 echo "==> [5/7] env file"
 mkdir -p "$ENV_DIR"
