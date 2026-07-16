@@ -11,6 +11,15 @@ Temporarily restrict `stratum.pool.honest.money:3433` to Mansfield only
 hashrate issues. Always armed with a `sleep && iptables-restore` timer so
 the box self-heals if we forget or get cut off.
 
+# CRITICAL: STRATUM_ALLOW custom chain
+
+The box has a legacy `STRATUM_ALLOW` custom chain referenced from INPUT
+that ACCEPTs port 3433 traffic matching SYN flags. If it sits ABOVE our
+isolation rules it defeats them — every non-Mansfield miner sails through
+before the DROP is evaluated. Our `-I INPUT 1 ...` inserts MUST land above
+`STRATUM_ALLOW` in the numbered listing. Verify with
+`iptables -L INPUT -n --line-numbers | head -6` before trusting the block.
+
 # Apply (fresh block)
 
 ```bash
@@ -26,11 +35,12 @@ echo "snapshot: /root/iptables.pre-mansfield.$STAMP.rules"
 disown
 echo "auto-revert armed, pid $!"
 
-iptables -I INPUT 1 -p tcp --dport 3433 -s 97.154.36.156  -m comment --comment mansfield         -j ACCEPT
-iptables -I INPUT 2 -p tcp --dport 3433 -s 13.217.211.175 -m comment --comment conroe-proxy-test -j ACCEPT
-iptables -I INPUT 3 -p tcp --dport 3433 -j DROP
+# Insert in reverse order so final numbering is 1=mansfield, 2=conroe-proxy, 3=drop
+iptables -I INPUT 1 -p tcp --dport 3433 -j DROP -m comment --comment "isolate:drop-others"
+iptables -I INPUT 1 -p tcp --dport 3433 -s 13.217.211.175 -j ACCEPT -m comment --comment "isolate:allow-conroe-proxy"
+iptables -I INPUT 1 -p tcp --dport 3433 -s 97.154.36.156  -j ACCEPT -m comment --comment "isolate:allow-mansfield"
 
-# kick everyone else off (returns count killed)
+# kick everyone else off (returns count killed) — REQUIRED, sockets survive rule changes otherwise
 conntrack -D -p tcp --dport 3433 2>/dev/null | wc -l
 '
 ```
