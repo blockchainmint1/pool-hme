@@ -565,12 +565,9 @@ function ConnectCard() {
       </ol>
 
       <div className="rounded-md border border-pool-hairline pool-graphite p-3 text-[12px] font-mono text-pool-steel">
-        <span className="text-pool-amber uppercase tracking-widest text-[10px] mr-2">
-          coming soon
-        </span>
-        migrating to{" "}
-        <span className="text-pool-steel-hi">{POOL.stratumFuture}</span> once the pool's own
-        rigs go live. The current endpoint will keep working through the cutover.
+        Stratum lives at{" "}
+        <span className="text-pool-steel-hi">{POOL.stratum}</span>. Port 3433, scrypt only,
+        with LTC/DOGE/ISK/TXC/ZCU merge-mined on every share.
       </div>
     </div>
   );
