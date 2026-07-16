@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowUpRight,
@@ -15,6 +16,14 @@ import {
   BookOpen,
   Radio,
 } from "lucide-react";
+import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+
+const poolSummaryQuery = queryOptions({
+  queryKey: ["pool", "summary"],
+  queryFn: () => getPoolSummary(),
+  staleTime: 20_000,
+  refetchInterval: 30_000,
+});
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,6 +50,7 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(poolSummaryQuery),
   component: PoolHome,
 });
 
@@ -331,7 +341,7 @@ function PoolHero() {
 
           <Kpi label="Active miners" value={POOL.miners.toLocaleString()} hint="workers online" />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
-          <Kpi label="Blocks / 24h" value={POOL.blocks24h.toString()} hint="all algos combined" />
+          <LiveBlocks24hKpi />
         </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -647,7 +657,22 @@ function nextHalfHourEpoch() {
 // ---------------------------------------------------------------------------
 // Found blocks
 // ---------------------------------------------------------------------------
+function LiveBlocks24hKpi() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  return (
+    <Kpi
+      label="Blocks / 24h"
+      value={data.blocks24h.toString()}
+      hint="TXC · ISK · ZCU · pool-found"
+    />
+  );
+}
+
 function FoundBlocks() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const rows = data.blocks.slice(0, 8);
+
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -658,32 +683,49 @@ function FoundBlocks() {
               <th className="text-left px-3 py-3 font-normal">Height</th>
               <th className="text-left px-3 py-3 font-normal">Age</th>
               <th className="text-right px-3 py-3 font-normal">Reward</th>
-              <th className="text-right px-5 py-3 font-normal">Effort</th>
+              <th className="text-right px-5 py-3 font-normal">Status</th>
             </tr>
           </thead>
           <tbody className="font-mono">
-            {POOL.found.map((b) => {
-              const effortColor =
-                b.effort <= 100 ? "text-pool-mint" : b.effort <= 120 ? "text-pool-amber" : "text-primary";
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-6 text-center text-pool-steel">
+                  Waiting for the next pool-found block…
+                </td>
+              </tr>
+            )}
+            {rows.map((b: PoolBlock) => {
+              const isImmature = b.category === "immature" || b.confirmations < 100;
+              const statusColor = isImmature ? "text-pool-amber" : "text-pool-mint";
+              const statusLabel = isImmature
+                ? `${b.confirmations} conf`
+                : b.category === "orphan"
+                  ? "orphan"
+                  : "confirmed";
               return (
                 <tr
-                  key={`${b.coin}-${b.height}`}
+                  key={`${b.symbol}-${b.height}-${b.blockhash.slice(0, 8)}`}
                   className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
                 >
                   <td className="px-5 py-3">
                     <span className="inline-flex items-center gap-2">
-                      <CoinBadge symbol={b.coin} />
-                      <span className="text-pool-steel-hi">{b.coin}</span>
+                      <CoinBadge symbol={b.symbol} />
+                      <span className="text-pool-steel-hi">{b.symbol}</span>
                     </span>
                   </td>
                   <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
                     {b.height.toLocaleString()}
                   </td>
-                  <td className="px-3 py-3 text-pool-steel">{ago(b.ago)}</td>
-                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                    {b.reward.toLocaleString()} <span className="text-pool-steel">{b.coin}</span>
+                  <td className="px-3 py-3 text-pool-steel">
+                    {ago(Math.max(0, nowSec - b.time))}
                   </td>
-                  <td className={`px-5 py-3 text-right tabular-nums ${effortColor}`}>{b.effort}%</td>
+                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                    {b.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
+                    <span className="text-pool-steel">{b.symbol}</span>
+                  </td>
+                  <td className={`px-5 py-3 text-right tabular-nums ${statusColor}`}>
+                    {statusLabel}
+                  </td>
                 </tr>
               );
             })}
@@ -692,8 +734,8 @@ function FoundBlocks() {
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
         <div className="text-[11px] font-mono text-pool-steel">
-          Effort under 100% = block found faster than expected. LTC / DOGE are merge-mined
-          via auxpow (share credit, not solo-found blocks) and are not listed here.
+          Live from stratum · updated {ago(Math.max(0, nowSec - data.fetchedAt))}. LTC / DOGE are
+          merge-mined via auxpow (share credit, not solo-found) and are not listed here.
         </div>
       </div>
     </div>
