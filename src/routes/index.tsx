@@ -46,8 +46,8 @@ export const Route = createFileRoute("/")({
 
 // ---------------------------------------------------------------------------
 // Placeholder pool data — shaped to match pool.texitcoin.org today.
-// When the real ASICs move to stratum.pool.texitcoin.org this becomes a
-// server-function fetch; the UI stays the same.
+// Backend stratum now lives at stratum.pool.texitcoin.org; this will
+// become a server-function fetch, and the UI stays the same.
 // ---------------------------------------------------------------------------
 
 const POOL = {
