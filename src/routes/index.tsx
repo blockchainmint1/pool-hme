@@ -17,6 +17,7 @@ import {
   Radio,
 } from "lucide-react";
 import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
 
 const poolSummaryQuery = queryOptions({
   queryKey: ["pool", "summary"],
