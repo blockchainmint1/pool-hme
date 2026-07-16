@@ -2,7 +2,8 @@
  * yiimp-api — read-only JSON API in front of the yiimpfrontend MySQL DB.
  *
  * Runs on the yiimp box, binds 127.0.0.1:8787, fronted by nginx TLS at
- * https://yiimp-api.pool.honest.money. See README.md for schema notes.
+ * https://api.stratum.pool.honest.money. See README.md for schema notes.
+
  *
  * Design constraints:
  *   - Read-only. MySQL user is GRANT SELECT only.
