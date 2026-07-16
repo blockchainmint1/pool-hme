@@ -172,7 +172,7 @@ export function PoolHashrateChart() {
                   type="monotone"
                   dataKey="network_hashrate"
                   name="network"
-                  stroke="var(--color-pool-steel-hi)"
+                  stroke="var(--pool-steel-hi)"
                   strokeWidth={1}
                   strokeDasharray="3 3"
                   dot={false}
