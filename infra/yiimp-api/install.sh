@@ -75,8 +75,11 @@ if ! certbot certificates 2>/dev/null | grep -q "Domains:.*$DOMAIN"; then
       echo "   sudo certbot --nginx -d $DOMAIN"
     }
 else
-  echo "    cert for $DOMAIN already present"
+  echo "    cert for $DOMAIN already present — re-installing into nginx site"
+  certbot --nginx --non-interactive --agree-tos --redirect --reinstall \
+    -m "admin@honest.money" -d "$DOMAIN" || true
 fi
+systemctl reload nginx
 
 echo
 echo "==> done."
