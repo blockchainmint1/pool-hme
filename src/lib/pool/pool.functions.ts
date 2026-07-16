@@ -156,3 +156,114 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Hashrate time-series — /api/v1/pool/hashrate?window=...&algo=scrypt
+//
+// Server returns bucketed samples from yiimp's `hashstats` table:
+//   { window, algo, points: [{ time, hashrate, network_hashrate, difficulty }] }
+//
+// If the endpoint isn't deployed yet, we synthesize a plausible series from
+// the current live hashrate so the chart still renders and dev keeps moving.
+// ---------------------------------------------------------------------------
+
+export type HashrateWindow = "1h" | "24h" | "7d" | "30d";
+
+export interface HashratePoint {
+  time: number;
+  hashrate: number; // H/s pool
+  network_hashrate: number; // H/s network (may be 0 if not tracked)
+  difficulty: number;
+}
+
+export interface PoolHashrateSeries {
+  window: HashrateWindow;
+  algo: string;
+  points: HashratePoint[];
+  synthetic: boolean;
+  fetchedAt: number;
+}
+
+const hashrateInput = z.object({
+  window: z.enum(["1h", "24h", "7d", "30d"]).default("24h"),
+  algo: z.string().default("scrypt"),
+});
+
+const WINDOW_SECONDS: Record<HashrateWindow, number> = {
+  "1h": 60 * 60,
+  "24h": 24 * 60 * 60,
+  "7d": 7 * 24 * 60 * 60,
+  "30d": 30 * 24 * 60 * 60,
+};
+const WINDOW_BUCKETS: Record<HashrateWindow, number> = {
+  "1h": 60,
+  "24h": 288, // 5-min buckets
+  "7d": 336, // 30-min buckets
+  "30d": 360, // 2-hr buckets
+};
+
+function synth(window: HashrateWindow, centerHs: number): HashratePoint[] {
+  const buckets = WINDOW_BUCKETS[window];
+  const total = WINDOW_SECONDS[window];
+  const step = Math.floor(total / buckets);
+  const now = Math.floor(Date.now() / 1000);
+  const base = centerHs > 0 ? centerHs : 7.9e12; // ~7.9 TH/s fallback
+  const out: HashratePoint[] = [];
+  for (let i = 0; i < buckets; i++) {
+    const t = now - (buckets - 1 - i) * step;
+    // gentle sine + jitter around base
+    const phase = (i / buckets) * Math.PI * 2;
+    const drift = 1 + Math.sin(phase) * 0.06 + (Math.random() - 0.5) * 0.04;
+    out.push({
+      time: t,
+      hashrate: base * drift,
+      network_hashrate: 0,
+      difficulty: 0,
+    });
+  }
+  return out;
+}
+
+export const getPoolHashrate = createServerFn({ method: "GET" })
+  .inputValidator((d) => hashrateInput.parse(d))
+  .handler(async ({ data }): Promise<PoolHashrateSeries> => {
+    const { window, algo } = data;
+    const nowSec = Math.floor(Date.now() / 1000);
+    try {
+      const res = await fetch(
+        `${POOL_API}/api/v1/pool/hashrate?window=${window}&algo=${algo}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) throw new Error(`hashrate ${res.status}`);
+      const body = (await res.json()) as {
+        window: HashrateWindow;
+        algo: string;
+        points: HashratePoint[];
+      };
+      if (!Array.isArray(body.points) || body.points.length === 0) {
+        throw new Error("empty series");
+      }
+      return {
+        window: body.window ?? window,
+        algo: body.algo ?? algo,
+        points: body.points,
+        synthetic: false,
+        fetchedAt: nowSec,
+      };
+    } catch {
+      // Fall back to synthetic ~7.9 TH/s so the graph section still ships.
+      // Real numbers arrive once the upgraded yiimp-api is on the box.
+      const summary = (g.__poolSummaryCache as CacheEntry | undefined)?.data;
+      const centerHs = summary
+        ? summary.liveHashrateGhs * 1e9 // GH → H
+        : 7.9e12;
+      return {
+        window,
+        algo,
+        points: synth(window, centerHs),
+        synthetic: true,
+        fetchedAt: nowSec,
+      };
+    }
+  });
+
