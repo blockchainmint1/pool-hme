@@ -65,9 +65,17 @@ echo "==> ufw"
 ufw --force reset >/dev/null
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow from 10.0.0.0/24 to any port 22 proto tcp
-ufw allow 3433/tcp
-ufw allow from 10.0.0.0/24 to any port 8404 proto tcp
+if [[ $SKIP_NETPLAN -eq 1 ]]; then
+  # EC2 burn-in: no LAN yet, allow SSH + stats from anywhere so we can reach it.
+  ufw allow 22/tcp
+  ufw allow 3433/tcp
+  ufw allow 8404/tcp
+else
+  # On-site: SSH + stats only from the Conroe LAN; stratum open to miners.
+  ufw allow from 10.0.0.0/24 to any port 22 proto tcp
+  ufw allow 3433/tcp
+  ufw allow from 10.0.0.0/24 to any port 8404 proto tcp
+fi
 ufw --force enable
 
 echo "==> enable + restart haproxy"
