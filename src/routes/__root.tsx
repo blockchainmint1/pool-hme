@@ -11,6 +11,8 @@ import {
 import appCss from "../styles.css?url";
 import { SearchBar } from "@/components/explorer/SearchBar";
 import { PriceTicker } from "@/components/explorer/PriceTicker";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
 
 function NotFoundComponent() {
   return (
@@ -100,6 +102,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('hme-theme')||'dark';var c=document.documentElement.classList;c.toggle('light',t==='light');c.toggle('dark',t==='dark');}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>
         {children}
@@ -108,6 +115,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
+
 
 function Header() {
   return (
@@ -133,6 +141,8 @@ function Header() {
         </nav>
         <div className="flex-1 flex justify-end items-center gap-2">
           <PriceTicker />
+          <ThemeToggle />
+
           <SearchBar variant="header" />
         </div>
       </div>
