@@ -200,15 +200,21 @@ async function computeSummary() {
   const nowSec = Math.floor(Date.now() / 1000);
   const dayAgo = nowSec - 86_400;
 
-  // Miner/worker counts from the workers table, filtered to recent rows
-  // (workers table keeps stale entries for hours).
+  // Miner/worker counts, honest 10-min active window.
+  //
+  // The `workers` table's `time` column is the *connection* timestamp, not
+  // last-share — so a miner connected hours ago but still hashing would be
+  // wrongly excluded by a `time > now-600` filter. Count DISTINCT workerids
+  // that submitted a share in the last 10 minutes from the `shares` table
+  // instead, and join back to `workers` to expose userid for miner count.
   const [algoRows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT algo,
-            COUNT(DISTINCT userid) AS db_miners,
-            COUNT(*) AS db_workers
-       FROM workers
-      WHERE time > UNIX_TIMESTAMP() - 600
-      GROUP BY algo`,
+    `SELECT s.algo,
+            COUNT(DISTINCT w.userid)   AS db_miners,
+            COUNT(DISTINCT s.workerid) AS db_workers
+       FROM shares s
+       LEFT JOIN workers w ON w.id = s.workerid
+      WHERE s.time > UNIX_TIMESTAMP() - 600
+      GROUP BY s.algo`,
   );
 
   // Current pool hashrate per algo — latest row per algo in hashstats.
