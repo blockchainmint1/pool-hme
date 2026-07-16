@@ -192,7 +192,11 @@ app.get("/api/pool/algos", async () => {
  * NOTE: the yiimpfrontend `workers` table has NO `hashrate` column in
  * this fork — hashrate lives in the `hashstats` time-series table.
  */
-app.get("/api/v1/pool/summary", async () => {
+let summaryCache: { at: number; body: unknown } | null = null;
+let summaryInflight: Promise<unknown> | null = null;
+const SUMMARY_TTL_MS = 20_000;
+
+async function computeSummary() {
   const nowSec = Math.floor(Date.now() / 1000);
   const dayAgo = nowSec - 86_400;
 
@@ -288,6 +292,24 @@ app.get("/api/v1/pool/summary", async () => {
     effort,
     fetched_at: nowSec,
   };
+}
+
+app.get("/api/v1/pool/summary", async () => {
+  const now = Date.now();
+  if (summaryCache && now - summaryCache.at < SUMMARY_TTL_MS) return summaryCache.body;
+  if (!summaryInflight) {
+    summaryInflight = computeSummary()
+      .then((body) => {
+        summaryCache = { at: Date.now(), body };
+        return body;
+      })
+      .finally(() => {
+        summaryInflight = null;
+      });
+  }
+  // Serve stale while refreshing if we have any cache at all.
+  if (summaryCache) return summaryCache.body;
+  return summaryInflight;
 });
 
 app.get("/api/v1/pool/hashrate", async (req, reply) => {
