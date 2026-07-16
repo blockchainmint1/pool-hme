@@ -1,0 +1,30 @@
+[Unit]
+Description=yiimp-api (read-only JSON API for yiimpfrontend)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=yiimp-api
+Group=yiimp-api
+EnvironmentFile=/etc/yiimp-api/env
+WorkingDirectory=/opt/yiimp-api
+ExecStart=/usr/bin/node /opt/yiimp-api/dist/server.js
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/yiimp-api
+ReadWritePaths=
+ReadOnlyPaths=/var/stratum
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
