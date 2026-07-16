@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowUpRight,
@@ -15,6 +16,14 @@ import {
   BookOpen,
   Radio,
 } from "lucide-react";
+import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+
+const poolSummaryQuery = queryOptions({
+  queryKey: ["pool", "summary"],
+  queryFn: () => getPoolSummary(),
+  staleTime: 20_000,
+  refetchInterval: 30_000,
+});
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,6 +50,7 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(poolSummaryQuery),
   component: PoolHome,
 });
 
