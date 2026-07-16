@@ -43,25 +43,57 @@ terminates TLS on `api.stratum.pool.honest.money` and proxies to it. No
 direct internet exposure of Node or MySQL.
 
 
-## Endpoints
+## Endpoints (v0.2.0)
 
-All JSON. All GET. All cached at the edge for 5–30s depending on
-volatility.
+All JSON. All GET (plus one SSE stream). The `/api/v1/*` namespace is the stable surface; `/api/*` paths remain as legacy aliases for one release.
 
-| Path                                 | Cache | Notes |
-| ------------------------------------ | ----- | ----- |
-| `/api/health`                        | 0s    | `{ok:true, db:true, uptime}` |
-| `/api/pool/stats`                    | 10s   | Per-algo: hashrate, workers, miners, last_block, network_diff |
-| `/api/pool/algos`                    | 60s   | Active algos + upstream ports |
-| `/api/coins`                         | 60s   | Coins yiimp knows about, `enabled`, `visible` |
-| `/api/blocks?coin=&algo=&limit=`     | 15s   | Recent blocks. `coin=` matches `symbol` (LTC/DOGE/TXC/ISK/ZCU). Default limit 50, max 500. |
-| `/api/miner/:address`                | 5s    | Address summary: hashrate, workers online, pending balance, total paid, last share |
-| `/api/miner/:address/workers`        | 5s    | One row per worker: name, hashrate, last_share, diff, valid/invalid shares |
-| `/api/miner/:address/payouts?limit=` | 30s   | Payout history rows. Default 50, max 500. |
-| `/api/miner/:address/earnings?limit=`| 30s   | Per-block credits — matched-block share of reward. |
+Full reference: [`docs/api.md`](../../docs/api.md).
 
-Address validation regex: `/^[A-Za-z0-9]{20,80}$/`. Rejects anything
-else with 400 before hitting SQL.
+| Path                                        | Notes |
+| ------------------------------------------- | ----- |
+| `/api/v1/health`                            | `{ok, db, uptime, version}` |
+| `/api/v1/coins`                             | Visible coins |
+| `/api/v1/coins/:symbol`                     | One coin incl. price / difficulty / network_hash / reward / fees |
+| `/api/v1/coins/:symbol/blocks`              | Pool-found blocks for one coin |
+| `/api/v1/pool/summary`                      | One-shot dashboard payload (algos, live stratum, last blocks, effort, blocks 24h) |
+| `/api/v1/pool/hashrate?window=1h\|24h\|7d\|30d` | Bucketed hashrate series from `hashstats` |
+| `/api/v1/pool/effort`                       | Shares since last block ÷ network difficulty |
+| `/api/v1/pool/blocks/luck?window=…`         | Actual blocks over window |
+| `/api/v1/blocks?coin=&algo=&limit=`         | Recent blocks |
+| `/api/v1/mergedmining/summary?window=…`     | Per-round: primary + auxpow chains credited |
+| `/api/v1/mergedmining/credits?limit=`       | Flat credit feed tagged `solo` / `auxpow` |
+| `/api/v1/miners/count`                      | **Real** active-miner count from stratum diag (not the stale `workers` table) |
+| `/api/v1/miners/top?limit=`                 | Leaderboard, addresses truncated |
+| `/api/v1/miners/locations`                  | GeoIP country/region rollup — **no IPs ever returned** |
+| `/api/v1/miner/:address`                    | Summary |
+| `/api/v1/miner/:address/workers`            | Per-worker rows with country/region |
+| `/api/v1/miner/:address/hashrate?window=…`  | Per-miner time-series |
+| `/api/v1/miner/:address/payouts?limit=`     | Payout history |
+| `/api/v1/miner/:address/earnings?limit=`    | Per-block credits |
+| `/api/v1/stream` (SSE)                      | `block-found`, `hashrate-tick`, `ping` |
+| `/api/v1/openapi.json`                      | OpenAPI 3.1 index for client generation |
+
+### Fixing the miner count
+
+`/api/v1/miners/count` reads the last `SCRYPT summary diag clients=…` line
+from each `${STRATUM_LOG_DIR}/${algo}.log`. This is the truth — the yiimp
+`workers` MySQL table keeps stale rows for hours after miner disconnects,
+which is why every previous number was wrong.
+
+Address validation regex: `/^[A-Za-z0-9]{20,80}$/`. Rejected with 400 before
+hitting SQL.
+
+### GeoIP
+
+Server-side lookups via `geoip-lite` (embedded MaxMind Lite DB). The DB
+refreshes monthly — add a cron entry on the host:
+
+```
+0 3 1 * * cd /opt/yiimp-api && npx geoip-lite-update
+```
+
+Raw IPs are never returned in any public response.
+
 
 ## Files
 

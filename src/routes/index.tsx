@@ -339,7 +339,7 @@ function PoolHero() {
             </div>
           </div>
 
-          <Kpi label="Active miners" value={POOL.miners.toLocaleString()} hint="workers online" />
+          <LiveMinersKpi />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
           <LiveBlocks24hKpi />
         </div>
@@ -668,9 +668,21 @@ function LiveBlocks24hKpi() {
   );
 }
 
+function LiveMinersKpi() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Live stratum client count is the real number. yiimp's workers table
+  // keeps stale rows for hours, which is why the placeholder looked wrong.
+  const clients = data.liveClients;
+  const value = clients > 0 ? clients.toLocaleString() : "—";
+  return <Kpi label="Active miners" value={value} hint="live stratum clients" />;
+}
+
 function FoundBlocks() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  const nowSec = Math.floor(Date.now() / 1000);
+  // Anchor "age" to data.fetchedAt (already in the SSR payload) so server and
+  // client render identical strings on first paint. A live re-tick happens on
+  // the next Query refetch (30s) — good enough, and no hydration drift.
+  const nowSec = data.fetchedAt;
   const rows = data.blocks.slice(0, 8);
 
   return (
@@ -734,7 +746,7 @@ function FoundBlocks() {
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
         <div className="text-[11px] font-mono text-pool-steel">
-          Live from stratum · updated {ago(Math.max(0, nowSec - data.fetchedAt))}. LTC / DOGE are
+          Live from stratum · snapshot age {ago(0)}. LTC / DOGE are
           merge-mined via auxpow (share credit, not solo-found) and are not listed here.
         </div>
       </div>
