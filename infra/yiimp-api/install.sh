@@ -53,7 +53,7 @@ systemctl daemon-reload
 systemctl enable yiimp-api.service
 systemctl restart yiimp-api.service
 
-echo "==> [7/7] nginx"
+echo "==> [7/8] nginx"
 # rate limit zone
 cat >/etc/nginx/conf.d/yiimp-api-limits.conf <<'EOF'
 limit_req_zone $binary_remote_addr zone=yiimp_api:10m rate=20r/s;
@@ -63,11 +63,24 @@ ln -sf /etc/nginx/sites-available/yiimp-api.conf /etc/nginx/sites-enabled/yiimp-
 nginx -t
 systemctl reload nginx
 
+echo "==> [8/8] TLS via certbot"
+if ! command -v certbot >/dev/null; then
+  apt-get install -y certbot python3-certbot-nginx
+fi
+if ! certbot certificates 2>/dev/null | grep -q "Domains:.*$DOMAIN"; then
+  echo "    requesting cert for $DOMAIN (DNS must already resolve to this box)"
+  certbot --nginx --non-interactive --agree-tos --redirect \
+    -m "admin@honest.money" -d "$DOMAIN" || {
+      echo "!! certbot failed — DNS may not be propagated. Re-run:"
+      echo "   sudo certbot --nginx -d $DOMAIN"
+    }
+else
+  echo "    cert for $DOMAIN already present"
+fi
+
 echo
 echo "==> done."
 echo "   next steps:"
 echo "     1. edit $ENV_DIR/env and set MYSQL_PASSWORD (see README for GRANT)"
 echo "     2. systemctl restart yiimp-api"
-echo "     3. point DNS $DOMAIN at this box"
-echo "     4. sudo certbot --nginx -d $DOMAIN"
-echo "     5. curl -s https://$DOMAIN/api/health"
+echo "     3. curl -s https://$DOMAIN/api/health"
