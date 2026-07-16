@@ -17,3 +17,4 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 - [yiimp-api deploy](mem://infra/yiimp-api-deploy.md) — How to publish updates to the yiimp-api service (bundle → publish → curl-pipe installer); DB is `yiimpfrontend`; hashstats schema notes
 - [Stratum port](mem://infra/stratum-port.md) — Scrypt stratum listens on TCP 3433 on stratum.pool.honest.money
 - [Stratum schema & paths](mem://infra/stratum-schema.md) — Authoritative: binary `/var/stratum/stratum`, live config `/var/stratum/scrypt.conf`, systemd `stratum-aws-scrypt`; workers.difficulty NOT difficulty_actual; shares.error int NOT reject_reason. Read before SQL or config edits.
+- [Mansfield-only isolation](mem://infra/mansfield-isolation.md) — iptables apply/extend/lift pattern for restricting 3433 to Mansfield + Conroe haproxy during hashpower debugging, with sleep-based auto-revert timer.
