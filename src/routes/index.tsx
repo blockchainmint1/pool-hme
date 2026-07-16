@@ -139,6 +139,7 @@ function PoolHome() {
           <RailLink href="#overview"  icon={Gauge}         label="Overview" active />
           <RailLink href="#algos"     icon={CircuitBoard}  label="Algos" />
           <RailLink href="#stats"     icon={Activity}      label="Pool stats" />
+          <RailLink href="#graphs"    icon={Activity}      label="Graphs" />
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
           <RailLink href="#workers"   icon={Cpu}           label="Workers" />
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
