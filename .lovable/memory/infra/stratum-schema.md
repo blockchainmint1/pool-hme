@@ -29,7 +29,8 @@ type: reference
 ### `workers` table
 - `id`, `userid`, `algo`, `pid`, `ip`, `name` (wallet), `worker`, `password`, `version`
 - `difficulty` — vardiff's current per-session target/ceiling (e.g. 131072, 1048576). **NOT `difficulty_actual`**
-- `subscribe`, `time`, `last_share`, `pool_id`
+- `subscribe`, `time`, `pool_id`
+- **NO `last_share` column** on this build (verified 2026-07-16 via `ERROR 1054`). For "recently active worker" checks, join `shares` and filter on `shares.time > UNIX_TIMESTAMP()-N`. Do not `WHERE last_share > ...` — the query will error out.
 
 ### `shares` table
 - `id`, `userid`, `workerid`, `algo`, `pid`, `time`
