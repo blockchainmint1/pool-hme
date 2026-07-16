@@ -737,7 +737,7 @@ function FoundBlocks() {
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
         <div className="text-[11px] font-mono text-pool-steel">
-          Live from stratum · updated {ago(Math.max(0, nowSec - data.fetchedAt))}. LTC / DOGE are
+          Live from stratum · snapshot age {ago(0)}. LTC / DOGE are
           merge-mined via auxpow (share credit, not solo-found) and are not listed here.
         </div>
       </div>
