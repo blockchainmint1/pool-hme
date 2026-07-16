@@ -111,10 +111,14 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         fetchJson<{
           stratum_live: Record<string, StratumLive>;
           blocks_24h_pool_found: number;
+          blocks_24h_by_symbol?: Record<string, number>;
+          active_miners_10m?: number;
           algos?: PoolAlgoStats[];
         }>("/api/v1/pool/summary").catch(() => ({
           stratum_live: {} as Record<string, StratumLive>,
           blocks_24h_pool_found: -1,
+          blocks_24h_by_symbol: {} as Record<string, number>,
+          active_miners_10m: 0,
           algos: [] as PoolAlgoStats[],
         })),
       ]);
