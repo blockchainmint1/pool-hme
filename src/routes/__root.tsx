@@ -135,6 +135,8 @@ function Header() {
         </nav>
         <div className="flex-1 flex justify-end items-center gap-2">
           <PriceTicker />
+          <ThemeToggle />
+
           <SearchBar variant="header" />
         </div>
       </div>
