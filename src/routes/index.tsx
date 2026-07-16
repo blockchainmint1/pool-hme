@@ -362,7 +362,7 @@ function AlgoTable() {
   // All 5 coins share the scrypt algo (merged mining). Pull the scrypt
   // aggregate once; every row displays the same live values.
   const scrypt = data.algos.find((x) => x.algo === "scrypt");
-  const miners = scrypt?.live_clients ?? data.liveClients;
+  const miners = data.activeMiners || scrypt?.live_clients || 0;
   const ths = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
