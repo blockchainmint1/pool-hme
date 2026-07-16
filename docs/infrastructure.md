@@ -13,7 +13,7 @@
 | Concern                              | Where it actually lives                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | Pool frontend (this repo)            | TanStack Start app · `src/routes/`                                             |
-| Stratum server host                  | `ubuntu@pool2.iskandercoin.com` (AWS EC2 · `ip-172-31-83-232`)                 |
+| Stratum server host                  | `ubuntu@stratum.pool.honest.money` (AWS EC2 · `ip-172-31-83-232`)                 |
 | Stratum binaries & runtime files     | `/var/stratum/` on the host                                                    |
 | Stratum config (rendered)            | `/var/stratum/config/scrypt.conf` (fallback: `/var/stratum/scrypt.conf`)       |
 | Stratum config (source of truth)     | Ansible: `infra/stratum-stack/` · template `scrypt.conf.j2`                    |
@@ -148,7 +148,7 @@ sudo bash -c '
 
 We are in the process of taking **full control** of the entire stack:
 
-1. **The box** — `pool2.iskandercoin.com` (AWS EC2). Goal: own the AWS
+1. **The box** — `stratum.pool.honest.money` (AWS EC2). Goal: own the AWS
    account / SSH keys / systemd units / Ansible repo outright. Until then,
    treat every change as reversible and log it here.
 2. **The pool** — stratum binary, coin daemons, Yiimp DB, payout logic.
