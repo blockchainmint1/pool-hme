@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 // yiimp-api on the stratum host. Behind nginx + LE TLS.
 const POOL_API = "https://api.stratum.pool.honest.money";
