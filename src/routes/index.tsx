@@ -668,6 +668,15 @@ function LiveBlocks24hKpi() {
   );
 }
 
+function LiveMinersKpi() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Live stratum client count is the real number. yiimp's workers table
+  // keeps stale rows for hours, which is why the placeholder looked wrong.
+  const clients = data.liveClients;
+  const value = clients > 0 ? clients.toLocaleString() : "—";
+  return <Kpi label="Active miners" value={value} hint="live stratum clients" />;
+}
+
 function FoundBlocks() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
   // Anchor "age" to data.fetchedAt (already in the SSR payload) so server and
