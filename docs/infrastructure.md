@@ -396,3 +396,70 @@ ORDER BY time DESC LIMIT 12;
 To confirm columns on any table before querying:
 `SHOW COLUMNS FROM <table>;`
 
+### 2026-07-16 — Conroe HAProxy burn-in + fleet-wide share-counting bug
+
+**HAProxy burn-in (PASSED).** Single L9 (`conroe-A`) pointed at
+`13.217.211.175:3433` (EC2 HAProxy, `/opt/haproxy-conroe/`). Stratum sees
+the session as coming from the EC2 IP as expected:
+
+```
+172.31.83.232:3433 ← 13.217.211.175:20796
+```
+
+Vardiff climbed correctly through the proxy: `131072 → 688128 → 1048576`
+(cap), spm ramped to ~33 before we changed the worker suffix. After the
+suffix change, session reconnected cleanly as `worker=conroe-A`, vardiff
+restarted at `131072` and began climbing again (spm=84.62 in the first
+sample). The proxy path is transparent to vardiff and reconnect logic.
+
+**Fleet-wide share-counting bug (NEW, higher priority than the NAT story).**
+Every `SCRYPT client diag` line during burn-in shows
+`valid=0 invalid=0 dup=0 low=0 stale=0 other=0` and
+`accepted_ghs=0.000`, despite `spm` climbing to 25–33 shares/min. Pool
+summary confirms it is not specific to Conroe:
+
+```
+SCRYPT summary diag clients=380 active=0 accepted_ghs=0.000
+                    valid=0 invalid=0 dup=0 low=0 stale=0 other=0
+```
+
+Shares are being submitted (spm > 0) but nothing is being *classified* —
+not accepted, not rejected, not stale. They are dropped somewhere between
+the network read and the counters. This affects **all 380 clients**, not
+just the double-NAT'd ones.
+
+**Reframing §9 numbers.** The earlier "Conroe is delivering ~10% of
+capacity because of double-NAT" conclusion was partly wrong. The
+double-NAT is a real problem (HAProxy fixes it), but the ~9.5 TH/s
+credited vs ~19.2 TH/s expected is mostly this share-counting bug — the
+`hashrate` table only counts what the stratum *classifies* as valid, and
+right now the stratum classifies nothing. Some blocks still land because
+the parent chain check happens on a different path from `valid++`.
+
+**Where to look next (stratum build, not proxy, not NAT):**
+
+1. Diff the current running binary against `LIVE2` / `TXC3` / `live3` in
+   `/var/stratum/` — one of those older builds was counting shares
+   correctly before the last rebuild. Snapshot which build we're on now
+   (`sha256sum /var/stratum/stratum`) before rolling back.
+2. Enable higher log verbosity if the build supports it, or add a
+   printf around the share-classify path in the source tree once we
+   locate it.
+3. `active=0` with `clients=380` is the most specific signal — find
+   where `active` gets incremented and work backward.
+
+**Action items (updated):**
+
+1. ~~Deploy on-site HAProxy stratum proxy in Conroe~~ — burn-in passed
+   on EC2. Next: replicate on the on-site N100/Protectli, cut all 1200
+   L9s over. Config lives in `infra/haproxy-conroe/`.
+2. ~~Split usernames per tank/container~~ — convention confirmed working:
+   `<wallet>.<container>-<tank>-<unit>` (e.g. `.conroe-A`). Roll out to
+   the full fleet as part of cutover.
+3. **Fix stratum share classification** — new top priority; this is
+   what's actually costing hashrate credit fleet-wide.
+4. Longer TCP keepalive on miners (unchanged).
+5. Ask landlord about DMZ / public IP (unchanged, still parallel).
+6. ZCU `getblocktemplate` (unchanged, still low priority).
+
+
