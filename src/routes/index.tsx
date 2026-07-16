@@ -17,6 +17,7 @@ import {
   Radio,
 } from "lucide-react";
 import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
 
 const poolSummaryQuery = queryOptions({
   queryKey: ["pool", "summary"],
@@ -138,6 +139,7 @@ function PoolHome() {
           <RailLink href="#overview"  icon={Gauge}         label="Overview" active />
           <RailLink href="#algos"     icon={CircuitBoard}  label="Algos" />
           <RailLink href="#stats"     icon={Activity}      label="Pool stats" />
+          <RailLink href="#graphs"    icon={Activity}      label="Graphs" />
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
           <RailLink href="#workers"   icon={Cpu}           label="Workers" />
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
@@ -173,6 +175,14 @@ function PoolHome() {
               hint="rolling windows · scrypt"
             />
             <PoolStatsTable />
+          </section>
+          <section id="graphs" className="space-y-3">
+            <SectionHeader
+              eyebrow="Time-series"
+              title="Hashrate over time."
+              hint="scrypt · from hashstats"
+            />
+            <PoolHashrateChart />
           </section>
 
           <section id="connect" className="grid lg:grid-cols-5 gap-6">
