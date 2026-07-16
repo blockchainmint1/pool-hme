@@ -52,6 +52,8 @@ stratumEvents.setMaxListeners(1000);
 /** Return { scrypt: {...}, pawelhash: {...} } for all algos that have a log. */
 export async function getStratumLive(): Promise<Record<string, StratumLive>> {
   if (!STRATUM_LOG_DIR) return {};
+  // Note: readSummary handles ENOENT gracefully, so a missing file for a
+  // configured algo just yields no entry — never an exception.
   const out: Record<string, StratumLive> = {};
   await Promise.all(
     ALGOS.map(async (algo) => {
