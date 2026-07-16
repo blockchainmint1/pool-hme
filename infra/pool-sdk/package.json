@@ -1,0 +1,19 @@
+{
+  "name": "@honestmoney/pool-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client for the honest.money pool API (api.stratum.pool.honest.money). Pool-native + merged-mining + realtime SSE.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p .",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["yiimp", "mining", "pool", "texitcoin", "honestmoney", "stratum"],
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
