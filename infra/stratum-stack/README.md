@@ -1,7 +1,7 @@
 # stratum-stack
 
 Ansible-managed deployment of the yiimp-style stratum server that fronts the
-Iskandercoin / TEXITcoin merge-mine pool (`pool2.iskandercoin.com`).
+Iskandercoin / TEXITcoin merge-mine pool (`stratum.pool.honest.money`).
 
 This directory is the source of truth for:
 
@@ -81,9 +81,9 @@ is authoritative *only until the next playbook run*.
 Run against the box over SSH:
 
 ```bash
-./scripts/health-check.sh    ubuntu@pool2.iskandercoin.com
-./scripts/vardiff-report.sh  ubuntu@pool2.iskandercoin.com
-./scripts/share-audit.sh     ubuntu@pool2.iskandercoin.com scrypt
+./scripts/health-check.sh    ubuntu@stratum.pool.honest.money
+./scripts/vardiff-report.sh  ubuntu@stratum.pool.honest.money
+./scripts/share-audit.sh     ubuntu@stratum.pool.honest.money scrypt
 ```
 
 ## Tuning decisions captured here
