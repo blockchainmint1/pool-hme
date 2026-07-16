@@ -98,7 +98,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.2.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.3.0" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -109,7 +109,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.2.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.3.0" };
 });
 
 // ============================================================================
@@ -739,7 +739,7 @@ app.get("/api/v1/stream", (req, reply) => {
       // Hello frame so clients confirm the pipe.
       yield {
         event: "hello",
-        data: JSON.stringify({ time: Math.floor(Date.now() / 1000), version: "0.2.0" }),
+        data: JSON.stringify({ time: Math.floor(Date.now() / 1000), version: "0.3.0" }),
       };
 
       const queue: { event: string; data: string }[] = [];
@@ -782,7 +782,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.2.0",
+    version: "0.3.0",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
