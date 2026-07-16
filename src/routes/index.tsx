@@ -176,6 +176,14 @@ function PoolHome() {
             />
             <PoolStatsTable />
           </section>
+          <section id="graphs" className="space-y-3">
+            <SectionHeader
+              eyebrow="Time-series"
+              title="Hashrate over time."
+              hint="scrypt · from hashstats"
+            />
+            <PoolHashrateChart />
+          </section>
 
           <section id="connect" className="grid lg:grid-cols-5 gap-6">
             <div className="lg:col-span-3 space-y-3">
