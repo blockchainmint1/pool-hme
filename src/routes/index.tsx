@@ -670,7 +670,10 @@ function LiveBlocks24hKpi() {
 
 function FoundBlocks() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  const nowSec = Math.floor(Date.now() / 1000);
+  // Anchor "age" to data.fetchedAt (already in the SSR payload) so server and
+  // client render identical strings on first paint. A live re-tick happens on
+  // the next Query refetch (30s) — good enough, and no hydration drift.
+  const nowSec = data.fetchedAt;
   const rows = data.blocks.slice(0, 8);
 
   return (
