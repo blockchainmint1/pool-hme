@@ -1,16 +1,30 @@
 # /etc/netplan/99-haproxy.yaml
-# Static LAN IP for the HAProxy box. Miners point at 10.0.0.10:3433.
-# Adjust `enp1s0` to match `ip -o link show` on the actual hardware.
+#
+# One Beelink per container. Two NICs:
+#   WAN — DHCP client, plugged into the site's SG2218 (landlord uplink).
+#   LAN — static 10.0.0.10/24, plugged into the container's miner switch.
+#
+# The Beelink NATs the miners' 10.0.0.0/24 subnet out through the WAN NIC,
+# so miners see one gateway (10.0.0.10) and the landlord CPE sees one
+# device per container.
+#
+# Every container Beelink uses the SAME LAN subnet (10.0.0.0/24). The
+# subnets are isolated behind NAT, so there is no L2/L3 collision. Admin
+# access is by Tailscale hostname (beelink-c1..c6), not LAN IP.
+#
+# `restore.sh` auto-detects the actual interface names and rewrites this
+# template before applying — the names below are placeholders.
 network:
   version: 2
   renderer: networkd
   ethernets:
-    enp1s0:
+    __WAN__:
+      dhcp4: true
+      dhcp6: false
+      optional: false
+    __LAN__:
       dhcp4: false
       addresses:
         - 10.0.0.10/24
-      routes:
-        - to: default
-          via: 10.0.0.1
       nameservers:
         addresses: [1.1.1.1, 9.9.9.9]
