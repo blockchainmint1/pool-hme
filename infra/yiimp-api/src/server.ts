@@ -283,12 +283,21 @@ async function computeSummary() {
     };
   });
 
+  // 10-minute active-miner count — updated by yiimp on every share submit,
+  // so it's the honest number. Stratum diag `clients` is a TCP snapshot and
+  // undercounts fleets that reconnect (e.g. cellular).
+  const activeMiners10m = (algoRows as mysql.RowDataPacket[]).reduce(
+    (s, r) => s + Number(r.db_workers ?? 0),
+    0,
+  );
+
   return {
     algos,
     stratum_live: stratum,
     last_blocks: lastBlocks,
     blocks_24h_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n)])),
     blocks_24h_pool_found: totalPoolFound24h,
+    active_miners_10m: activeMiners10m,
     effort,
     fetched_at: nowSec,
   };

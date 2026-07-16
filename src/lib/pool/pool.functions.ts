@@ -54,14 +54,18 @@ export interface PoolSummary {
   /** Newest-first. Only pool-found chains (TXC / ISK / ZCU) — LTC/DOGE come in as auxpow. */
   blocks: PoolBlock[];
   blocks24h: number;
+  /** Per-symbol 24h count from the DB. LTC/DOGE will typically be 0 (auxpow credits only). */
+  blocks24hBySymbol: Record<string, number>;
   lastFoundBySymbol: Record<string, number>; // symbol -> unix seconds
   fetchedAt: number;
   health: { ok: boolean; db: boolean };
-  /** Live stratum client counts, per algo. This is the real "active miner" number. */
+  /** Live stratum client counts, per algo. TCP snapshot — undercounts on cellular. */
   stratumLive: Record<string, StratumLive>;
   /** Per-algo aggregate (miners + current hashrate). */
   algos: PoolAlgoStats[];
-  /** Sum across all algos. */
+  /** Honest active-miner count: workers with a share submit in the last 10 min. */
+  activeMiners: number;
+  /** Legacy: stratum-diag `clients` sum. Prefer activeMiners for display. */
   liveClients: number;
   /** Sum of current pool hashrate across all algos (GH/s). */
   liveHashrateGhs: number;
@@ -107,10 +111,14 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         fetchJson<{
           stratum_live: Record<string, StratumLive>;
           blocks_24h_pool_found: number;
+          blocks_24h_by_symbol?: Record<string, number>;
+          active_miners_10m?: number;
           algos?: PoolAlgoStats[];
         }>("/api/v1/pool/summary").catch(() => ({
           stratum_live: {} as Record<string, StratumLive>,
           blocks_24h_pool_found: -1,
+          blocks_24h_by_symbol: {} as Record<string, number>,
+          active_miners_10m: 0,
           algos: [] as PoolAlgoStats[],
         })),
       ]);
@@ -150,15 +158,40 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         algos.reduce((s, a) => s + a.hashrate_hs / 1e9, 0) ||
         Object.values(stratumLive).reduce((s, v) => s + Number(v.accepted_ghs ?? 0), 0);
 
+      const blocks24hBySymbol: Record<string, number> = {
+        ...(summaryRes.blocks_24h_by_symbol ?? {}),
+      };
+      // Ensure every pool-found symbol has a numeric entry (0 default),
+      // so the tile grid can render deterministically.
+      for (const sym of POOL_FOUND) {
+        if (blocks24hBySymbol[sym] == null) {
+          // Fall back to counting from the blocks list if the API didn't
+          // populate this symbol yet.
+          const fallback = poolFound.filter(
+            (b) => b.symbol === sym && b.time >= dayAgo,
+          ).length;
+          blocks24hBySymbol[sym] = fallback;
+        }
+      }
+
+      // Honest active-miner count from the API (10-min recency in DB).
+      // Fall back to summing algos.db_workers, then stratum-diag clients.
+      const activeMiners =
+        Number(summaryRes.active_miners_10m ?? 0) ||
+        algos.reduce((s, a) => s + a.db_workers, 0) ||
+        Object.values(stratumLive).reduce((s, v) => s + Number(v.clients ?? 0), 0);
+
       const data: PoolSummary = {
         coins: coinsRes.coins,
         blocks: poolFound.slice(0, 20),
         blocks24h,
+        blocks24hBySymbol,
         lastFoundBySymbol,
         fetchedAt: nowSec,
         health: { ok: !!health.ok, db: !!health.db },
         stratumLive,
         algos,
+        activeMiners,
         liveClients,
         liveHashrateGhs,
       };
@@ -171,11 +204,13 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         coins: [],
         blocks: [],
         blocks24h: 0,
+        blocks24hBySymbol: {},
         lastFoundBySymbol: {},
         fetchedAt: Math.floor(now / 1000),
         health: { ok: false, db: false },
         stratumLive: {},
         algos: [],
+        activeMiners: 0,
         liveClients: 0,
         liveHashrateGhs: 0,
       };
