@@ -30,7 +30,8 @@ the DB — the service is stateless and safe to restart at any time.
            │
            │  fetch()  →  src/routes/api/v1/pool/*   (thin proxy + CORS + cache)
            ▼
-   yiimp-api.pool.honest.money      (this service, nginx TLS in front)
+   api.stratum.pool.honest.money    (this service, nginx TLS in front)
+
            │
            │  mysql localhost:3306
            ▼
@@ -94,8 +95,9 @@ ssh ubuntu@stratum.pool.honest.money "sudo bash /tmp/yiimp-api/install.sh"
 2. Copies the source to `/opt/yiimp-api/`, runs `npm ci && npm run build`.
 3. Creates `yiimp-api` system user, `/etc/yiimp-api/env` (chmod 600).
 4. Installs `systemd/yiimp-api.service`, enables + starts.
-5. Drops `nginx/yiimp-api.conf` in `/etc/nginx/sites-available/`,
-   symlinks, and runs `certbot --nginx -d yiimp-api.pool.honest.money`.
+    5. Drops `nginx/yiimp-api.conf` in `/etc/nginx/sites-available/`,
+    symlinks, and runs `certbot --nginx -d api.stratum.pool.honest.money`.
+
 
 Idempotent — safe to re-run after edits.
 
@@ -136,6 +138,7 @@ Never edit the running box's `/opt/yiimp-api/` directly.
 ## Front-end integration
 
 The Lovable front-end exposes a thin proxy at
-`/api/v1/pool/*` that forwards to `https://yiimp-api.pool.honest.money`
+`/api/v1/pool/*` that forwards to `https://api.stratum.pool.honest.money`
 with CORS and edge caching. See `src/lib/api/yiimp.ts` and
 `src/routes/api/v1/pool.*.ts`.
+

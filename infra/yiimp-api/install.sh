@@ -7,7 +7,8 @@ SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="/opt/yiimp-api"
 ENV_DIR="/etc/yiimp-api"
 SERVICE_USER="yiimp-api"
-DOMAIN="${YIIMP_API_DOMAIN:-yiimp-api.pool.honest.money}"
+DOMAIN="${YIIMP_API_DOMAIN:-api.stratum.pool.honest.money}"
+
 
 if [[ $EUID -ne 0 ]]; then
   echo "must run as root" >&2
