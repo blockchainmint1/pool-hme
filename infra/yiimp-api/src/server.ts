@@ -368,9 +368,11 @@ app.get("/api/v1/pool/blocks/luck", async (req, reply) => {
 /** legacy /api/pool/stats — keep for one release. */
 app.get("/api/pool/stats", async () => {
   const [algoRows] = await pool.query(
-    `SELECT algo, SUM(hashrate) AS hashrate,
+    `SELECT algo,
             COUNT(DISTINCT userid) AS miners, COUNT(*) AS workers
-       FROM workers GROUP BY algo`,
+       FROM workers
+      WHERE time > UNIX_TIMESTAMP() - 600
+      GROUP BY algo`,
   );
   const [lastBlocks] = await pool.query(
     `SELECT b.algo, b.height, b.time, c.symbol
