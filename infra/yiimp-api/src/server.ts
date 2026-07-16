@@ -624,25 +624,17 @@ async function minerWorkers(address: string, reply: import("fastify").FastifyRep
       WHERE a.username = ? ORDER BY w.hashrate DESC LIMIT 500`,
     [address],
   );
-  // Owner endpoint: we can safely include country+region but still not the
-  // raw IP. If a proper "owner-authenticated" view lands later we can widen
-  // this to include IP for the miner's own address only.
+  // Owner endpoint: include country+region but never the raw IP. If an
+  // authenticated "my miner" view lands later we can widen this to include
+  // IP for the miner's own address only.
   const enriched = rows.map((r) => {
+    const rec = r as unknown as Record<string, unknown> & { ip?: string | null };
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ip: _ip, ...rest } = r as unknown as { ip?: string } & Record<string, unknown>;
-    const { country, region } = importGeo(r.ip as string | null | undefined);
+    const { ip, ...rest } = rec;
+    const { country, region } = lookupGeo(rec.ip);
     return { ...rest, country, region };
   });
   return { workers: enriched };
-}
-
-// Inline geo lookup wrapper to avoid re-importing in the same TU.
-function importGeo(ip: string | null | undefined) {
-  // Uses the module-level geoip lazily. We forward to aggregateGeo's helper
-  // to keep a single code path. But we only need country/region here.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require("./geoip.js") as { lookupGeo: (ip: string | null | undefined) => { country: string; region: string } };
-  return mod.lookupGeo(ip);
 }
 
 app.get<{ Params: { address: string }; Querystring: { limit?: string } }>(
