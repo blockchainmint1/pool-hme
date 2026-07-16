@@ -266,18 +266,9 @@ function SectionHeader({
 // Hero — big live hashrate + KPI band
 // ---------------------------------------------------------------------------
 function PoolHero() {
-  // gently drift the hashrate to feel live
-  const [ths, setThs] = useState(POOL.hashrateThs);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setThs((prev) => {
-        const drift = (Math.random() - 0.5) * 0.18;
-        const next = Math.max(6.4, Math.min(9.4, prev + drift));
-        return Number(next.toFixed(2));
-      });
-    }, 3200);
-    return () => clearInterval(id);
-  }, []);
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Real pool hashrate in TH/s from hashstats via the API (v0.3+).
+  const ths = data.liveHashrateGhs / 1000;
 
   return (
     <section id="overview" className="pool-kpi-panel rounded-lg overflow-hidden">
@@ -310,12 +301,12 @@ function PoolHero() {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="font-pool-display font-semibold text-5xl md:text-6xl text-pool-steel-hi pool-hash-live tabular-nums">
-                {ths.toFixed(2)}
+                {ths > 0 ? ths.toFixed(2) : "—"}
               </span>
               <span className="font-mono text-pool-steel text-sm">TH/s</span>
             </div>
             <div className="mt-2 text-[11px] font-mono text-pool-steel">
-              rolling · scrypt · updated live
+              rolling · scrypt · live from hashstats
             </div>
           </div>
 
