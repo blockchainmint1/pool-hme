@@ -56,59 +56,29 @@ export const Route = createFileRoute("/")({
 });
 
 // ---------------------------------------------------------------------------
-// Placeholder pool data — shaped to match pool.texitcoin.org today.
-// Backend stratum now lives at stratum.pool.texitcoin.org; this will
-// become a server-function fetch, and the UI stays the same.
+// Static pool metadata. Numeric fields (hashrate, miners, hashrate history)
+// come from getPoolSummary + getPoolHashrate; only presentation-level
+// constants live here.
 // ---------------------------------------------------------------------------
 
 const POOL = {
-  hashrateThs: 7.9,
-  miners: 697,
   fee: 0, // percent
-  blocks24h: 84,
   region: "US · Texas",
-  stratum: "stratum+tcp://pool.texitcoin.org:3433",
-  stratumFuture: "stratum+tcp://stratum.pool.texitcoin.org:3433",
+  stratum: "stratum+tcp://stratum.pool.honest.money:3433",
   algos: [
-    { symbol: "LTC",  name: "Litecoin",     port: 3433, note: "dedicated port for LTC",  miners: 697, fee: 0 },
-    { symbol: "DOGE", name: "Dogecoin",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "ISK",  name: "Iskander",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "TXC",  name: "TEXITcoin",    port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "ZCU",  name: "Zero Chill U", port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-  ],
-  stats: [
-    { name: "Zero Chill U", symbol: "ZCU", hour: 5,  day: 309, week: 3158, month: 13742 },
-    { name: "TEXITcoin",    symbol: "TXC", hour: 20, day: 294, week: 3025, month: 3227 },
-    { name: "Iskander",     symbol: "ISK", hour: 30, day: 297, week: 2986, month: 3188 },
-    { name: "Dogecoin",     symbol: "DOGE", hour: 0, day: 4,   week: 19,   month: 93 },
-    { name: "Litecoin",     symbol: "LTC",  hour: 0, day: 2,   week: 14,   month: 46 },
-  ],
-  avgHashrate: { hour: 8.3, day: 7.7, week: 8.0, month: 7.1 },
-  // Solo-found blocks. LTC/DOGE are NOT included — on merge-mine we submit shares
-  // to LTC and receive auxpow credit; the pool does not solo-find LTC or DOGE
-  // blocks. Only TXC / ISK / ZCU are truly found by this pool.
-  found: [
-    { height: 326253, coin: "TXC",  ago: 92,   reward: 250,   effort: 87  },
-    { height: 326244, coin: "ISK",  ago: 340,  reward: 1.2,   effort: 104 },
-    { height: 326238, coin: "ZCU",  ago: 1145, reward: 5,     effort: 118 },
-    { height: 326231, coin: "TXC",  ago: 1602, reward: 250,   effort: 96  },
-    { height: 326219, coin: "ISK",  ago: 2410, reward: 1.2,   effort: 78  },
-    { height: 326204, coin: "TXC",  ago: 3380, reward: 250,   effort: 112 },
-  ],
-  // Miner-version breakdown (scrypt). Snapshot from the stratum's active
-  // connection table; will move to a live server function once the stratum
-  // moves to stratum.pool.texitcoin.org.
-  workers: [
-    { version: "xminer-1.2.7",     count: 1042, hashrateThs: 8.2,     avgGhs: 7.9,   percent: 97.3 },
-    { version: "farm-proxy/0.9.0", count: 60,   hashrateThs: 0.0244,  avgGhs: 0.406, percent: 0.29 },
-    { version: "cpuminer/2.5.1",   count: 5,    hashrateThs: 0.0096,  avgGhs: 1.9,   percent: 0.11 },
-    { version: "xminer-1.2.6-hf4", count: 3,    hashrateThs: 0.0298,  avgGhs: 9.9,   percent: 0.35 },
-  ],
+    { symbol: "LTC",  name: "Litecoin",     port: 3433, note: "dedicated port for LTC" },
+    { symbol: "DOGE", name: "Dogecoin",     port: null, note: "merged-mined via LTC" },
+    { symbol: "ISK",  name: "Iskander",     port: null, note: "merged-mined via LTC" },
+    { symbol: "TXC",  name: "TEXITcoin",    port: null, note: "merged-mined via LTC" },
+    { symbol: "ZCU",  name: "Zero Chill U", port: null, note: "merged-mined via LTC" },
+  ] as const,
 };
 
 function formatThs(n: number) {
+  if (!Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1000) return `${(n / 1000).toFixed(2)} PH/s`;
-  return `${n.toFixed(2)} TH/s`;
+  if (n >= 1) return `${n.toFixed(2)} TH/s`;
+  return `${(n * 1000).toFixed(1)} GH/s`;
 }
 function ago(sec: number) {
   if (sec < 60) return `${sec}s ago`;
