@@ -1,66 +1,106 @@
-# Three-part build: Public API, Live Price, Fun Address Page
+# Track 1: Expand yiimp-api (this turn)
 
-## 1) Public API + `/docs` page
+Building out the yiimp-api service on `stratum.pool.honest.money` so the frontend, third-party dashboards, and the SDK all have real data. Tracks 2–4 (miner reg flow, graph rebuild, workers/locations page) come after this ships.
 
-Stand up a **TXC-flavored** version of the mempool.space REST/WebSocket API, hosted on our explorer at `/api/v1/*`. Routes proxy through to the self-hosted backend at `api.mempool.texitcoin.org` and add TXC-only extras.
+## The 4 answers that shape this build
 
-**New server routes** (under `src/routes/api/public/v1/`, so they're CORS-free for outside callers):
-- `blocks/tip/height`, `blocks/tip/hash`
-- `block/$hash`, `block/$hash/txids`, `block-height/$height`
-- `blocks` (paginated), `blocks/$startHeight`
-- `tx/$txid`, `tx/$txid/status`, `tx/$txid/hex`, `tx/$txid/outspends`
-- `address/$addr`, `address/$addr/utxo`, `address/$addr/txs`
-- `mempool`, `mempool/recent`, `fees/recommended`, `fees/mempool-blocks`
-- `mining/pools/24h|1w|1m`, `difficulty-adjustment`
-- **TXC extras**: `omni/tx/$txid` (decoded Omni payload), `price` (live TXC price + 24h change), `supply` (circulating supply from emission curve)
-- `ws` — thin WebSocket pass-through to the upstream mempool WS, so external apps can subscribe to new blocks/txs/address updates
+1. **Active miner = live stratum clients**, not the `workers` MySQL table. The workers table keeps stale rows for hours after disconnect — that's why the number looks wrong. Truth is the `clients=` field on `SCRYPT summary diag` lines emitted every minute by the stratum daemon.
+2. **Locations = country + region from GeoIP**, raw IPs stay admin-only (never in a public response).
+3. **API's unique value = pool-native + merged-mining + realtime + SDK.** All four. Explorer/mempool can't see any of this.
+4. **Scope order:** finish the endpoints first, then everything else has real data to render.
 
-All routes: GET-only, CORS `*`, OPTIONS handlers, JSON, 30-60s edge cache where appropriate.
+## New endpoints on `api.stratum.pool.honest.money`
 
-**New `/docs` route**: a clean, searchable reference page (left sidebar of categories, right pane with endpoint + example curl + example JSON response) styled in the explorer's dark theme. Tabs for **REST** and **WebSocket**.
+Read-only, versioned under `/api/v1/*`. Existing `/api/*` stays as a legacy alias for one release.
 
-## 2) Live TXC price (CoinMarketCap)
+### Pool-native
 
-- Add `CMC_API_KEY` secret.
-- New server fn `getTxcPrice` → calls CMC `/v2/cryptocurrency/quotes/latest?symbol=TXC`, caches result for 60s in memory.
-- New `/api/v1/price` public endpoint exposes `{ usd, btc, change24h, marketCap, volume24h, updatedAt }`.
-- New `<PriceTicker>` component pinned in the top nav: TXC/USD with green/red 24h delta.
-- USD values appear next to TXC amounts on the **address** and **tx** pages (toggleable).
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/pool/summary` | one-shot dashboard payload: hashrate per algo, active clients per algo, blocks 24h, last block per coin, luck, fees, effort |
+| `GET /api/v1/pool/hashrate?window=1h\|24h\|7d\|30d` | time-series from `hashstats` (yiimp's own rollup) — pool total + per-algo |
+| `GET /api/v1/pool/blocks/luck?window=24h\|7d\|30d` | actual vs expected blocks per coin (uses network difficulty) |
+| `GET /api/v1/pool/effort` | current round effort per coin: shares since last block ÷ network difficulty |
+| `GET /api/v1/coins/:symbol` | one coin: algo, block reward, network diff, network hashrate, current price (from `coins.price` col), fee, min payout |
+| `GET /api/v1/coins/:symbol/blocks?limit=100` | pool-found blocks for that coin |
 
-## 3) Supercharged address page
+### Merged-mining truth (the thing nobody else surfaces)
 
-Rebuild `/address/$addr` into a multi-section dashboard:
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/mergedmining/summary` | for each scrypt block round: primary chain solved (TXC/ISK/ZCU), and which auxpow chains (LTC/DOGE) also credited in the same time window |
+| `GET /api/v1/mergedmining/credits?limit=200` | flat feed of every credit event across all 5 coins, source: auxpow vs solo, so consumers can reconstruct "one hash → 5 coins" |
 
-1. **Header card** (existing) + new pills: first-seen, last-seen, age, Type badge (P2PKH / P2SH / Multisig / Omni-issuer if detected).
-2. **Balance History chart** — line/area chart (Recharts), computed client-side by walking the address's tx history and summing deltas. Toggle: All vs Last 30 days. USD overlay if price is available.
-3. **UTXO bubble chart** — packed circles sized by sat value, color-graded by age (fresh → aged). Hover = value + height + age. Click = jump to funding tx.
-4. **Activity heatmap** — GitHub-style 12-month grid, one cell per day, intensity = tx count.
-5. **Flow & counterparties** — totals received vs sent, top 5 sending addresses, top 5 receiving addresses (with TXC totals), Omni token holdings if present.
-6. **Tx history list** (existing) moved to the bottom, with sticky filter chips: All / Received / Sent / Omni / Coinbase.
+### Miners & workers (with corrected counts)
 
-## Technical details
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/miners/top?limit=50` | leaderboard: address (truncated), hashrate 1h, workers online, algo — no IPs |
+| `GET /api/v1/miners/count` | live from stratum diag: `{scrypt: {clients, active, accepted_ghs}}` — the real "active miners" number |
+| `GET /api/v1/miners/locations` | aggregate `{country, region, miner_count, hashrate}[]` from GeoIP over live IPs; no per-address geo in public response |
+| `GET /api/v1/miner/:address/summary` | already exists — extend with 1h/24h hashrate history |
+| `GET /api/v1/miner/:address/workers` | already exists — add `country_code`, `region` (from live stratum IP+GeoIP), hashrate history |
+| `GET /api/v1/miner/:address/hashrate?window=24h\|7d` | per-miner time-series |
 
-- Server routes use `createFileRoute(... )({ server: { handlers: { GET, OPTIONS } } })` with shared `CORS_HEADERS` helper at `src/lib/api/cors.ts`.
-- A thin `proxy(path)` helper in `src/lib/api/upstream.ts` fetches from `https://api.mempool.texitcoin.org/api/v1/...` and returns `Response.json(...)` with CORS + cache headers.
-- Charts use the existing `recharts` (already in deps); bubble packing uses `d3-hierarchy` (small, edge-safe).
-- Heatmap is a custom CSS-grid component (no extra dep).
-- Price fetcher is a server fn (keeps CMC key server-side), called from a React Query hook polling every 60s.
-- Docs page content is a single data file (`src/lib/docs/api-spec.ts`) so endpoints stay easy to edit.
+### Realtime
 
-## Files (new)
-- `src/lib/api/cors.ts`, `src/lib/api/upstream.ts`
-- `src/routes/api/public/v1/*.ts` (one per endpoint group)
-- `src/routes/docs.tsx`
-- `src/lib/docs/api-spec.ts`
-- `src/lib/txc/price.functions.ts`, `src/components/explorer/PriceTicker.tsx`
-- `src/components/address/BalanceHistoryChart.tsx`
-- `src/components/address/UtxoBubbleChart.tsx`
-- `src/components/address/ActivityHeatmap.tsx`
-- `src/components/address/CounterpartiesPanel.tsx`
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/stream` (SSE) | server-sent events: `block-found`, `share-batch`, `hashrate-tick`, `client-connected`, `client-disconnected`. SSE first (works everywhere, one-way); WS upgrade later if needed |
 
-## Out of scope (for this round)
-- Persisting historical price snapshots (we'll just cache live).
-- Authenticated/rate-limited API keys (open public API for now).
-- Mobile-specific layouts beyond what Tailwind responsive utilities already give us.
+## Server-side implementation
 
-Ready to build — shall I go?
+### Fixing the miner count
+
+Add `scrapeStratumSummaries()` variants for all active algos, parse `clients` / `active` / `accepted_ghs` / `valid` / `invalid` from the last summary line of each `${algo}.log` in `STRATUM_LOG_DIR`. Cache 30s. Expose at `/api/v1/miners/count` and inline into `/api/v1/pool/summary`.
+
+### GeoIP
+
+Add `geoip-lite` (embedded MaxMind Lite DB, ~30 MB, refreshed monthly via cron). Look up `accounts.IP` on demand, drop octets before returning, aggregate before any public response.
+
+### hashstats time-series
+
+yiimp's `hashstats` table has per-algo hashrate samples every ~2 min. Query with time bucketing.
+
+### SSE stream
+
+Fastify `reply.sse()` via `fastify-sse-v2`. Tail stratum log + poll `blocks`/`workers` deltas, fan out. Backpressure: bounded per-connection queue, drop oldest.
+
+## Frontend wiring (this turn)
+
+- Update `src/lib/pool/pool.functions.ts`: swap `/api/*` calls to `/api/v1/*`, add `getPoolLive` server fn that hits `/api/v1/pool/summary` and `/api/v1/miners/count` in parallel.
+- Wire `blocks24h`, active miners, and per-coin last-block time on the homepage to live numbers.
+- Fix the `17m/18m ago` SSR-vs-client hydration mismatch by rendering relative times only after mount.
+
+## Public docs
+
+- `GET /api/v1/openapi.json` — machine-readable spec (generated from Fastify schemas).
+- Add `docs/api.md` in this repo with copy-pasteable curl examples for every endpoint.
+- Publish `@honestmoney/pool-sdk` (TypeScript, works in Node + browser, WS auto-reconnect) — repo scaffold in `infra/pool-sdk/`. Publish to npm in a later turn.
+
+## Deploy path
+
+I edit `infra/yiimp-api/src/server.ts` + package.json in this repo. Then you run on the box:
+
+```
+cd ~/yiimp-api && git pull && bun install && sudo systemctl restart yiimp-api
+```
+
+New `geoip-lite` dep adds ~30 MB — first `bun install` takes an extra minute.
+
+## Files touched
+
+- `infra/yiimp-api/src/server.ts` — new endpoints
+- `infra/yiimp-api/src/stratum-live.ts` — SSE fan-out + log tailing
+- `infra/yiimp-api/src/geoip.ts` — GeoIP wrapper
+- `infra/yiimp-api/src/hashstats.ts` — time-series queries
+- `infra/yiimp-api/package.json` — add `fastify-sse-v2`, `geoip-lite`
+- `infra/yiimp-api/README.md` — update endpoint list
+- `docs/api.md` — public API docs
+- `src/lib/pool/pool.functions.ts` — call `/api/v1/*`
+- `src/routes/index.tsx` — wire live miner count, fix hydration mismatch
+- `infra/pool-sdk/` — SDK scaffold (published later)
+
+## Not in this turn
+
+Tracks 2–4 (new registration flow, graph rebuild, workers/locations UI page) — each is a big enough surface that they deserve their own turn once endpoints are live and returning real data.
