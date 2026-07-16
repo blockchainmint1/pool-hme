@@ -54,14 +54,18 @@ export interface PoolSummary {
   /** Newest-first. Only pool-found chains (TXC / ISK / ZCU) — LTC/DOGE come in as auxpow. */
   blocks: PoolBlock[];
   blocks24h: number;
+  /** Per-symbol 24h count from the DB. LTC/DOGE will typically be 0 (auxpow credits only). */
+  blocks24hBySymbol: Record<string, number>;
   lastFoundBySymbol: Record<string, number>; // symbol -> unix seconds
   fetchedAt: number;
   health: { ok: boolean; db: boolean };
-  /** Live stratum client counts, per algo. This is the real "active miner" number. */
+  /** Live stratum client counts, per algo. TCP snapshot — undercounts on cellular. */
   stratumLive: Record<string, StratumLive>;
   /** Per-algo aggregate (miners + current hashrate). */
   algos: PoolAlgoStats[];
-  /** Sum across all algos. */
+  /** Honest active-miner count: workers with a share submit in the last 10 min. */
+  activeMiners: number;
+  /** Legacy: stratum-diag `clients` sum. Prefer activeMiners for display. */
   liveClients: number;
   /** Sum of current pool hashrate across all algos (GH/s). */
   liveHashrateGhs: number;
