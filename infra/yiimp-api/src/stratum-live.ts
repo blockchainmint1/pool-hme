@@ -19,7 +19,7 @@ import { promises as fs, watch } from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 
-const STRATUM_LOG_DIR = process.env.STRATUM_LOG_DIR ?? "";
+const STRATUM_LOG_DIR = process.env.STRATUM_LOG_DIR ?? "/var/stratum";
 // Which algos to look for. We only run scrypt in prod today, but pawelhash
 // is wired so a future rollout is a config change, not a code change.
 const ALGOS = (process.env.STRATUM_ALGOS ?? "scrypt,pawelhash")
