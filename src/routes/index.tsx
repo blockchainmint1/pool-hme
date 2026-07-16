@@ -809,7 +809,7 @@ function FoundBlocks() {
 function WorkersTable() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
   const scrypt = data.algos.find((x) => x.algo === "scrypt");
-  const totalCount = scrypt?.live_clients ?? data.liveClients;
+  const totalCount = data.activeMiners || scrypt?.live_clients || 0;
   const totalThs = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   const avgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
 
