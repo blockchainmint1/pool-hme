@@ -38,6 +38,17 @@ export interface StratumLive {
   updated_at: number;
 }
 
+export interface PoolAlgoStats {
+  algo: string;
+  db_miners: number;
+  db_workers: number;
+  /** Live-preferred miner count (stratum diag when available, else workers-table recent count). */
+  live_clients: number;
+  /** Current pool hashrate for this algo, H/s. */
+  hashrate_hs: number;
+  hashrate_updated_at: number;
+}
+
 export interface PoolSummary {
   coins: PoolCoin[];
   /** Newest-first. Only pool-found chains (TXC / ISK / ZCU) — LTC/DOGE come in as auxpow. */
@@ -48,9 +59,11 @@ export interface PoolSummary {
   health: { ok: boolean; db: boolean };
   /** Live stratum client counts, per algo. This is the real "active miner" number. */
   stratumLive: Record<string, StratumLive>;
+  /** Per-algo aggregate (miners + current hashrate). */
+  algos: PoolAlgoStats[];
   /** Sum across all algos. */
   liveClients: number;
-  /** Sum of accepted_ghs across all algos (GH/s). */
+  /** Sum of current pool hashrate across all algos (GH/s). */
   liveHashrateGhs: number;
 }
 
@@ -94,9 +107,11 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         fetchJson<{
           stratum_live: Record<string, StratumLive>;
           blocks_24h_pool_found: number;
+          algos?: PoolAlgoStats[];
         }>("/api/v1/pool/summary").catch(() => ({
           stratum_live: {} as Record<string, StratumLive>,
           blocks_24h_pool_found: -1,
+          algos: [] as PoolAlgoStats[],
         })),
       ]);
 
@@ -117,14 +132,23 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
       }
 
       const stratumLive = summaryRes.stratum_live ?? {};
-      const liveClients = Object.values(stratumLive).reduce(
-        (s, v) => s + Number(v.clients ?? 0),
-        0,
-      );
-      const liveHashrateGhs = Object.values(stratumLive).reduce(
-        (s, v) => s + Number(v.accepted_ghs ?? 0),
-        0,
-      );
+      const algos = (summaryRes.algos ?? []).map((a) => ({
+        algo: String(a.algo),
+        db_miners: Number(a.db_miners ?? 0),
+        db_workers: Number(a.db_workers ?? 0),
+        live_clients: Number(a.live_clients ?? 0),
+        hashrate_hs: Number(a.hashrate_hs ?? 0),
+        hashrate_updated_at: Number(a.hashrate_updated_at ?? 0),
+      }));
+
+      // Prefer the summary's `algos` aggregate (workers-table + hashstats).
+      // Fall back to stratum_live diag sums when the endpoint is old/empty.
+      const liveClients =
+        algos.reduce((s, a) => s + a.live_clients, 0) ||
+        Object.values(stratumLive).reduce((s, v) => s + Number(v.clients ?? 0), 0);
+      const liveHashrateGhs =
+        algos.reduce((s, a) => s + a.hashrate_hs / 1e9, 0) ||
+        Object.values(stratumLive).reduce((s, v) => s + Number(v.accepted_ghs ?? 0), 0);
 
       const data: PoolSummary = {
         coins: coinsRes.coins,
@@ -134,6 +158,7 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         fetchedAt: nowSec,
         health: { ok: !!health.ok, db: !!health.db },
         stratumLive,
+        algos,
         liveClients,
         liveHashrateGhs,
       };
@@ -150,6 +175,7 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         fetchedAt: Math.floor(now / 1000),
         health: { ok: false, db: false },
         stratumLive: {},
+        algos: [],
         liveClients: 0,
         liveHashrateGhs: 0,
       };

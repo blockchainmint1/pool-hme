@@ -56,59 +56,29 @@ export const Route = createFileRoute("/")({
 });
 
 // ---------------------------------------------------------------------------
-// Placeholder pool data — shaped to match pool.texitcoin.org today.
-// Backend stratum now lives at stratum.pool.texitcoin.org; this will
-// become a server-function fetch, and the UI stays the same.
+// Static pool metadata. Numeric fields (hashrate, miners, hashrate history)
+// come from getPoolSummary + getPoolHashrate; only presentation-level
+// constants live here.
 // ---------------------------------------------------------------------------
 
 const POOL = {
-  hashrateThs: 7.9,
-  miners: 697,
   fee: 0, // percent
-  blocks24h: 84,
   region: "US · Texas",
-  stratum: "stratum+tcp://pool.texitcoin.org:3433",
-  stratumFuture: "stratum+tcp://stratum.pool.texitcoin.org:3433",
+  stratum: "stratum+tcp://stratum.pool.honest.money:3433",
   algos: [
-    { symbol: "LTC",  name: "Litecoin",     port: 3433, note: "dedicated port for LTC",  miners: 697, fee: 0 },
-    { symbol: "DOGE", name: "Dogecoin",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "ISK",  name: "Iskander",     port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "TXC",  name: "TEXITcoin",    port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-    { symbol: "ZCU",  name: "Zero Chill U", port: null, note: "merged-mined via LTC",     miners: 697, fee: 0 },
-  ],
-  stats: [
-    { name: "Zero Chill U", symbol: "ZCU", hour: 5,  day: 309, week: 3158, month: 13742 },
-    { name: "TEXITcoin",    symbol: "TXC", hour: 20, day: 294, week: 3025, month: 3227 },
-    { name: "Iskander",     symbol: "ISK", hour: 30, day: 297, week: 2986, month: 3188 },
-    { name: "Dogecoin",     symbol: "DOGE", hour: 0, day: 4,   week: 19,   month: 93 },
-    { name: "Litecoin",     symbol: "LTC",  hour: 0, day: 2,   week: 14,   month: 46 },
-  ],
-  avgHashrate: { hour: 8.3, day: 7.7, week: 8.0, month: 7.1 },
-  // Solo-found blocks. LTC/DOGE are NOT included — on merge-mine we submit shares
-  // to LTC and receive auxpow credit; the pool does not solo-find LTC or DOGE
-  // blocks. Only TXC / ISK / ZCU are truly found by this pool.
-  found: [
-    { height: 326253, coin: "TXC",  ago: 92,   reward: 250,   effort: 87  },
-    { height: 326244, coin: "ISK",  ago: 340,  reward: 1.2,   effort: 104 },
-    { height: 326238, coin: "ZCU",  ago: 1145, reward: 5,     effort: 118 },
-    { height: 326231, coin: "TXC",  ago: 1602, reward: 250,   effort: 96  },
-    { height: 326219, coin: "ISK",  ago: 2410, reward: 1.2,   effort: 78  },
-    { height: 326204, coin: "TXC",  ago: 3380, reward: 250,   effort: 112 },
-  ],
-  // Miner-version breakdown (scrypt). Snapshot from the stratum's active
-  // connection table; will move to a live server function once the stratum
-  // moves to stratum.pool.texitcoin.org.
-  workers: [
-    { version: "xminer-1.2.7",     count: 1042, hashrateThs: 8.2,     avgGhs: 7.9,   percent: 97.3 },
-    { version: "farm-proxy/0.9.0", count: 60,   hashrateThs: 0.0244,  avgGhs: 0.406, percent: 0.29 },
-    { version: "cpuminer/2.5.1",   count: 5,    hashrateThs: 0.0096,  avgGhs: 1.9,   percent: 0.11 },
-    { version: "xminer-1.2.6-hf4", count: 3,    hashrateThs: 0.0298,  avgGhs: 9.9,   percent: 0.35 },
-  ],
+    { symbol: "LTC",  name: "Litecoin",     port: 3433, note: "dedicated port for LTC" },
+    { symbol: "DOGE", name: "Dogecoin",     port: null, note: "merged-mined via LTC" },
+    { symbol: "ISK",  name: "Iskander",     port: null, note: "merged-mined via LTC" },
+    { symbol: "TXC",  name: "TEXITcoin",    port: null, note: "merged-mined via LTC" },
+    { symbol: "ZCU",  name: "Zero Chill U", port: null, note: "merged-mined via LTC" },
+  ] as const,
 };
 
 function formatThs(n: number) {
+  if (!Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1000) return `${(n / 1000).toFixed(2)} PH/s`;
-  return `${n.toFixed(2)} TH/s`;
+  if (n >= 1) return `${n.toFixed(2)} TH/s`;
+  return `${(n * 1000).toFixed(1)} GH/s`;
 }
 function ago(sec: number) {
   if (sec < 60) return `${sec}s ago`;
@@ -296,18 +266,9 @@ function SectionHeader({
 // Hero — big live hashrate + KPI band
 // ---------------------------------------------------------------------------
 function PoolHero() {
-  // gently drift the hashrate to feel live
-  const [ths, setThs] = useState(POOL.hashrateThs);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setThs((prev) => {
-        const drift = (Math.random() - 0.5) * 0.18;
-        const next = Math.max(6.4, Math.min(9.4, prev + drift));
-        return Number(next.toFixed(2));
-      });
-    }, 3200);
-    return () => clearInterval(id);
-  }, []);
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Real pool hashrate in TH/s from hashstats via the API (v0.3+).
+  const ths = data.liveHashrateGhs / 1000;
 
   return (
     <section id="overview" className="pool-kpi-panel rounded-lg overflow-hidden">
@@ -340,12 +301,12 @@ function PoolHero() {
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="font-pool-display font-semibold text-5xl md:text-6xl text-pool-steel-hi pool-hash-live tabular-nums">
-                {ths.toFixed(2)}
+                {ths > 0 ? ths.toFixed(2) : "—"}
               </span>
               <span className="font-mono text-pool-steel text-sm">TH/s</span>
             </div>
             <div className="mt-2 text-[11px] font-mono text-pool-steel">
-              rolling · scrypt · updated live
+              rolling · scrypt · live from hashstats
             </div>
           </div>
 
@@ -397,6 +358,12 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 // Algo table — the "Pool Status" analog
 // ---------------------------------------------------------------------------
 function AlgoTable() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // All 5 coins share the scrypt algo (merged mining). Pull the scrypt
+  // aggregate once; every row displays the same live values.
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  const miners = scrypt?.live_clients ?? data.liveClients;
+  const ths = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -429,11 +396,13 @@ function AlgoTable() {
                     <span className="text-pool-steel">—</span>
                   )}
                 </td>
-                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">{a.miners.toLocaleString()}</td>
                 <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
-                  {formatThs(POOL.hashrateThs)}
+                  {miners > 0 ? miners.toLocaleString() : "—"}
                 </td>
-                <td className="px-3 py-3 text-pool-steel-hi">{a.fee}%</td>
+                <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
+                  {formatThs(ths)}
+                </td>
+                <td className="px-3 py-3 text-pool-steel-hi">{POOL.fee}%</td>
                 <td className="px-3 py-3 text-pool-steel">{a.note}</td>
               </tr>
             ))}
@@ -452,10 +421,36 @@ function AlgoTable() {
   );
 }
 
+
 // ---------------------------------------------------------------------------
 // Pool stats table — coins × time-windows
 // ---------------------------------------------------------------------------
 function PoolStatsTable() {
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  // Derive per-coin counts + last-found from the pool-found blocks list.
+  // Windows: 1h / 24h / 7d — computed from block timestamps.
+  const now = data.fetchedAt;
+  const buckets = { h1: 3600, h24: 86_400, d7: 7 * 86_400 };
+  type Row = { symbol: string; name: string; h1: number; h24: number; d7: number; last: number };
+  const rows: Record<string, Row> = {};
+  for (const b of data.blocks) {
+    const r = rows[b.symbol] ?? {
+      symbol: b.symbol,
+      name: b.name,
+      h1: 0,
+      h24: 0,
+      d7: 0,
+      last: 0,
+    };
+    const age = now - b.time;
+    if (age <= buckets.h1) r.h1 += 1;
+    if (age <= buckets.h24) r.h24 += 1;
+    if (age <= buckets.d7) r.d7 += 1;
+    if (b.time > r.last) r.last = b.time;
+    rows[b.symbol] = r;
+  }
+  const list = Object.values(rows).sort((a, b) => b.d7 - a.d7);
+
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -464,36 +459,41 @@ function PoolStatsTable() {
             <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
               <th className="text-left px-5 py-3 font-normal">Coin</th>
               <th className="text-left px-3 py-3 font-normal">Symbol</th>
-              <th className="text-right px-3 py-3 font-normal">1 h</th>
+              <th className="text-right px-3 py-3 font-normal">Blocks 1 h</th>
               <th className="text-right px-3 py-3 font-normal">24 h</th>
               <th className="text-right px-3 py-3 font-normal">7 d</th>
-              <th className="text-right px-5 py-3 font-normal">30 d</th>
+              <th className="text-right px-5 py-3 font-normal">Last found</th>
             </tr>
           </thead>
           <tbody className="font-mono">
-            {POOL.stats.map((s) => (
+            {list.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-6 text-center text-pool-steel">
+                  No pool-found blocks yet in the current window.
+                </td>
+              </tr>
+            )}
+            {list.map((r) => (
               <tr
-                key={s.symbol}
+                key={r.symbol}
                 className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
               >
-                <td className="px-5 py-3 text-pool-steel-hi">{s.name}</td>
-                <td className="px-3 py-3 text-pool-steel">{s.symbol}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.hour.toLocaleString()}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.day.toLocaleString()}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{s.week.toLocaleString()}</td>
-                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">{s.month.toLocaleString()}</td>
+                <td className="px-5 py-3 text-pool-steel-hi">{r.name}</td>
+                <td className="px-3 py-3 text-pool-steel">{r.symbol}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h1}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h24}</td>
+                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.d7}</td>
+                <td className="px-5 py-3 text-right text-pool-steel tabular-nums">
+                  {r.last ? ago(Math.max(0, now - r.last)) : "—"}
+                </td>
               </tr>
             ))}
-            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
-              <td className="px-5 py-3 text-pool-steel-hi">Avg hashrate</td>
-              <td className="px-3 py-3 text-pool-steel">TH/s</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.hour.toFixed(1)}</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.day.toFixed(1)}</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.week.toFixed(1)}</td>
-              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">{POOL.avgHashrate.month.toFixed(1)}</td>
-            </tr>
           </tbody>
         </table>
+      </div>
+      <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
+        Only TXC · ISK · ZCU are solo-found by this pool. LTC / DOGE credit via auxpow and
+        are not counted here.
       </div>
     </div>
   );
@@ -565,12 +565,9 @@ function ConnectCard() {
       </ol>
 
       <div className="rounded-md border border-pool-hairline pool-graphite p-3 text-[12px] font-mono text-pool-steel">
-        <span className="text-pool-amber uppercase tracking-widest text-[10px] mr-2">
-          coming soon
-        </span>
-        migrating to{" "}
-        <span className="text-pool-steel-hi">{POOL.stratumFuture}</span> once the pool's own
-        rigs go live. The current endpoint will keep working through the cutover.
+        Stratum lives at{" "}
+        <span className="text-pool-steel-hi">{POOL.stratum}</span>. Port 3433, scrypt only,
+        with LTC/DOGE/ISK/TXC/ZCU merge-mined on every share.
       </div>
     </div>
   );
@@ -768,17 +765,21 @@ function FoundBlocks() {
 // Workers table — miner-version breakdown, modeled on pool.txc
 // ---------------------------------------------------------------------------
 function WorkersTable() {
-  const totalCount = POOL.workers.reduce((s, w) => s + w.count, 0);
-  const totalThs = POOL.workers.reduce((s, w) => s + w.hashrateThs, 0);
-  const totalAvgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  const totalCount = scrypt?.live_clients ?? data.liveClients;
+  const totalThs = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
+  const avgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
 
   const fmtHash = (ths: number) => {
+    if (!Number.isFinite(ths) || ths <= 0) return "—";
     if (ths >= 1) return `${ths.toFixed(2)} TH/s`;
     const ghs = ths * 1000;
     if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
     return `${(ghs * 1000).toFixed(1)} MH/s`;
   };
   const fmtAvg = (ghs: number) => {
+    if (!Number.isFinite(ghs) || ghs <= 0) return "—";
     if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
     return `${(ghs * 1000).toFixed(1)} MH/s`;
   };
@@ -789,54 +790,32 @@ function WorkersTable() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
-              <th className="text-left  px-5 py-3 font-normal">Version</th>
-              <th className="text-right px-3 py-3 font-normal">Count</th>
-              <th className="text-right px-3 py-3 font-normal">Percent</th>
-              <th className="text-right px-3 py-3 font-normal">Hashrate*</th>
-              <th className="text-right px-5 py-3 font-normal">Avg</th>
+              <th className="text-left  px-5 py-3 font-normal">Algo</th>
+              <th className="text-right px-3 py-3 font-normal">Connected workers</th>
+              <th className="text-right px-3 py-3 font-normal">Hashrate</th>
+              <th className="text-right px-5 py-3 font-normal">Avg / worker</th>
             </tr>
           </thead>
           <tbody className="font-mono">
-            {POOL.workers.map((w) => (
-              <tr
-                key={w.version}
-                className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
-              >
-                <td className="px-5 py-3 text-pool-steel-hi font-semibold">{w.version}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {w.count.toLocaleString()}
-                </td>
-                <td className="px-3 py-3 text-right text-pool-steel tabular-nums">
-                  {w.percent.toFixed(2)}%
-                </td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {fmtHash(w.hashrateThs)}
-                </td>
-                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {fmtAvg(w.avgGhs)}
-                </td>
-              </tr>
-            ))}
-            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
-              <td className="px-5 py-3 text-pool-steel-hi">Total</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
-                {totalCount.toLocaleString()}
+            <tr className="border-b border-pool-hairline hover:pool-graphite-2 transition-colors">
+              <td className="px-5 py-3 text-pool-steel-hi font-semibold">scrypt</td>
+              <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                {totalCount > 0 ? totalCount.toLocaleString() : "—"}
               </td>
-              <td className="px-3 py-3 text-right text-pool-steel">—</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
+              <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
                 {fmtHash(totalThs)}
               </td>
-              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">
-                {fmtAvg(totalAvgGhs)}
+              <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">
+                {fmtAvg(avgGhs)}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
-        * approximate from the last 5 minutes of submitted shares.
-        <span className="ml-2 text-pool-amber">farm-proxy/0.9.0</span> connections aggregate
-        multiple miners behind a single stratum session — under investigation.
+        Per-miner-version breakdown lands in the next API drop — will pull from stratum's
+        <span className="mx-1 font-mono text-pool-steel-hi">subscribe</span> user-agent
+        field.
       </div>
     </div>
   );
