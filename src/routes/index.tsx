@@ -339,7 +339,7 @@ function PoolHero() {
             </div>
           </div>
 
-          <Kpi label="Active miners" value={POOL.miners.toLocaleString()} hint="workers online" />
+          <LiveMinersKpi />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
           <LiveBlocks24hKpi />
         </div>
