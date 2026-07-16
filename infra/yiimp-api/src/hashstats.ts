@@ -1,28 +1,27 @@
 /**
  * hashstats time-series queries.
  *
- * yiimp's `hashstats` table stores per-algo hashrate + earning samples every
- * ~2 minutes. Schema (relevant columns):
+ * yiimpfrontend `hashstats` schema (this fork):
+ *   id       INT PK
+ *   time     INT   (unix seconds)
+ *   hashrate BIGINT (H/s across the pool for this algo)
+ *   earnings DOUBLE
+ *   algo     VARCHAR(16)
  *
- *   time       INT UNSIGNED  (unix seconds)
- *   hashrate   DOUBLE        (H/s across the pool for this algo)
- *   NHR        DOUBLE        (network hashrate)
- *   difficulty DOUBLE
- *   algo       VARCHAR
- *   coin_id    INT (nullable — pool-wide row uses NULL/0)
+ * No network-hashrate or difficulty columns — those come from `coins` /
+ * `stats` if we ever need them.
  *
- * We expose bucketed series for 1h / 24h / 7d / 30d windows so charts stay
- * cheap and paginated.
+ * Per-miner series uses the `shares` table.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 export type Window = "1h" | "24h" | "7d" | "30d";
 
 const CFG: Record<Window, { seconds: number; bucketSec: number }> = {
-  "1h": { seconds: 60 * 60, bucketSec: 60 }, // 1-min buckets
-  "24h": { seconds: 24 * 60 * 60, bucketSec: 5 * 60 }, // 5-min buckets
-  "7d": { seconds: 7 * 24 * 60 * 60, bucketSec: 30 * 60 }, // 30-min buckets
-  "30d": { seconds: 30 * 24 * 60 * 60, bucketSec: 2 * 60 * 60 }, // 2-hour buckets
+  "1h": { seconds: 60 * 60, bucketSec: 60 },
+  "24h": { seconds: 24 * 60 * 60, bucketSec: 5 * 60 },
+  "7d": { seconds: 7 * 24 * 60 * 60, bucketSec: 30 * 60 },
+  "30d": { seconds: 30 * 24 * 60 * 60, bucketSec: 2 * 60 * 60 },
 };
 
 export function windowConfig(w: Window) {
@@ -30,16 +29,11 @@ export function windowConfig(w: Window) {
 }
 
 export interface HashratePoint {
-  time: number; // bucket start, unix seconds
-  hashrate: number; // pool hashrate at this bucket
-  network_hashrate: number;
-  difficulty: number;
+  time: number;
+  hashrate: number;
+  earnings: number;
 }
 
-/**
- * Aggregate hashstats into fixed-width time buckets. Query is fully
- * indexed via (time, algo).
- */
 export async function poolHashrateSeries(
   pool: Pool,
   algo: string,
@@ -50,8 +44,7 @@ export async function poolHashrateSeries(
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT FLOOR(time / ?) * ? AS bucket,
             AVG(hashrate) AS hashrate,
-            AVG(NHR) AS network_hashrate,
-            AVG(difficulty) AS difficulty
+            AVG(earnings) AS earnings
        FROM hashstats
       WHERE algo = ? AND time >= ?
       GROUP BY bucket
@@ -62,19 +55,13 @@ export async function poolHashrateSeries(
   return rows.map((r) => ({
     time: Number(r.bucket),
     hashrate: Number(r.hashrate ?? 0),
-    network_hashrate: Number(r.network_hashrate ?? 0),
-    difficulty: Number(r.difficulty ?? 0),
+    earnings: Number(r.earnings ?? 0),
   }));
 }
 
 /**
- * Per-miner hashrate series, computed from the `shares` table since
- * `hashstats` does not break down by user. We approximate with:
- *
+ * Per-miner hashrate series from `shares`. Standard pool-side estimate:
  *   hashrate ≈ Σ(share_difficulty * 2^32) / bucket_seconds
- *
- * This is the standard "pool-side" estimate and matches what the miner
- * dashboard shows.
  */
 export async function minerHashrateSeries(
   pool: Pool,
