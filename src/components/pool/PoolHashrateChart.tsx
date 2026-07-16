@@ -129,21 +129,21 @@ export function PoolHashrateChart() {
             <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
               <defs>
                 <linearGradient id="poolHashGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-pool-mint)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--color-pool-mint)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--pool-mint)" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="var(--pool-mint)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="var(--color-pool-hairline)" strokeDasharray="2 4" />
+              <CartesianGrid stroke="var(--pool-hairline)" strokeDasharray="2 4" />
               <XAxis
                 dataKey="time"
                 tickFormatter={tickFormatter(window)}
-                stroke="var(--color-pool-steel)"
+                stroke="var(--pool-steel)"
                 fontSize={10}
                 minTickGap={40}
               />
               <YAxis
                 tickFormatter={(v) => fmtHash(v).replace(/\.\d+ /, " ")}
-                stroke="var(--color-pool-steel)"
+                stroke="var(--pool-steel)"
                 fontSize={10}
                 width={72}
               />
@@ -151,8 +151,8 @@ export function PoolHashrateChart() {
                 labelFormatter={(v: number) => new Date(v * 1000).toLocaleString()}
                 formatter={(v: number, name: string) => [fmtHash(v), name]}
                 contentStyle={{
-                  background: "var(--color-pool-obsidian)",
-                  border: "1px solid var(--color-pool-hairline)",
+                  background: "var(--pool-obsidian)",
+                  border: "1px solid var(--pool-hairline)",
                   borderRadius: 6,
                   fontFamily: "var(--font-mono)",
                   fontSize: 12,
@@ -162,7 +162,7 @@ export function PoolHashrateChart() {
                 type="monotone"
                 dataKey="hashrate"
                 name="pool"
-                stroke="var(--color-pool-mint)"
+                stroke="var(--pool-mint)"
                 strokeWidth={1.75}
                 fill="url(#poolHashGradient)"
                 isAnimationActive={false}
