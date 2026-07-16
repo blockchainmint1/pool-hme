@@ -666,22 +666,64 @@ function nextHalfHourEpoch() {
 // ---------------------------------------------------------------------------
 function LiveBlocks24hKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
+  // 5 chains + Total. LTC/DOGE come in as auxpow credit — not solo-found —
+  // so their tiles will normally read 0. That's intentional (see manifesto).
+  const chains = ["LTC", "DOGE", "TXC", "ISK", "ZCU"] as const;
+  const total = data.blocks24h;
   return (
-    <Kpi
-      label="Blocks / 24h"
-      value={data.blocks24h.toString()}
-      hint="TXC · ISK · ZCU · pool-found"
-    />
+    <div className="pool-tick rounded-md p-5">
+      <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+        Blocks / 24h
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <MiniBlockTile label="Total" value={total} accent />
+        {chains.map((sym) => (
+          <MiniBlockTile
+            key={sym}
+            label={sym}
+            value={data.blocks24hBySymbol[sym] ?? 0}
+          />
+        ))}
+      </div>
+      <div className="mt-3 text-[10px] font-mono text-pool-steel leading-relaxed">
+        TXC · ISK · ZCU pool-found · LTC / DOGE via auxpow credit
+      </div>
+    </div>
+  );
+}
+
+function MiniBlockTile({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
+  return (
+    <div className="rounded border border-pool-hairline pool-graphite/40 px-2 py-1.5">
+      <div className="text-[9px] uppercase tracking-widest text-pool-steel font-mono">
+        {label}
+      </div>
+      <div
+        className={`mt-0.5 font-pool-display font-semibold text-lg tabular-nums ${
+          accent ? "text-pool-mint" : "text-pool-steel-hi"
+        }`}
+      >
+        {value.toLocaleString()}
+      </div>
+    </div>
   );
 }
 
 function LiveMinersKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  // Live stratum client count is the real number. yiimp's workers table
-  // keeps stale rows for hours, which is why the placeholder looked wrong.
-  const clients = data.liveClients;
-  const value = clients > 0 ? clients.toLocaleString() : "—";
-  return <Kpi label="Active miners" value={value} hint="live stratum clients" />;
+  // `activeMiners` = distinct workers with a share submit in the last 10 min
+  // (yiimp's `workers` table, filtered by `time`). More honest than stratum
+  // diag's TCP snapshot, which undercounts fleets that reconnect (cellular).
+  const value = data.activeMiners > 0 ? data.activeMiners.toLocaleString() : "—";
+  return <Kpi label="Active miners" value={value} hint="active in last 10 min" />;
 }
 
 function FoundBlocks() {
