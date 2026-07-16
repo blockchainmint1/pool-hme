@@ -765,17 +765,21 @@ function FoundBlocks() {
 // Workers table — miner-version breakdown, modeled on pool.txc
 // ---------------------------------------------------------------------------
 function WorkersTable() {
-  const totalCount = POOL.workers.reduce((s, w) => s + w.count, 0);
-  const totalThs = POOL.workers.reduce((s, w) => s + w.hashrateThs, 0);
-  const totalAvgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
+  const { data } = useSuspenseQuery(poolSummaryQuery);
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  const totalCount = scrypt?.live_clients ?? data.liveClients;
+  const totalThs = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
+  const avgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
 
   const fmtHash = (ths: number) => {
+    if (!Number.isFinite(ths) || ths <= 0) return "—";
     if (ths >= 1) return `${ths.toFixed(2)} TH/s`;
     const ghs = ths * 1000;
     if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
     return `${(ghs * 1000).toFixed(1)} MH/s`;
   };
   const fmtAvg = (ghs: number) => {
+    if (!Number.isFinite(ghs) || ghs <= 0) return "—";
     if (ghs >= 1) return `${ghs.toFixed(1)} GH/s`;
     return `${(ghs * 1000).toFixed(1)} MH/s`;
   };
@@ -786,54 +790,32 @@ function WorkersTable() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
-              <th className="text-left  px-5 py-3 font-normal">Version</th>
-              <th className="text-right px-3 py-3 font-normal">Count</th>
-              <th className="text-right px-3 py-3 font-normal">Percent</th>
-              <th className="text-right px-3 py-3 font-normal">Hashrate*</th>
-              <th className="text-right px-5 py-3 font-normal">Avg</th>
+              <th className="text-left  px-5 py-3 font-normal">Algo</th>
+              <th className="text-right px-3 py-3 font-normal">Connected workers</th>
+              <th className="text-right px-3 py-3 font-normal">Hashrate</th>
+              <th className="text-right px-5 py-3 font-normal">Avg / worker</th>
             </tr>
           </thead>
           <tbody className="font-mono">
-            {POOL.workers.map((w) => (
-              <tr
-                key={w.version}
-                className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
-              >
-                <td className="px-5 py-3 text-pool-steel-hi font-semibold">{w.version}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {w.count.toLocaleString()}
-                </td>
-                <td className="px-3 py-3 text-right text-pool-steel tabular-nums">
-                  {w.percent.toFixed(2)}%
-                </td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {fmtHash(w.hashrateThs)}
-                </td>
-                <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">
-                  {fmtAvg(w.avgGhs)}
-                </td>
-              </tr>
-            ))}
-            <tr className="border-t-2 border-pool-hairline pool-graphite/60 font-semibold">
-              <td className="px-5 py-3 text-pool-steel-hi">Total</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
-                {totalCount.toLocaleString()}
+            <tr className="border-b border-pool-hairline hover:pool-graphite-2 transition-colors">
+              <td className="px-5 py-3 text-pool-steel-hi font-semibold">scrypt</td>
+              <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
+                {totalCount > 0 ? totalCount.toLocaleString() : "—"}
               </td>
-              <td className="px-3 py-3 text-right text-pool-steel">—</td>
-              <td className="px-3 py-3 text-right text-pool-mint tabular-nums">
+              <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
                 {fmtHash(totalThs)}
               </td>
-              <td className="px-5 py-3 text-right text-pool-mint tabular-nums">
-                {fmtAvg(totalAvgGhs)}
+              <td className="px-5 py-3 text-right text-pool-steel-hi tabular-nums">
+                {fmtAvg(avgGhs)}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
-        * approximate from the last 5 minutes of submitted shares.
-        <span className="ml-2 text-pool-amber">farm-proxy/0.9.0</span> connections aggregate
-        multiple miners behind a single stratum session — under investigation.
+        Per-miner-version breakdown lands in the next API drop — will pull from stratum's
+        <span className="mx-1 font-mono text-pool-steel-hi">subscribe</span> user-agent
+        field.
       </div>
     </div>
   );
