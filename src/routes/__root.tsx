@@ -11,6 +11,8 @@ import {
 import appCss from "../styles.css?url";
 import { SearchBar } from "@/components/explorer/SearchBar";
 import { PriceTicker } from "@/components/explorer/PriceTicker";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
 
 function NotFoundComponent() {
   return (
