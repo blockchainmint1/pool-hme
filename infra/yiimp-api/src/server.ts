@@ -292,6 +292,24 @@ async function computeSummary() {
     effort,
     fetched_at: nowSec,
   };
+}
+
+app.get("/api/v1/pool/summary", async () => {
+  const now = Date.now();
+  if (summaryCache && now - summaryCache.at < SUMMARY_TTL_MS) return summaryCache.body;
+  if (!summaryInflight) {
+    summaryInflight = computeSummary()
+      .then((body) => {
+        summaryCache = { at: Date.now(), body };
+        return body;
+      })
+      .finally(() => {
+        summaryInflight = null;
+      });
+  }
+  // Serve stale while refreshing if we have any cache at all.
+  if (summaryCache) return summaryCache.body;
+  return summaryInflight;
 });
 
 app.get("/api/v1/pool/hashrate", async (req, reply) => {
