@@ -341,7 +341,7 @@ function PoolHero() {
 
           <Kpi label="Active miners" value={POOL.miners.toLocaleString()} hint="workers online" />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
-          <Kpi label="Blocks / 24h" value={POOL.blocks24h.toString()} hint="all algos combined" />
+          <LiveBlocks24hKpi />
         </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
