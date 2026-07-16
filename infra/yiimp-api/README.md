@@ -39,8 +39,9 @@ the DB — the service is stateless and safe to restart at any time.
 ```
 
 The service listens on `127.0.0.1:8787` only. nginx on the yiimp box
-terminates TLS on `yiimp-api.pool.honest.money` and proxies to it. No
+terminates TLS on `api.stratum.pool.honest.money` and proxies to it. No
 direct internet exposure of Node or MySQL.
+
 
 ## Endpoints
 
@@ -75,7 +76,8 @@ infra/yiimp-api/
 ├── systemd/
 │   └── yiimp-api.service   # systemd unit
 ├── nginx/
-│   └── yiimp-api.conf      # server block for yiimp-api.pool.honest.money
+│   └── yiimp-api.conf      # server block for api.stratum.pool.honest.money
+
 └── .env.example            # DB creds — copy to /etc/yiimp-api/env
 ```
 
