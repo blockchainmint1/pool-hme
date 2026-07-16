@@ -158,15 +158,40 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         algos.reduce((s, a) => s + a.hashrate_hs / 1e9, 0) ||
         Object.values(stratumLive).reduce((s, v) => s + Number(v.accepted_ghs ?? 0), 0);
 
+      const blocks24hBySymbol: Record<string, number> = {
+        ...(summaryRes.blocks_24h_by_symbol ?? {}),
+      };
+      // Ensure every pool-found symbol has a numeric entry (0 default),
+      // so the tile grid can render deterministically.
+      for (const sym of POOL_FOUND) {
+        if (blocks24hBySymbol[sym] == null) {
+          // Fall back to counting from the blocks list if the API didn't
+          // populate this symbol yet.
+          const fallback = poolFound.filter(
+            (b) => b.symbol === sym && b.time >= dayAgo,
+          ).length;
+          blocks24hBySymbol[sym] = fallback;
+        }
+      }
+
+      // Honest active-miner count from the API (10-min recency in DB).
+      // Fall back to summing algos.db_workers, then stratum-diag clients.
+      const activeMiners =
+        Number(summaryRes.active_miners_10m ?? 0) ||
+        algos.reduce((s, a) => s + a.db_workers, 0) ||
+        Object.values(stratumLive).reduce((s, v) => s + Number(v.clients ?? 0), 0);
+
       const data: PoolSummary = {
         coins: coinsRes.coins,
         blocks: poolFound.slice(0, 20),
         blocks24h,
+        blocks24hBySymbol,
         lastFoundBySymbol,
         fetchedAt: nowSec,
         health: { ok: !!health.ok, db: !!health.db },
         stratumLive,
         algos,
+        activeMiners,
         liveClients,
         liveHashrateGhs,
       };
@@ -179,11 +204,13 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         coins: [],
         blocks: [],
         blocks24h: 0,
+        blocks24hBySymbol: {},
         lastFoundBySymbol: {},
         fetchedAt: Math.floor(now / 1000),
         health: { ok: false, db: false },
         stratumLive: {},
         algos: [],
+        activeMiners: 0,
         liveClients: 0,
         liveHashrateGhs: 0,
       };
