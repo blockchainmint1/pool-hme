@@ -29,7 +29,7 @@ import {
   startStratumWatch,
   stratumEvents,
 } from "./stratum-live.js";
-import { aggregateGeo } from "./geoip.js";
+import { aggregateGeo, lookupGeo } from "./geoip.js";
 import {
   minerHashrateSeries,
   poolHashrateSeries,
