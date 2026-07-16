@@ -238,7 +238,13 @@ export const getPoolHashrate = createServerFn({ method: "GET" })
       const body = (await res.json()) as {
         window: HashrateWindow;
         algo: string;
-        points: HashratePoint[];
+        points: Array<{
+          time: number;
+          hashrate: number;
+          network_hashrate?: number;
+          difficulty?: number;
+          earnings?: number;
+        }>;
       };
       if (!Array.isArray(body.points) || body.points.length === 0) {
         throw new Error("empty series");
@@ -246,7 +252,12 @@ export const getPoolHashrate = createServerFn({ method: "GET" })
       return {
         window: body.window ?? window,
         algo: body.algo ?? algo,
-        points: body.points,
+        points: body.points.map((p) => ({
+          time: Number(p.time),
+          hashrate: Number(p.hashrate) || 0,
+          network_hashrate: Number(p.network_hashrate ?? 0),
+          difficulty: Number(p.difficulty ?? 0),
+        })),
         synthetic: false,
         fetchedAt: nowSec,
       };
