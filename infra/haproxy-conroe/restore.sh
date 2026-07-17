@@ -49,9 +49,9 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
   LAN_ADDR="10.${CONTAINER}.0.10"
   LAN_CIDR="10.${CONTAINER}.0.10/24"
   LAN_NET="10.${CONTAINER}.0.0/24"
-  LAN_POOL_START="10.${CONTAINER}.0.100"
+  LAN_POOL_START="10.${CONTAINER}.0.20"
   LAN_POOL_END="10.${CONTAINER}.0.254"
-  echo "==> container ${CONTAINER}  →  Beelink ${LAN_CIDR}  miners ${LAN_POOL_START}-${LAN_POOL_END}"
+  echo "==> container ${CONTAINER}  →  Beelink ${LAN_CIDR}  miners ${LAN_POOL_START}-${LAN_POOL_END}  (235 leases)"
 fi
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
