@@ -39,6 +39,19 @@ type: reference
 - `share_diff` — miner's claimed hash diff of the nonce found (huge number)
 - `error` — int reject code, **NOT `reject_reason`**. Codes: 21=stale, 22=duplicate, 23=low-diff, 24=high-hash/bad-nonce, 25=other
 - `algo`, `blockhash`, `height`, `category`
+- **NO `coin_id` column** on this build (verified 2026-07-17 via `ERROR 1054`). To attribute shares to a coin, join via `blocks` (for pool-found blocks) or filter by `algo` + time. For merged-mining health, the authoritative signal is the `blocks` table (has `coin_id` → `coins.id`) — do NOT query `shares.coin_id`.
+
+### `blocks` table
+- Has `coin_id` (FK → `coins.id`) — this is where per-chain block finds are recorded.
+- Verified 2026-07-17: pool has found 78 LTC, 169 DOGE, 2987 TXC, 2928 ISK, 2490 ZCU blocks. Merged submission end-to-end works for all 5 chains.
+
+## Stratum log line formats
+
+- LTC parent templating: `LTC template mweb length=...` (MWeb rules active). The `LTC <height> - diff <N> job <id> to X clients` format seen in some yiimp forks does NOT appear on this build — use `LTC template mweb` count as the parent-chain-healthy signal.
+- Per-share aux evaluation: `XXX aux submit skip target parent_diff=P child_diff=C hash=H` — normal, one per aux per share. Child_diff clusters observed 2026-07-17:
+  - TXC + ISK: ~128k / ~138k (paired, roughly equal counts)
+  - DOGE: ~35M-58M (varies with DOGE net diff)
+  - ZCU: intermediate tier
 
 ## Known 2026-07-16 findings
 
