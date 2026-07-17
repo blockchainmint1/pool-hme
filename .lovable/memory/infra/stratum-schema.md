@@ -16,7 +16,8 @@ type: reference
 - **Logs:** `/var/stratum/scrypt.log` (stdout/stderr) + `/var/stratum/logs/scrypt-YYYYMMDD-HHMMSS-pid<pid>.log`
 - **systemd unit:** `stratum-aws-scrypt.service`
 - **Scrypt stratum port:** TCP 3433
-- **DB:** MariaDB `yiimpfrontend` on 127.0.0.1:3306. **SQL runs inside the `mysql` client, not in bash.** Always wrap queries as `mysql -u"$U" -p"$P" "$D" -e "SELECT ...;"` (or pipe a heredoc). Never paste bare `SELECT ...` at the shell prompt — bash parses `(` as a syntax error. When giving the user a query, always include the `mysql -e "..."` wrapper.
+- **DB:** MariaDB `yiimpfrontend` on 127.0.0.1:3306. **SQL runs inside the `mysql` client, not in bash.** Always wrap queries as `mysql ... -e "SELECT ...;"` (or pipe a heredoc). Never paste bare `SELECT ...` at the shell prompt — bash parses `(` as a syntax error.
+- **DB auth on this box (verified 2026-07-17):** MariaDB `root` uses `unix_socket` auth — `mysql -u root -p...` fails with `ERROR 1698 (28000): Access denied`. **Always use `sudo mysql <db> -e "..."`** (no `-u`, no `-p`). Example: `sudo mysql yiimpfrontend -e "SELECT ... FROM blocks WHERE coin_id=(SELECT id FROM coins WHERE symbol='ZCU') LIMIT 5;"`. If a script needs a non-root user, read creds from yiimp config files, not `-u root`.
 
 ## ⚠️ NO Ansible template deployed on the live box
 
