@@ -16,7 +16,7 @@ type: reference
 - **Logs:** `/var/stratum/scrypt.log` (stdout/stderr) + `/var/stratum/logs/scrypt-YYYYMMDD-HHMMSS-pid<pid>.log`
 - **systemd unit:** `stratum-aws-scrypt.service`
 - **Scrypt stratum port:** TCP 3433
-- **DB:** MariaDB `yiimpfrontend` on 127.0.0.1:3306
+- **DB:** MariaDB `yiimpfrontend` on 127.0.0.1:3306. **SQL runs inside the `mysql` client, not in bash.** Always wrap queries as `mysql -u"$U" -p"$P" "$D" -e "SELECT ...;"` (or pipe a heredoc). Never paste bare `SELECT ...` at the shell prompt — bash parses `(` as a syntax error. When giving the user a query, always include the `mysql -e "..."` wrapper.
 
 ## ⚠️ NO Ansible template deployed on the live box
 
