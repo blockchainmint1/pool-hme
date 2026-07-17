@@ -1,0 +1,43 @@
+Subject: [PATCH] stratum: skip parent-style getblocktemplate job for pure-aux children
+
+Yiimp's coind_create_job() unconditionally calls getblocktemplate on every
+configured coind. For a pure-aux child served by a bitcoind-compat adapter
+that only implements createauxblock/submitauxblock (ZCU), the RPC method
+does not exist (-32601) and the call fails on every job cycle. That failure
+prevents ZCU from ever entering the aux merge-mine rotation, so its hash
+is never merkled into the scrypt work and no aux blocks are ever submitted.
+
+TXC/ISK's adapters happen to expose getblocktemplate as a stub (it returns
+error -8 "call with rules") so the RPC exists and the codepath survives,
+which is why they work today. ZCU's adapter returns -32601 and dies.
+
+The correct gate is auxpow_rpc_mode: when a coind is flagged aux AND uses
+the custom-auxpow (createauxblock) path, stratum has no business asking it
+for a parent-chain block template. Skip coind_create_job() for those coins.
+
+Apply on the live tree, then rebuild + reinstall:
+
+    cd /home/ubuntu/aws/LIVE/LIVE-FINAL/stratum
+    sudo patch -p1 < /path/to/stratum-skip-aux-child-job.patch
+    sudo make -j$(nproc)
+    sudo install -m755 stratum /var/stratum/stratum
+    sudo systemctl restart stratum-aws-scrypt
+
+---
+ stratum/coind_template.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+--- a/stratum/coind_template.cpp
++++ b/stratum/coind_template.cpp
+@@ -564,6 +564,11 @@
+ // coind_create_job — parent-chain job creation via getblocktemplate.
+ bool coind_create_job(YAAMP_COIND *coind, bool force)
+ {
++	// Pure-aux children (custom auxpow via createauxblock) have no
++	// getblocktemplate on their adapter — skip parent-style job creation.
++	// Their aux hash is fetched by coind_getauxblock_custom() elsewhere.
++	if (coind->isaux && coind_uses_custom_auxpow(coind)) return false;
++
+ 	bool b = rpc_connected(&coind->rpc);
+ 	if(!b) return false;
+ 
