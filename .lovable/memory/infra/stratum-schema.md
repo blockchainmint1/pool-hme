@@ -39,7 +39,7 @@ type: reference
 - `share_diff` — miner's claimed hash diff of the nonce found (huge number)
 - `error` — int reject code, **NOT `reject_reason`**. Codes: 21=stale, 22=duplicate, 23=low-diff, 24=high-hash/bad-nonce, 25=other
 - `algo`, `blockhash`, `height`, `category`
-- `coinid` — int FK to `coins.id`. **Column name is `coinid` (no underscore)**, NOT `coin_id`. Verified 2026-07-17 via `DESC shares`. Use for per-coin share attribution: `JOIN coins c ON c.id = s.coinid`. My earlier claim that this column didn't exist was wrong — the `ERROR 1054` came from writing `coin_id`.
+- `coinid` — int FK to `coins.id`. **Column name is `coinid` (no underscore)**, NOT `coin_id`. Verified 2026-07-17 via `DESC shares`. **On merged-mining scrypt, every share row has `coinid = LTC`** — shares are credited against the parent chain only. Aux chains (DOGE/TXC/ISK/ZCU) never appear in `shares`; they only surface in `blocks` when a share happens to meet the aux's child_diff. So `GROUP BY coinid` on `shares` for scrypt will always return one row (LTC) — that's healthy, not a bug. For per-aux health use: (1) `aux submit skip` log lines to confirm wiring, (2) `blocks` table grouped by `coin_id` for end-to-end proof.
 
 ### `blocks` table
 - Has `coin_id` (FK → `coins.id`) — this is where per-chain block finds are recorded. (Yes, `blocks` uses `coin_id` with underscore while `shares` uses `coinid` without — the schema is inconsistent.)
