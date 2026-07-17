@@ -17,11 +17,15 @@ type: feature
   ```
 
 ## Candidate source trees on the box
-Two trees exist; do NOT assume — check timestamps & which one has the patch:
-- `/home/ubuntu/aws/LIVE/LIVE-FINAL/stratum`
-- `/home/ubuntu/aws/LIVE/yiimp/live-aux-issue-doge/stratum`
+**LIVE tree (verified 2026-07-17):** `/home/ubuntu/aws/LIVE/yiimp/live-aux-issue-doge/stratum`
+- Its build produced the current `/var/stratum/stratum` (mtime Jul 17 03:16).
+- Contains the ZCU aux-child patch at `coind_template.cpp:571`.
 
-Whichever tree was last `make`d and copied to `/var/stratum/stratum` is the "live" one. There is no symlink — `install -m755 stratum /var/stratum/stratum` is a plain copy.
+**STALE tree — do NOT patch or build:** `/home/ubuntu/aws/LIVE/LIVE-FINAL/stratum`
+- Its local `stratum` binary is older than the live one and is not deployed.
+- Earlier `sudo patch -p1` runs against this tree were wasted work.
+
+Always re-verify before editing: `ls -l /var/stratum/stratum` and compare mtime to `<tree>/stratum`, plus `grep` for the patch line in `coind_template.cpp`. There is no symlink — `install -m755 stratum /var/stratum/stratum` is a plain copy.
 
 ## Build gotcha: parallel make link race
 Top-level `make -j$(nproc)` races: the link of `stratum` fires before `algos/libalgos.a` and `sha3/libhash.a` finish, producing:
