@@ -115,6 +115,13 @@ function PoolHome() {
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
+          <Link
+            to="/diagnostics"
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
+          >
+            <Activity className="size-4" />
+            <span>Diagnostics</span>
+          </Link>
           <div className="mt-6 pool-tick rounded-md p-3">
             <div className="text-[10px] uppercase tracking-widest text-pool-steel">Status</div>
             <div className="mt-1 flex items-center gap-2 text-xs font-mono">
@@ -362,7 +369,10 @@ function AlgoTable() {
   // All 5 coins share the scrypt algo (merged mining). Pull the scrypt
   // aggregate once; every row displays the same live values.
   const scrypt = data.algos.find((x) => x.algo === "scrypt");
-  const miners = data.activeMiners || scrypt?.live_clients || 0;
+  // Prefer connected count (stratum diag TCP sessions = full fleet). The
+  // 10-min share-active count undercounts miners that haven't hit their diff
+  // recently, and confuses operators used to the old dashboard's "Miners" col.
+  const miners = scrypt?.live_clients || data.activeMiners || 0;
   const ths = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
@@ -719,11 +729,17 @@ function MiniBlockTile({
 
 function LiveMinersKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  // `activeMiners` = distinct workers with a share submit in the last 10 min
-  // (yiimp's `workers` table, filtered by `time`). More honest than stratum
-  // diag's TCP snapshot, which undercounts fleets that reconnect (cellular).
-  const value = data.activeMiners > 0 ? data.activeMiners.toLocaleString() : "—";
-  return <Kpi label="Active miners" value={value} hint="active in last 10 min" />;
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  // Connected = full fleet (stratum TCP sessions). Hashing = shares submitted
+  // in last 10 min. Show both — the gap is a diagnostic signal on its own.
+  const connected = scrypt?.live_clients || 0;
+  const hashing = data.activeMiners || 0;
+  const value = connected > 0 ? connected.toLocaleString() : "—";
+  const hint =
+    hashing > 0 && connected > 0
+      ? `${hashing.toLocaleString()} hashing · last 10 min`
+      : "connected · stratum sessions";
+  return <Kpi label="Active miners" value={value} hint={hint} />;
 }
 
 function FoundBlocks() {
@@ -809,7 +825,7 @@ function FoundBlocks() {
 function WorkersTable() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
   const scrypt = data.algos.find((x) => x.algo === "scrypt");
-  const totalCount = data.activeMiners || scrypt?.live_clients || 0;
+  const totalCount = scrypt?.live_clients || data.activeMiners || 0;
   const totalThs = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   const avgGhs = totalCount > 0 ? (totalThs * 1000) / totalCount : 0;
 

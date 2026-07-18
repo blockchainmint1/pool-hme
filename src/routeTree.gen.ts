@@ -17,6 +17,7 @@ import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
 import { Route as GraphsRouteImport } from './routes/graphs'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SplatRouteImport } from './routes/$'
@@ -116,6 +117,11 @@ const GraphsRoute = GraphsRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DiagnosticsRoute = DiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlocksRoute = BlocksRouteImport.update({
@@ -427,6 +433,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/manifesto': typeof ManifestoRoute
@@ -497,6 +504,7 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/manifesto': typeof ManifestoRoute
@@ -567,6 +575,7 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/manifesto': typeof ManifestoRoute
@@ -639,6 +648,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/diagnostics'
     | '/docs'
     | '/graphs'
     | '/manifesto'
@@ -709,6 +719,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/diagnostics'
     | '/docs'
     | '/graphs'
     | '/manifesto'
@@ -778,6 +789,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/diagnostics'
     | '/docs'
     | '/graphs'
     | '/manifesto'
@@ -849,6 +861,7 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   AboutRoute: typeof AboutRoute
   BlocksRoute: typeof BlocksRoute
+  DiagnosticsRoute: typeof DiagnosticsRoute
   DocsRoute: typeof DocsRoute
   GraphsRoute: typeof GraphsRoute
   ManifestoRoute: typeof ManifestoRoute
@@ -952,6 +965,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/diagnostics': {
+      id: '/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof DiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blocks': {
@@ -1496,6 +1516,7 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   AboutRoute: AboutRoute,
   BlocksRoute: BlocksRoute,
+  DiagnosticsRoute: DiagnosticsRoute,
   DocsRoute: DocsRoute,
   GraphsRoute: GraphsRoute,
   ManifestoRoute: ManifestoRoute,
