@@ -115,6 +115,13 @@ function PoolHome() {
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
+          <Link
+            to="/diagnostics"
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
+          >
+            <Activity className="size-4" />
+            <span>Diagnostics</span>
+          </Link>
           <div className="mt-6 pool-tick rounded-md p-3">
             <div className="text-[10px] uppercase tracking-widest text-pool-steel">Status</div>
             <div className="mt-1 flex items-center gap-2 text-xs font-mono">
