@@ -722,11 +722,17 @@ function MiniBlockTile({
 
 function LiveMinersKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  // `activeMiners` = distinct workers with a share submit in the last 10 min
-  // (yiimp's `workers` table, filtered by `time`). More honest than stratum
-  // diag's TCP snapshot, which undercounts fleets that reconnect (cellular).
-  const value = data.activeMiners > 0 ? data.activeMiners.toLocaleString() : "—";
-  return <Kpi label="Active miners" value={value} hint="active in last 10 min" />;
+  const scrypt = data.algos.find((x) => x.algo === "scrypt");
+  // Connected = full fleet (stratum TCP sessions). Hashing = shares submitted
+  // in last 10 min. Show both — the gap is a diagnostic signal on its own.
+  const connected = scrypt?.live_clients || 0;
+  const hashing = data.activeMiners || 0;
+  const value = connected > 0 ? connected.toLocaleString() : "—";
+  const hint =
+    hashing > 0 && connected > 0
+      ? `${hashing.toLocaleString()} hashing · last 10 min`
+      : "connected · stratum sessions";
+  return <Kpi label="Active miners" value={value} hint={hint} />;
 }
 
 function FoundBlocks() {
