@@ -11,6 +11,8 @@ Fleet: 1200 Antminer L9s across 6 containers, single TX site. Scrypt merged mini
 Scrypt stratum listens on TCP **3433** (not 3333). Miners connect: `stratum+tcp://stratum.pool.honest.money:3433`.
 Mansfield site (WAN 97.154.36.156, 48× L9) is on **Verizon Wireless cellular** (`myvzw.com` rDNS) — structural ~25% hashrate loss vs wired due to RTT/jitter/reconnects. Not a stratum bug.
 User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp-api/build-bundle.sh` + Publish, then user runs `curl -fsSL https://pool.honest.money/install/yiimp-api.sh | sudo bash` on the box.
+**Share counting IS working** — DB `shares` table reflects submissions correctly (valid/invalid/stale counts populate). The `SCRYPT summary diag active=0 valid=0` log line is a broken/stale in-memory counter, NOT a broken pipeline. Do NOT diagnose share-counting bugs from that log line — always cross-check `SELECT ... FROM shares WHERE time > UNIX_TIMESTAMP()-300`.
+**Conroe uplink monitoring**: healthy = ~325+ sessions from 209.34.50.105 (or 13.217.211.175 via haproxy). If per-site session breakdown shows ONLY Mansfield (97.154.36.156) + McKinney (99.107.246.68) and no Conroe IP, Conroe uplink is DOWN — call the site before debugging code.
 
 ## Memories
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
