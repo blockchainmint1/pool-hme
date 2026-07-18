@@ -362,7 +362,10 @@ function AlgoTable() {
   // All 5 coins share the scrypt algo (merged mining). Pull the scrypt
   // aggregate once; every row displays the same live values.
   const scrypt = data.algos.find((x) => x.algo === "scrypt");
-  const miners = data.activeMiners || scrypt?.live_clients || 0;
+  // Prefer connected count (stratum diag TCP sessions = full fleet). The
+  // 10-min share-active count undercounts miners that haven't hit their diff
+  // recently, and confuses operators used to the old dashboard's "Miners" col.
+  const miners = scrypt?.live_clients || data.activeMiners || 0;
   const ths = (scrypt?.hashrate_hs ?? data.liveHashrateGhs * 1e9) / 1e12;
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
