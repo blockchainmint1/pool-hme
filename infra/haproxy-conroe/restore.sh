@@ -70,7 +70,7 @@ fi
 apt-get update -y
 apt-get install -y \
     haproxy ufw chrony htop iftop conntrack net-tools rsyslog \
-    iptables netfilter-persistent iptables-persistent kea-dhcp4-server
+    iptables kea-dhcp4-server
 
 echo "==> sysctl (haproxy + ip_forward)"
 install -m 0644 "$SRC_DIR/config/99-haproxy.conf" /etc/sysctl.d/99-haproxy.conf
