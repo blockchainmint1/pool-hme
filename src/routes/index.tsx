@@ -772,13 +772,24 @@ function FoundBlocks() {
               </tr>
             )}
             {rows.map((b: PoolBlock) => {
-              const isImmature = b.category === "immature" || b.confirmations < 100;
-              const statusColor = isImmature ? "text-pool-amber" : "text-pool-mint";
-              const statusLabel = isImmature
-                ? `${b.confirmations} conf`
-                : b.category === "orphan"
-                  ? "orphan"
-                  : "confirmed";
+              // API returns null for amount/confirmations on brand-new blocks
+              // that haven't been credited yet — coerce so .toLocaleString() etc. don't blow up.
+              const confirmations = b.confirmations ?? 0;
+              const amount = b.amount ?? 0;
+              const isPending = b.confirmations == null || b.amount == null;
+              const isImmature = b.category === "immature" || confirmations < 100;
+              const statusColor = isPending
+                ? "text-pool-steel"
+                : isImmature
+                  ? "text-pool-amber"
+                  : "text-pool-mint";
+              const statusLabel = isPending
+                ? "pending"
+                : isImmature
+                  ? `${confirmations} conf`
+                  : b.category === "orphan"
+                    ? "orphan"
+                    : "confirmed";
               return (
                 <tr
                   key={`${b.symbol}-${b.height}-${b.blockhash.slice(0, 8)}`}
@@ -797,7 +808,7 @@ function FoundBlocks() {
                     {ago(Math.max(0, nowSec - b.time))}
                   </td>
                   <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                    {b.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
+                    {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
                     <span className="text-pool-steel">{b.symbol}</span>
                   </td>
                   <td className={`px-5 py-3 text-right tabular-nums ${statusColor}`}>
@@ -806,6 +817,7 @@ function FoundBlocks() {
                 </tr>
               );
             })}
+
           </tbody>
         </table>
       </div>
