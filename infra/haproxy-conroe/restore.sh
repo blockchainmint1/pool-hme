@@ -245,11 +245,24 @@ YAML
   systemctl enable kea-dhcp4-server
   systemctl restart kea-dhcp4-server
 
+  # NAT block is written AFTER `ufw --force reset` below — reset restores the
+  # stock before.rules and would wipe any block written here. See ufw section.
+  :
+else
+  echo "==> skipping netplan / DHCP / NAT (--skip-netplan)"
+fi
+
+echo "==> ufw"
+ufw --force reset >/dev/null
+ufw default deny incoming
+ufw default allow outgoing
+ufw default allow routed          # allow the NAT forward chain
+if [[ $SKIP_NETPLAN -eq 0 ]]; then
   echo "==> ufw-native NAT  ($LAN_IF $LAN_NET → $WAN_IF)"
-  # Ubuntu 24.04 ufw conflicts with iptables-persistent, so we persist NAT
-  # via ufw itself: /etc/ufw/before.rules (nat table) + DEFAULT_FORWARD_POLICY.
+  # Persist NAT via ufw: DEFAULT_FORWARD_POLICY + a *nat block prepended to
+  # /etc/ufw/before.rules. Must run AFTER `ufw --force reset` (which restores
+  # the stock before.rules and would erase our block).
   sed -i 's|^DEFAULT_FORWARD_POLICY=.*|DEFAULT_FORWARD_POLICY="ACCEPT"|' /etc/default/ufw
-  # Strip any prior nat block we wrote, then prepend a fresh one.
   sed -i '/^# BEGIN haproxy-conroe nat$/,/^# END haproxy-conroe nat$/d' /etc/ufw/before.rules
   TMP_NAT="$(mktemp)"
   cat > "$TMP_NAT" <<EOF
@@ -263,18 +276,10 @@ EOF
   cat "$TMP_NAT" /etc/ufw/before.rules > "${TMP_NAT}.new"
   mv "${TMP_NAT}.new" /etc/ufw/before.rules
   rm -f "$TMP_NAT"
-  # Runtime rules so NAT works immediately, before ufw reload below.
+  # Runtime rule so NAT works immediately (ufw enable below will also load it).
   iptables -t nat -C POSTROUTING -o "$WAN_IF" -s "$LAN_NET" -j MASQUERADE 2>/dev/null \
     || iptables -t nat -A POSTROUTING -o "$WAN_IF" -s "$LAN_NET" -j MASQUERADE
-else
-  echo "==> skipping netplan / DHCP / NAT (--skip-netplan)"
 fi
-
-echo "==> ufw"
-ufw --force reset >/dev/null
-ufw default deny incoming
-ufw default allow outgoing
-ufw default allow routed          # allow the NAT forward chain we just built
 if [[ $SKIP_NETPLAN -eq 1 ]]; then
   # EC2 burn-in: no LAN yet, allow SSH + stratum + stats from anywhere.
   ufw allow 22/tcp
@@ -289,6 +294,7 @@ else
   ufw allow in on "$LAN_IF" to any port 67   proto udp   # DHCP
 fi
 ufw --force enable
+
 
 echo "==> enable + restart haproxy"
 systemctl enable haproxy
