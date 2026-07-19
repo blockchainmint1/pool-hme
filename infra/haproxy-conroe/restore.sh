@@ -59,10 +59,18 @@ echo "==> restoring haproxy-conroe from $SRC_DIR"
 
 echo "==> apt install"
 export DEBIAN_FRONTEND=noninteractive
+# netfilter-persistent lives in `universe`; on minimal Ubuntu Server images
+# that component is disabled, which makes iptables-persistent uninstallable
+# with "Depends: netfilter-persistent but it is not installable".
+if ! apt-cache policy netfilter-persistent 2>/dev/null | grep -q 'Candidate: [0-9]'; then
+  echo "    enabling universe repo"
+  apt-get install -y software-properties-common
+  add-apt-repository -y universe
+fi
 apt-get update -y
 apt-get install -y \
     haproxy ufw chrony htop iftop conntrack net-tools rsyslog \
-    iptables iptables-persistent kea-dhcp4-server
+    iptables netfilter-persistent iptables-persistent kea-dhcp4-server
 
 echo "==> sysctl (haproxy + ip_forward)"
 install -m 0644 "$SRC_DIR/config/99-haproxy.conf" /etc/sysctl.d/99-haproxy.conf
