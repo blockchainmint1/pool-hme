@@ -184,9 +184,51 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
       -e "s|__LAN_CIDR__|$LAN_CIDR|g" \
       "$SRC_DIR/config/99-haproxy.yaml" > /etc/netplan/99-haproxy.yaml
   chmod 0600 /etc/netplan/99-haproxy.yaml
+  # Neutralise cloud-init's netplan (it sets eno1 dhcp4:true, which fights us).
+  if [[ -f /etc/netplan/50-cloud-init.yaml ]]; then
+    cat > /etc/netplan/50-cloud-init.yaml <<'YAML'
+network:
+  version: 2
+  ethernets: {}
+YAML
+    chmod 0600 /etc/netplan/50-cloud-init.yaml
+  fi
+  mkdir -p /etc/cloud/cloud.cfg.d
+  echo 'network: {config: disabled}' > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
   netplan apply
-  # Give the WAN interface a moment to re-DHCP after netplan apply.
   sleep 3
+
+  # ---- WAN sanity: some landlord DHCP pools hand out host-part .255 (valid
+  # in /23 but frequently dropped by stateful upstream gear). If the DHCP
+  # lease lands on an address that ends in .255 or .0, switch WAN to a static
+  # in the same subnet using the same gateway.
+  WAN_ADDR="$(ip -o -4 addr show "$WAN_IF" | awk '{print $4}' | head -1)"
+  WAN_HOST_OCT="${WAN_ADDR%%/*}"; WAN_HOST_OCT="${WAN_HOST_OCT##*.}"
+  if [[ "$WAN_HOST_OCT" == "255" || "$WAN_HOST_OCT" == "0" ]]; then
+    WAN_GW="$(ip -o -4 route show default dev "$WAN_IF" | awk '{print $3; exit}')"
+    WAN_PREFIX="${WAN_ADDR#*/}"
+    WAN_BASE="$(echo "$WAN_ADDR" | awk -F'[./]' '{print $1"."$2"."$3}')"
+    WAN_STATIC="${WAN_BASE}.100/${WAN_PREFIX}"
+    echo "==> WAN DHCP handed out ${WAN_ADDR} (broadcast-looking); pinning static ${WAN_STATIC} via ${WAN_GW}"
+    cat > /etc/netplan/60-wan-static.yaml <<YAML
+network:
+  version: 2
+  ethernets:
+    ${WAN_IF}:
+      dhcp4: false
+      addresses: [${WAN_STATIC}]
+      routes:
+        - to: default
+          via: ${WAN_GW}
+      nameservers:
+        addresses: [1.1.1.1, 9.9.9.9]
+YAML
+    chmod 0600 /etc/netplan/60-wan-static.yaml
+    ip addr flush dev "$WAN_IF"
+    netplan apply
+    sleep 3
+  fi
+
 
 
   echo "==> kea-dhcp4  (serving $LAN_POOL_START-$LAN_POOL_END on $LAN_IF)"
