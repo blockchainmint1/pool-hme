@@ -270,3 +270,26 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
 fi
 echo "    smoke test:    sudo /opt/haproxy-conroe/smoke-test.sh"
 echo "    live view:     sudo /opt/haproxy-conroe/watch-sessions.sh"
+
+# ---------------------------------------------------------------------------
+# Post-install verification — this is the check that matters. The pre-flight
+# above ran with initial DHCP state; this one runs against the final config
+# (netplan + ufw + NAT applied), so if this passes you can point miners here.
+# ---------------------------------------------------------------------------
+echo ""
+if run_connectivity_check "post-install"; then
+  echo "==> READY: upstream reachable, haproxy running. Safe to point L9s here."
+else
+  echo "==> NOT READY: upstream unreachable from this Beelink after full setup."
+  echo "    interface state:"
+  ip -brief addr | sed 's/^/      /'
+  echo "    default route:"
+  ip -o -4 route show default | sed 's/^/      /'
+  echo "    troubleshooting:"
+  echo "      • confirm WAN cable is in the port shown as '$WAN_IF' above"
+  echo "      • try  nc -vz 100.51.160.163 3433   (direct IP bypasses DNS)"
+  echo "      • try  nc -vz 100.51.160.163 443    (isolates 3433 vs. all egress)"
+  echo "      • if only 3433 fails, landlord/CPE is filtering that port"
+  echo "      • override NIC choice:  sudo bash restore.sh --container N --wan=<if> --lan=<if>"
+fi
+
