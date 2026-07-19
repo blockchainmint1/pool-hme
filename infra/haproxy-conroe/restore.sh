@@ -70,7 +70,7 @@ fi
 apt-get update -y
 apt-get install -y \
     haproxy ufw chrony htop iftop conntrack net-tools rsyslog \
-    iptables netfilter-persistent iptables-persistent kea-dhcp4-server
+    iptables kea-dhcp4-server
 
 echo "==> sysctl (haproxy + ip_forward)"
 install -m 0644 "$SRC_DIR/config/99-haproxy.conf" /etc/sysctl.d/99-haproxy.conf
@@ -158,14 +158,27 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
   systemctl enable kea-dhcp4-server
   systemctl restart kea-dhcp4-server
 
-  echo "==> iptables MASQUERADE  ($LAN_IF $LAN_NET → $WAN_IF)"
+  echo "==> ufw-native NAT  ($LAN_IF $LAN_NET → $WAN_IF)"
+  # Ubuntu 24.04 ufw conflicts with iptables-persistent, so we persist NAT
+  # via ufw itself: /etc/ufw/before.rules (nat table) + DEFAULT_FORWARD_POLICY.
+  sed -i 's|^DEFAULT_FORWARD_POLICY=.*|DEFAULT_FORWARD_POLICY="ACCEPT"|' /etc/default/ufw
+  # Strip any prior nat block we wrote, then prepend a fresh one.
+  sed -i '/^# BEGIN haproxy-conroe nat$/,/^# END haproxy-conroe nat$/d' /etc/ufw/before.rules
+  TMP_NAT="$(mktemp)"
+  cat > "$TMP_NAT" <<EOF
+# BEGIN haproxy-conroe nat
+*nat
+:POSTROUTING ACCEPT [0:0]
+-A POSTROUTING -s ${LAN_NET} -o ${WAN_IF} -j MASQUERADE
+COMMIT
+# END haproxy-conroe nat
+EOF
+  cat "$TMP_NAT" /etc/ufw/before.rules > "${TMP_NAT}.new"
+  mv "${TMP_NAT}.new" /etc/ufw/before.rules
+  rm -f "$TMP_NAT"
+  # Runtime rules so NAT works immediately, before ufw reload below.
   iptables -t nat -C POSTROUTING -o "$WAN_IF" -s "$LAN_NET" -j MASQUERADE 2>/dev/null \
     || iptables -t nat -A POSTROUTING -o "$WAN_IF" -s "$LAN_NET" -j MASQUERADE
-  iptables -C FORWARD -i "$LAN_IF" -o "$WAN_IF" -j ACCEPT 2>/dev/null \
-    || iptables -A FORWARD -i "$LAN_IF" -o "$WAN_IF" -j ACCEPT
-  iptables -C FORWARD -i "$WAN_IF" -o "$LAN_IF" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null \
-    || iptables -A FORWARD -i "$WAN_IF" -o "$LAN_IF" -m state --state RELATED,ESTABLISHED -j ACCEPT
-  netfilter-persistent save
 else
   echo "==> skipping netplan / DHCP / NAT (--skip-netplan)"
 fi
