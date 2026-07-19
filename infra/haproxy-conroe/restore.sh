@@ -25,15 +25,20 @@ set -euo pipefail
 
 SKIP_NETPLAN=0
 CONTAINER=""
+FORCE_WAN=""
+FORCE_LAN=""
 for arg in "$@"; do
   case "$arg" in
     --skip-netplan)   SKIP_NETPLAN=1 ;;
     --container=*)    CONTAINER="${arg#*=}" ;;
     --container)      shift; CONTAINER="${1:-}" ;;
+    --wan=*)          FORCE_WAN="${arg#*=}" ;;
+    --lan=*)          FORCE_LAN="${arg#*=}" ;;
     [1-6])            CONTAINER="$arg" ;;  # tolerate `--container 3` split by shell
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
 
 if [[ $EUID -ne 0 ]]; then
   echo "must run as root (use sudo)" >&2
