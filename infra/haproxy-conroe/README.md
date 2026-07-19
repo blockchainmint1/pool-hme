@@ -159,28 +159,30 @@ Tear down:
 
 ## Deploy to one container
 
-For each of the 6 Beelinks:
+For each Beelink, on-site:
 
 1. Install Ubuntu Server 24.04 LTS (defaults, OpenSSH enabled, no snaps).
-   Note the WAN NIC's MAC address — label the Beelink with it and its
-   container number.
+   Label the Beelink with its container number (1–6).
 2. Plug **WAN NIC** into the SG2218 (landlord uplink). Plug **LAN NIC**
    into the container's miner switch.
-3. On first boot the WAN NIC picks up an internet lease from the
-   landlord. Find its temporary IP on the landlord CPE's lease table
-   (that's why you labelled the MAC), then from your laptop while
-   physically on-site (or through whatever access to the landlord
-   subnet you've arranged):
+3. Boot. The WAN NIC pulls a DHCP lease from the landlord and the box
+   has internet. Log in at the console (keyboard + monitor, or the
+   Beelink's HDMI) and run **one line**:
 
    ```bash
-   scp -r infra/haproxy-conroe ubuntu@<wan-ip>:/tmp/
-   ssh ubuntu@<wan-ip> "sudo bash /tmp/haproxy-conroe/restore.sh --container 1"
+   curl -fsSL https://pool.honest.money/install/haproxy-conroe.sh \
+     | sudo bash -s -- --container N
    ```
 
-   Replace `--container 1` with the actual container number for this Beelink.
+   Replace `N` with this Beelink's container number (1–6). The installer
+   bundles the config from this repo, runs `restore.sh`, and prints the
+   Beelink's LAN IP + smoke-test commands when it's done.
 
-4. After `restore.sh` finishes, from inside the container you can ssh
-   to the Beelink at its LAN IP:
+   No scp, no laptop-on-site, no landlord DHCP lease lookup required.
+   The Beelink pulls everything from `pool.honest.money` over its WAN.
+
+4. After it finishes, ssh to the Beelink from inside the container at
+   its LAN IP:
 
    ```bash
    ssh ubuntu@10.1.0.10        # container 1
@@ -188,10 +190,12 @@ For each of the 6 Beelinks:
    ```
 
 5. Power on the container's L9s. They'll DHCP from the Beelink into
-   `10.N.0.100+`. Configure their pool as
+   `10.N.0.20+`. Configure their pool as
    `stratum+tcp://10.N.0.10:3433`.
 
-Same script, one flag different per container. No hand-editing config files.
+Same one-liner per Beelink, only `--container N` changes. No hand-editing.
+
+
 
 ### Remote admin from your laptop
 
