@@ -91,54 +91,91 @@ systemctl daemon-reload
 echo "==> haproxy.cfg"
 install -m 0644 "$SRC_DIR/config/haproxy.cfg" /etc/haproxy/haproxy.cfg
 haproxy -c -f /etc/haproxy/haproxy.cfg
-
 # ---------------------------------------------------------------------------
-# Pre-flight: can this Beelink actually reach the upstream stratum?
-# We do this BEFORE touching netplan / NAT so a failure here is unambiguously
-# "landlord uplink / DNS / egress firewall", not something we caused.
-# Non-fatal by default (--strict-preflight to hard-fail) so a bad DNS moment
-# doesn't block the whole install.
+# Connectivity probe — used for both pre-flight (before netplan) and
+# post-flight (after netplan + ufw). Uses `nc` when available, falls back to
+# bash /dev/tcp. Retries a few times so a single DHCP hiccup isn't fatal.
 # ---------------------------------------------------------------------------
 UPSTREAM_HOST="stratum.pool.honest.money"
 UPSTREAM_PORT="3433"
-echo "==> pre-flight: DNS + TCP ${UPSTREAM_HOST}:${UPSTREAM_PORT}"
-PF_OK=1
-if ! getent hosts "$UPSTREAM_HOST" >/dev/null; then
-  echo "    !! DNS lookup for $UPSTREAM_HOST FAILED"
-  PF_OK=0
-else
-  echo "    DNS: $(getent hosts "$UPSTREAM_HOST" | awk '{print $1}' | paste -sd, -)"
-fi
-if timeout 5 bash -c "exec 3<>/dev/tcp/${UPSTREAM_HOST}/${UPSTREAM_PORT}" 2>/dev/null; then
-  echo "    TCP ${UPSTREAM_PORT}: OK"
-else
-  echo "    !! TCP connect to ${UPSTREAM_HOST}:${UPSTREAM_PORT} FAILED"
-  echo "       check landlord uplink / Archer outbound / AWS SG for this WAN IP:"
-  echo "       WAN egress IP: $(timeout 5 curl -fsS https://api.ipify.org 2>/dev/null || echo '?')"
-  PF_OK=0
-fi
-if [[ $PF_OK -ne 1 ]]; then
-  echo "    !! pre-flight FAILED — continuing anyway (fix uplink before pointing miners here)"
-fi
+
+probe_tcp() {
+  # probe_tcp <host> <port>  → 0 if any of 3 attempts connects
+  local host="$1" port="$2" i
+  for i in 1 2 3; do
+    if command -v nc >/dev/null 2>&1; then
+      if nc -w 4 -z "$host" "$port" >/dev/null 2>&1; then return 0; fi
+    else
+      if timeout 5 bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null; then return 0; fi
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+run_connectivity_check() {
+  # $1 = label ("pre-flight" | "post-install")
+  local label="$1"
+  echo "==> ${label}: DNS + TCP ${UPSTREAM_HOST}:${UPSTREAM_PORT}"
+  local ok=1 ips=""
+  if ips="$(getent hosts "$UPSTREAM_HOST" 2>/dev/null | awk '{print $1}' | paste -sd, -)" && [[ -n "$ips" ]]; then
+    echo "    DNS: $ips"
+  else
+    echo "    !! DNS lookup for $UPSTREAM_HOST FAILED"
+    ok=0
+  fi
+  if probe_tcp "$UPSTREAM_HOST" "$UPSTREAM_PORT"; then
+    echo "    TCP ${UPSTREAM_PORT} (by name): OK"
+  else
+    echo "    !! TCP ${UPSTREAM_HOST}:${UPSTREAM_PORT} FAILED"
+    # try each resolved IP directly to isolate DNS vs. routing
+    for ip in ${ips//,/ }; do
+      if probe_tcp "$ip" "$UPSTREAM_PORT"; then
+        echo "    TCP ${UPSTREAM_PORT} (direct $ip): OK  (DNS/resolver is the problem)"
+        ok=0
+        return 0
+      else
+        echo "    TCP ${UPSTREAM_PORT} (direct $ip): FAILED"
+      fi
+    done
+    echo "       WAN egress IP: $(timeout 5 curl -fsS https://api.ipify.org 2>/dev/null || echo '?')"
+    echo "       default route: $(ip -o -4 route show default | head -1 || echo none)"
+    ok=0
+  fi
+  if [[ $ok -ne 1 ]]; then
+    echo "    !! ${label} check did not fully pass"
+    return 1
+  fi
+  return 0
+}
+
+run_connectivity_check "pre-flight" || \
+  echo "    (continuing — will re-check after netplan + ufw)"
 
 # ---------------------------------------------------------------------------
 # Interface detection.
 # WAN = whatever holds the default route (DHCP from landlord).
 # LAN = the other physical ethernet.
+# Overridable with --wan=IFACE --lan=IFACE if auto-detect picks wrong.
 # ---------------------------------------------------------------------------
 detect_ifaces() {
-  WAN_IF="$(ip -o -4 route show default | awk '{print $5; exit}')"
-  LAN_IF="$(ip -o link show | awk -F': ' '{print $2}' \
+  if [[ -n "$FORCE_WAN" ]]; then WAN_IF="$FORCE_WAN"
+  else WAN_IF="$(ip -o -4 route show default | awk '{print $5; exit}')"
+  fi
+  if [[ -n "$FORCE_LAN" ]]; then LAN_IF="$FORCE_LAN"
+  else LAN_IF="$(ip -o link show | awk -F': ' '{print $2}' \
              | grep -E '^(en|eth)' | grep -v "^${WAN_IF}$" | head -1 || true)"
+  fi
 }
 
 if [[ $SKIP_NETPLAN -eq 0 ]]; then
   detect_ifaces
-  if [[ -z "${WAN_IF:-}" || -z "${LAN_IF:-}" ]]; then
-    echo "ERROR: could not detect two ethernet interfaces." >&2
+  if [[ -z "${WAN_IF:-}" || -z "${LAN_IF:-}" || "$WAN_IF" == "$LAN_IF" ]]; then
+    echo "ERROR: could not detect two distinct ethernet interfaces." >&2
     echo "  WAN_IF=$WAN_IF  LAN_IF=$LAN_IF" >&2
     echo "  ip -o link show:" >&2
     ip -o link show >&2
+    echo "  re-run with:  --wan=<iface> --lan=<iface>" >&2
     exit 3
   fi
   echo "==> netplan  WAN=$WAN_IF (dhcp)  LAN=$LAN_IF (static $LAN_CIDR)"
@@ -148,6 +185,9 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
       "$SRC_DIR/config/99-haproxy.yaml" > /etc/netplan/99-haproxy.yaml
   chmod 0600 /etc/netplan/99-haproxy.yaml
   netplan apply
+  # Give the WAN interface a moment to re-DHCP after netplan apply.
+  sleep 3
+
 
   echo "==> kea-dhcp4  (serving $LAN_POOL_START-$LAN_POOL_END on $LAN_IF)"
   install -d -m 0755 /etc/kea
