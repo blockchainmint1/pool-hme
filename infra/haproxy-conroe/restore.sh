@@ -80,6 +80,35 @@ install -m 0644 "$SRC_DIR/config/haproxy.cfg" /etc/haproxy/haproxy.cfg
 haproxy -c -f /etc/haproxy/haproxy.cfg
 
 # ---------------------------------------------------------------------------
+# Pre-flight: can this Beelink actually reach the upstream stratum?
+# We do this BEFORE touching netplan / NAT so a failure here is unambiguously
+# "landlord uplink / DNS / egress firewall", not something we caused.
+# Non-fatal by default (--strict-preflight to hard-fail) so a bad DNS moment
+# doesn't block the whole install.
+# ---------------------------------------------------------------------------
+UPSTREAM_HOST="stratum.pool.honest.money"
+UPSTREAM_PORT="3433"
+echo "==> pre-flight: DNS + TCP ${UPSTREAM_HOST}:${UPSTREAM_PORT}"
+PF_OK=1
+if ! getent hosts "$UPSTREAM_HOST" >/dev/null; then
+  echo "    !! DNS lookup for $UPSTREAM_HOST FAILED"
+  PF_OK=0
+else
+  echo "    DNS: $(getent hosts "$UPSTREAM_HOST" | awk '{print $1}' | paste -sd, -)"
+fi
+if timeout 5 bash -c "exec 3<>/dev/tcp/${UPSTREAM_HOST}/${UPSTREAM_PORT}" 2>/dev/null; then
+  echo "    TCP ${UPSTREAM_PORT}: OK"
+else
+  echo "    !! TCP connect to ${UPSTREAM_HOST}:${UPSTREAM_PORT} FAILED"
+  echo "       check landlord uplink / Archer outbound / AWS SG for this WAN IP:"
+  echo "       WAN egress IP: $(timeout 5 curl -fsS https://api.ipify.org 2>/dev/null || echo '?')"
+  PF_OK=0
+fi
+if [[ $PF_OK -ne 1 ]]; then
+  echo "    !! pre-flight FAILED — continuing anyway (fix uplink before pointing miners here)"
+fi
+
+# ---------------------------------------------------------------------------
 # Interface detection.
 # WAN = whatever holds the default route (DHCP from landlord).
 # LAN = the other physical ethernet.
