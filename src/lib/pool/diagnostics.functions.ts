@@ -47,6 +47,19 @@ export interface DiagLocation {
   hashrate: number;
 }
 
+export interface DiagSite {
+  site: string;
+  sessions: number;
+  is_known_site: boolean;
+}
+
+export interface DiagPayoutAddress {
+  address_short: string;
+  active_workers_1h: number;
+  share_weight_1h: number;
+  last_share: number;
+}
+
 export interface PoolDiagnostics {
   fetched_at: number;
   health: { ok: boolean; db: boolean };
@@ -58,7 +71,11 @@ export interface PoolDiagnostics {
   last_blocks: DiagLastBlock[];
   effort: DiagEffort[];
   locations: DiagLocation[];
+  sites: DiagSite[];
+  total_sessions: number;
+  payout_addresses: DiagPayoutAddress[];
 }
+
 
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
@@ -74,7 +91,7 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 
 export const getPoolDiagnostics = createServerFn({ method: "GET" }).handler(
   async (): Promise<PoolDiagnostics> => {
-    const [health, summary, locations] = await Promise.all([
+    const [health, summary, locations, sites, payoutAddrs] = await Promise.all([
       fetchJson<{ ok: boolean; db: boolean }>("/api/v1/health"),
       fetchJson<{
         stratum_live: Record<string, DiagStratumAlgo>;
@@ -87,6 +104,10 @@ export const getPoolDiagnostics = createServerFn({ method: "GET" }).handler(
         fetched_at: number;
       }>("/api/v1/pool/summary"),
       fetchJson<{ locations: DiagLocation[] }>("/api/v1/miners/locations"),
+      fetchJson<{ sites: DiagSite[]; total_sessions: number }>("/api/v1/miners/sites"),
+      fetchJson<{ payout_addresses: DiagPayoutAddress[] }>(
+        "/api/v1/pool/payout-addresses?limit=50",
+      ),
     ]);
 
     return {
@@ -100,6 +121,10 @@ export const getPoolDiagnostics = createServerFn({ method: "GET" }).handler(
       last_blocks: summary?.last_blocks ?? [],
       effort: summary?.effort ?? [],
       locations: locations?.locations ?? [],
+      sites: sites?.sites ?? [],
+      total_sessions: Number(sites?.total_sessions ?? 0),
+      payout_addresses: payoutAddrs?.payout_addresses ?? [],
     };
   },
 );
+

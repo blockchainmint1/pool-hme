@@ -156,8 +156,57 @@ function DiagnosticsPage() {
           />
         </Section>
 
+        {/* Payout addresses */}
+        <Section title="4 · Active payout addresses · last 1h">
+          {data.payout_addresses.length === 0 ? (
+            <p className="text-xs text-pool-steel font-mono px-3 py-4">
+              No share activity in the last hour, or yiimp-api hasn't been redeployed with v0.4.0 yet.
+            </p>
+          ) : (
+            <Table
+              head={["Payout address", "Active workers", "Share weight 1h", "Last share"]}
+              rows={data.payout_addresses.map((p) => [
+                p.address_short,
+                p.active_workers_1h.toLocaleString(),
+                p.share_weight_1h.toLocaleString(),
+                fmtAge(p.last_share, now),
+              ])}
+            />
+          )}
+          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
+            Sourced from the shares table (last-share time, not stratum connect time — so containers that
+            connected hours ago but are actively hashing still show up). Big rows = one Beelink/container;
+            single-worker rows are external one-off miners pointed at us.
+          </p>
+        </Section>
+
+        {/* Sessions by site */}
+        <Section title="5 · Live TCP sessions · by site">
+          {data.sites.length === 0 ? (
+            <p className="text-xs text-pool-steel font-mono px-3 py-4">
+              Session data unavailable — either yiimp-api v0.4.0 isn't deployed yet, or the `ss` probe
+              failed on the stratum host.
+            </p>
+          ) : (
+            <Table
+              head={["Site", "Sessions", "Status"]}
+              rows={data.sites.map((s) => [
+                s.site,
+                s.sessions.toLocaleString(),
+                s.is_known_site ? "known site" : "external / one-off",
+              ])}
+            />
+          )}
+          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
+            Live TCP peers on stratum port 3433 aggregated by known WAN egress. Total sessions:{" "}
+            <b>{data.total_sessions.toLocaleString()}</b>. Raw IPs never leave the box — only site labels
+            are returned. Known egresses: Conroe (209.34.50.105), Mansfield (97.154.36.156), McKinney
+            (99.107.246.68), plus Conroe haproxy (13.217.211.175).
+          </p>
+        </Section>
+
         {/* Geo rollup */}
-        <Section title="4 · Miners by region">
+        <Section title="6 · Miners by region">
           {data.locations.length === 0 ? (
             <p className="text-xs text-pool-steel font-mono px-3 py-4">
               No GeoIP data. Ensure geoip-lite DB is fresh on the yiimp-api box.
@@ -173,11 +222,8 @@ function DiagnosticsPage() {
               ])}
             />
           )}
-          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
-            Per-site (Conroe / Mansfield / McKinney) session counts by WAN IP aren't exposed yet — that's a
-            small yiimp-api addition. Ask and we'll add it.
-          </p>
         </Section>
+
       </div>
     </div>
   );
