@@ -888,6 +888,9 @@ app.get("/api/v1/openapi.json", async () => ({
     "/api/v1/miners/count": { get: { summary: "live stratum clients (correct miner count)" } },
     "/api/v1/miners/top": { get: { summary: "leaderboard (addresses truncated)" } },
     "/api/v1/miners/locations": { get: { summary: "country/region rollup (no IPs)" } },
+    "/api/v1/miners/sites": { get: { summary: "live TCP sessions per site (no IPs)" } },
+    "/api/v1/pool/payout-addresses": { get: { summary: "active workers by payout address (1h)" } },
+
     "/api/v1/miner/{address}": { get: { summary: "miner summary" } },
     "/api/v1/miner/{address}/workers": { get: { summary: "worker list with country/region" } },
     "/api/v1/miner/{address}/hashrate": { get: { summary: "miner hashrate time-series" } },
