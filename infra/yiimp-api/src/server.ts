@@ -30,12 +30,14 @@ import {
   stratumEvents,
 } from "./stratum-live.js";
 import { aggregateGeo, lookupGeo } from "./geoip.js";
+import { getSessionsBySite } from "./sessions.js";
 import {
   minerHashrateSeries,
   poolHashrateSeries,
   windowConfig,
   type Window,
 } from "./hashstats.js";
+
 
 const PORT = Number(process.env.YIIMP_API_PORT ?? 8787);
 const BIND = process.env.YIIMP_API_BIND ?? "127.0.0.1";
@@ -612,6 +614,53 @@ app.get("/api/v1/miners/locations", async () => {
   );
   return { locations: buckets };
 });
+
+/**
+ * Per-site live TCP session counts on the stratum host. Aggregates the
+ * output of `ss` into site labels — never returns raw IPs.
+ */
+app.get("/api/v1/miners/sites", async () => {
+  const sites = await getSessionsBySite();
+  return {
+    sites,
+    total_sessions: sites.reduce((s, r) => s + r.sessions, 0),
+  };
+});
+
+/**
+ * Active payout addresses over the last 1h, based on the shares table
+ * (workers.time is stale — connection time, not last-share). This is
+ * the honest "who's actually hashing right now, grouped by payout addr"
+ * view. Addresses are truncated to protect account privacy — the short
+ * form is stable per address so operators can identify their own.
+ */
+app.get<{ Querystring: { limit?: string } }>(
+  "/api/v1/pool/payout-addresses",
+  async (req) => {
+    const limit = clampLimit(req.query.limit, 50, 200);
+    const [rows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT u.username AS address,
+              COUNT(DISTINCT s.workerid) AS active_workers_1h,
+              ROUND(SUM(s.difficulty),0) AS share_weight_1h,
+              MAX(s.time) AS last_share
+         FROM shares s JOIN accounts u ON u.id = s.userid
+        WHERE s.valid = 1 AND s.time > UNIX_TIMESTAMP() - 3600
+        GROUP BY u.id
+        ORDER BY share_weight_1h DESC
+        LIMIT ?`,
+      [limit],
+    );
+    return {
+      payout_addresses: rows.map((r) => ({
+        address_short: truncateAddress(String(r.address)),
+        active_workers_1h: Number(r.active_workers_1h ?? 0),
+        share_weight_1h: Number(r.share_weight_1h ?? 0),
+        last_share: Number(r.last_share ?? 0),
+      })),
+    };
+  },
+);
+
 
 // Existing per-miner endpoints (kept, both prefixes)
 app.get<{ Params: { address: string } }>(
