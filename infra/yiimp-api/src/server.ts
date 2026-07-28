@@ -68,6 +68,47 @@ const pool = mysql.createPool({
   namedPlaceholders: false,
 });
 
+/**
+ * This yiimp fork's `workers` table does not have a `hashrate` column, and
+ * column names vary between forks. Detect once at runtime and build a SQL
+ * expression we can splice into queries (identifier comes from
+ * information_schema, never from user input).
+ */
+let workersColsCache: Set<string> | null = null;
+async function workersColumns(): Promise<Set<string>> {
+  if (workersColsCache) return workersColsCache;
+  try {
+    const [rows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workers'`,
+    );
+    workersColsCache = new Set(rows.map((r) => String(r.COLUMN_NAME)));
+  } catch {
+    workersColsCache = new Set<string>();
+  }
+  return workersColsCache;
+}
+
+/** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
+async function workerHashrateExpr(alias = "w"): Promise<string> {
+  const cols = await workersColumns();
+  for (const c of ["hashrate", "speed", "hashrate_bad"]) {
+    if (cols.has(c)) return `COALESCE(${alias}.${c}, 0)`;
+  }
+  // Fall back to difficulty-based estimate over the last share window.
+  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 65536 / 600`;
+  return `0`;
+}
+
+/** Column list for worker detail rows, skipping columns this fork lacks. */
+async function workerDetailCols(alias = "w"): Promise<string[]> {
+  const cols = await workersColumns();
+  return ["worker", "algo", "difficulty", "subscribe_time", "time", "shares", "rejects", "stales", "ip"]
+    .filter((c) => cols.has(c))
+    .map((c) => `${alias}.${c}`);
+}
+
+
 const ADDR_RE = /^[A-Za-z0-9]{20,80}$/;
 const SYMBOL_RE = /^[A-Za-z0-9]{2,10}$/;
 const ALGO_RE = /^[a-z0-9_-]{2,20}$/;
@@ -583,9 +624,10 @@ app.get("/api/v1/miners/count", async () => {
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) => {
   const limit = clampLimit(req.query.limit, 50, 200);
+  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT a.username AS address,
-            SUM(w.hashrate) AS hashrate,
+            SUM(${hrExpr}) AS hashrate,
             COUNT(*) AS workers,
             MAX(w.time) AS last_share,
             w.algo
@@ -613,10 +655,11 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) =
  * Never returns per-IP or per-address data.
  */
 app.get("/api/v1/miners/locations", async () => {
+  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT w.ip AS ip,
             COUNT(DISTINCT w.userid) AS miner_count,
-            SUM(COALESCE(w.hashrate, 0)) AS hashrate
+            SUM(${hrExpr}) AS hashrate
        FROM shares s
        JOIN workers w ON w.id = s.workerid
       WHERE s.time > UNIX_TIMESTAMP() - 600
@@ -701,8 +744,9 @@ async function minerSummary(address: string, reply: import("fastify").FastifyRep
   const account = accountRows[0];
   if (!account) return reply.code(404).send({ error: "not found" });
 
+  const hrAgg = await workerHashrateExpr("workers");
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT algo, COUNT(*) AS workers_online, SUM(hashrate) AS hashrate,
+    `SELECT algo, COUNT(*) AS workers_online, SUM(${hrAgg}) AS hashrate,
             MAX(time) AS last_share
        FROM workers WHERE userid = ? AND time > UNIX_TIMESTAMP() - 600
       GROUP BY algo`,
@@ -758,13 +802,12 @@ app.get<{ Params: { address: string } }>(
 
 async function minerWorkers(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
+  const hrExpr = await workerHashrateExpr("w");
+  const detailCols = await workerDetailCols("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT w.id, w.worker, w.algo, w.hashrate, w.difficulty,
-            w.subscribe_time AS connected_since,
-            w.time AS last_share,
-            w.shares, w.rejects, w.stales, w.ip
+    `SELECT w.id, ${detailCols.join(", ")}, ${hrExpr} AS hashrate
        FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE a.username = ? ORDER BY w.hashrate DESC LIMIT 500`,
+      WHERE a.username = ? ORDER BY hashrate DESC LIMIT 500`,
     [address],
   );
   // Owner endpoint: include country+region but never the raw IP. If an
@@ -773,9 +816,15 @@ async function minerWorkers(address: string, reply: import("fastify").FastifyRep
   const enriched = rows.map((r) => {
     const rec = r as unknown as Record<string, unknown> & { ip?: string | null };
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ip, ...rest } = rec;
+    const { ip, subscribe_time, time, ...rest } = rec;
     const { country, region } = lookupGeo(rec.ip);
-    return { ...rest, country, region };
+    return {
+      ...rest,
+      connected_since: subscribe_time ?? null,
+      last_share: time ?? null,
+      country,
+      region,
+    };
   });
   return { workers: enriched };
 }
