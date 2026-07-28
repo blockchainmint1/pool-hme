@@ -654,10 +654,11 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) =
  * Never returns per-IP or per-address data.
  */
 app.get("/api/v1/miners/locations", async () => {
+  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT w.ip AS ip,
             COUNT(DISTINCT w.userid) AS miner_count,
-            SUM(COALESCE(w.hashrate, 0)) AS hashrate
+            SUM(${hrExpr}) AS hashrate
        FROM shares s
        JOIN workers w ON w.id = s.workerid
       WHERE s.time > UNIX_TIMESTAMP() - 600
