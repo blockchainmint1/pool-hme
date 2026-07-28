@@ -329,14 +329,12 @@ function PoolHero() {
           >
             Connect a miner <ArrowUpRight className="size-4" />
           </a>
-          <a
-            href="https://pool.texitcoin.org/site/dogeRegister"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to="/register"
             className="inline-flex items-center gap-2 rounded-md border border-pool-hairline pool-tick text-pool-steel-hi px-4 py-2.5 text-sm font-medium hover:pool-graphite-2 transition"
           >
             Register LTC/DOGE <ChevronRight className="size-4" />
-          </a>
+          </Link>
           <span className="text-[11px] font-mono text-pool-steel ml-auto">
             <ShieldCheck className="inline size-3.5 -mt-0.5 mr-1 text-pool-mint" />
             self-hosted · no custody · no logs
