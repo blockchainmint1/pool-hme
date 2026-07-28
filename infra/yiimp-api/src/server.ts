@@ -609,18 +609,27 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) =
 });
 
 /**
- * Country/region rollup. Uses server-side GeoIP on the account IP.
+ * Country/region rollup. Uses server-side GeoIP on worker IPs from recent shares.
  * Never returns per-IP or per-address data.
  */
 app.get("/api/v1/miners/locations", async () => {
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT a.IP AS ip, SUM(w.hashrate) AS hashrate
-       FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE w.time > UNIX_TIMESTAMP() - 600
-      GROUP BY a.id`,
+    `SELECT w.ip AS ip,
+            COUNT(DISTINCT w.userid) AS miner_count,
+            SUM(COALESCE(w.hashrate, 0)) AS hashrate
+       FROM shares s
+       JOIN workers w ON w.id = s.workerid
+      WHERE s.time > UNIX_TIMESTAMP() - 600
+        AND w.ip IS NOT NULL
+        AND w.ip <> ''
+      GROUP BY w.ip`,
   );
   const buckets = aggregateGeo(
-    rows.map((r) => ({ ip: r.ip as string | null, hashrate: Number(r.hashrate ?? 0) })),
+    rows.map((r) => ({
+      ip: r.ip as string | null,
+      miner_count: Number(r.miner_count ?? 0),
+      hashrate: Number(r.hashrate ?? 0),
+    })),
   );
   return { locations: buckets };
 });
