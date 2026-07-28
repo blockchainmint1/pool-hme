@@ -893,16 +893,45 @@ async function minerEarnings(
 ) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
   const limit = clampLimit(limitRaw, 100, 500);
+
+  // Yiimp forks disagree on earnings column names — detect at runtime.
+  const cols = await tableColumns("earnings");
+  if (cols.size === 0) return { earnings: [] };
+
+  const userCol = pickCol(cols, ["userid", "user_id", "account_id", "accountid"]);
+  if (!userCol) return { earnings: [] };
+
+  const timeCol = pickCol(cols, ["time", "create_time", "createdat", "created_at", "insert_time"]);
+  const blockCol = pickCol(cols, ["blockid", "block_id", "idblock"]);
+  const coinCol = pickCol(cols, ["coinid", "coin_id", "idcoin"]);
+  const amountCol = pickCol(cols, ["amount", "value"]);
+  const statusCol = pickCol(cols, ["status", "state"]);
+
+  const timeExpr = timeCol ? `e.\`${timeCol}\`` : "NULL";
+  const sel = [
+    "e.id",
+    `${amountCol ? `e.\`${amountCol}\`` : "0"} AS amount`,
+    `${timeExpr} AS time`,
+    `${blockCol ? `e.\`${blockCol}\`` : "NULL"} AS blockid`,
+    `${statusCol ? `e.\`${statusCol}\`` : "NULL"} AS status`,
+    "b.height",
+    "b.blockhash",
+    "b.algo",
+    "c.symbol",
+    "c.name",
+  ].join(", ");
+
   const [rows] = await pool.query(
-    `SELECT e.id, e.amount, e.time, e.blockid, e.status,
-            b.height, b.blockhash, b.algo, c.symbol, c.name
-       FROM earnings e JOIN accounts a ON a.id = e.userid
-       LEFT JOIN blocks b ON b.id = e.blockid
-       LEFT JOIN coins c ON c.id = e.coinid
-      WHERE a.username = ? ORDER BY e.time DESC LIMIT ?`,
+    `SELECT ${sel}
+       FROM earnings e JOIN accounts a ON a.id = e.\`${userCol}\`
+       LEFT JOIN blocks b ON b.id = ${blockCol ? `e.\`${blockCol}\`` : "NULL"}
+       LEFT JOIN coins c ON c.id = ${coinCol ? `e.\`${coinCol}\`` : "NULL"}
+      WHERE a.username = ?
+      ORDER BY ${timeCol ? timeExpr : "e.id"} DESC LIMIT ?`,
     [address, limit],
   );
   return { earnings: rows };
+
 }
 
 // ============================================================================
