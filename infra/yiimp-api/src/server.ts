@@ -68,6 +68,47 @@ const pool = mysql.createPool({
   namedPlaceholders: false,
 });
 
+/**
+ * This yiimp fork's `workers` table does not have a `hashrate` column, and
+ * column names vary between forks. Detect once at runtime and build a SQL
+ * expression we can splice into queries (identifier comes from
+ * information_schema, never from user input).
+ */
+let workersColsCache: Set<string> | null = null;
+async function workersColumns(): Promise<Set<string>> {
+  if (workersColsCache) return workersColsCache;
+  try {
+    const [rows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workers'`,
+    );
+    workersColsCache = new Set(rows.map((r) => String(r.COLUMN_NAME)));
+  } catch {
+    workersColsCache = new Set<string>();
+  }
+  return workersColsCache;
+}
+
+/** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
+async function workerHashrateExpr(alias = "w"): Promise<string> {
+  const cols = await workersColumns();
+  for (const c of ["hashrate", "speed", "hashrate_bad"]) {
+    if (cols.has(c)) return `COALESCE(${alias}.${c}, 0)`;
+  }
+  // Fall back to difficulty-based estimate over the last share window.
+  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 65536 / 600`;
+  return `0`;
+}
+
+/** Column list for worker detail rows, skipping columns this fork lacks. */
+async function workerDetailCols(alias = "w"): Promise<string[]> {
+  const cols = await workersColumns();
+  return ["worker", "algo", "difficulty", "subscribe_time", "time", "shares", "rejects", "stales", "ip"]
+    .filter((c) => cols.has(c))
+    .map((c) => `${alias}.${c}`);
+}
+
+
 const ADDR_RE = /^[A-Za-z0-9]{20,80}$/;
 const SYMBOL_RE = /^[A-Za-z0-9]{2,10}$/;
 const ALGO_RE = /^[a-z0-9_-]{2,20}$/;
