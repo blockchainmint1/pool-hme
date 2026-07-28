@@ -20,6 +20,7 @@ import { Route as GraphsRouteImport } from './routes/graphs'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as BlocksRouteImport } from './routes/blocks'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
@@ -133,6 +134,11 @@ const DiagnosticsRoute = DiagnosticsRouteImport.update({
 const BlocksRoute = BlocksRouteImport.update({
   id: '/blocks',
   path: '/blocks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -438,6 +444,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
@@ -510,6 +517,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
@@ -582,6 +590,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
@@ -656,6 +665,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/about'
+    | '/account'
     | '/blocks'
     | '/diagnostics'
     | '/docs'
@@ -728,6 +738,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/about'
+    | '/account'
     | '/blocks'
     | '/diagnostics'
     | '/docs'
@@ -799,6 +810,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/about'
+    | '/account'
     | '/blocks'
     | '/diagnostics'
     | '/docs'
@@ -872,6 +884,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   AboutRoute: typeof AboutRoute
+  AccountRoute: typeof AccountRoute
   BlocksRoute: typeof BlocksRoute
   DiagnosticsRoute: typeof DiagnosticsRoute
   DocsRoute: typeof DocsRoute
@@ -999,6 +1012,13 @@ declare module '@tanstack/react-router' {
       path: '/blocks'
       fullPath: '/blocks'
       preLoaderRoute: typeof BlocksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -1535,6 +1555,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   AboutRoute: AboutRoute,
+  AccountRoute: AccountRoute,
   BlocksRoute: BlocksRoute,
   DiagnosticsRoute: DiagnosticsRoute,
   DocsRoute: DocsRoute,

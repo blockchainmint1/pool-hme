@@ -163,6 +163,7 @@ function Footer() {
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Explore</div>
           <ul className="space-y-1">
             <li><Link to="/" className="hover:text-primary">Pool</Link></li>
+            <li><Link to="/account" search={{ address: "" }} className="hover:text-primary">My account</Link></li>
             <li><a href="#workers" className="hover:text-primary">Workers</a></li>
             <li><a href="#blocks" className="hover:text-primary">Found blocks</a></li>
             <li><a href="#connect" className="hover:text-primary">Connect a miner</a></li>
