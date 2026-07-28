@@ -322,8 +322,8 @@ function AccountPage() {
                       <th className="px-3 py-2 text-left">Algo</th>
                       <th className="px-3 py-2 text-right">Hashrate</th>
                       <th className="px-3 py-2 text-right">Diff</th>
-                      <th className="px-3 py-2 text-right">Shares</th>
-                      <th className="px-3 py-2 text-right">Rejects</th>
+                      <th className="px-3 py-2 text-right">Shares 10m</th>
+                      <th className="px-3 py-2 text-right">Rejects 10m</th>
                       <th className="px-3 py-2 text-left">Last share</th>
                       <th className="px-3 py-2 text-left">Status</th>
                     </tr>
@@ -337,14 +337,17 @@ function AccountPage() {
                           <td className="px-3 py-2">{w.algo ?? "—"}</td>
                           <td className="px-3 py-2 text-right">{fmtHash(Number(w.hashrate ?? 0))}</td>
                           <td className="px-3 py-2 text-right">{Number(w.difficulty ?? 0)}</td>
-                          <td className="px-3 py-2 text-right">{Number(w.shares ?? 0)}</td>
-                          <td className="px-3 py-2 text-right">{Number(w.rejects ?? 0)}</td>
-                          <td className="px-3 py-2">{fmtTime(w.last_share)}</td>
+                          <td className="px-3 py-2 text-right">{Number(w.shares_10m ?? 0)}</td>
+                          <td className="px-3 py-2 text-right">{Number(w.rejects_10m ?? 0)}</td>
+                          <td className="px-3 py-2">
+                            {w.last_share ? fmtTime(w.last_share) : "—"}
+                          </td>
                           <td className={`px-3 py-2 ${st.cls}`}>{st.label}</td>
                         </tr>
                       );
                     })}
                   </tbody>
+
                 </table>
               </div>
             )}
