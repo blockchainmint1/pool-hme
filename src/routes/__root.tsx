@@ -167,6 +167,8 @@ function Footer() {
             <li><a href="#workers" className="hover:text-primary">Workers</a></li>
             <li><a href="#blocks" className="hover:text-primary">Found blocks</a></li>
             <li><a href="#connect" className="hover:text-primary">Connect a miner</a></li>
+            <li><Link to="/pool-api" className="hover:text-primary">Pool API</Link></li>
+
           </ul>
         </div>
         <div>
