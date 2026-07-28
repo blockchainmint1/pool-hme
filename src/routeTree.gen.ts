@@ -13,6 +13,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as RichlistRouteImport } from './routes/richlist'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PoolApiRouteImport } from './routes/pool-api'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
@@ -105,6 +106,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoolApiRoute = PoolApiRouteImport.update({
+  id: '/pool-api',
+  path: '/pool-api',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MiningRoute = MiningRouteImport.update({
@@ -488,6 +494,7 @@ export interface FileRoutesByFullPath {
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
+  '/pool-api': typeof PoolApiRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
@@ -566,6 +573,7 @@ export interface FileRoutesByTo {
   '/graphs': typeof GraphsRoute
   '/manifesto': typeof ManifestoRoute
   '/mining': typeof MiningRoute
+  '/pool-api': typeof PoolApiRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
@@ -646,6 +654,7 @@ export interface FileRoutesById {
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
+  '/pool-api': typeof PoolApiRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
@@ -727,6 +736,7 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/mempool'
     | '/mining'
+    | '/pool-api'
     | '/privacy'
     | '/register'
     | '/richlist'
@@ -805,6 +815,7 @@ export interface FileRouteTypes {
     | '/graphs'
     | '/manifesto'
     | '/mining'
+    | '/pool-api'
     | '/privacy'
     | '/register'
     | '/richlist'
@@ -884,6 +895,7 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/mempool'
     | '/mining'
+    | '/pool-api'
     | '/privacy'
     | '/register'
     | '/richlist'
@@ -964,6 +976,7 @@ export interface RootRouteChildren {
   ManifestoRoute: typeof ManifestoRoute
   MempoolRoute: typeof MempoolRouteWithChildren
   MiningRoute: typeof MiningRoute
+  PoolApiRoute: typeof PoolApiRoute
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   RichlistRoute: typeof RichlistRoute
@@ -1041,6 +1054,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pool-api': {
+      id: '/pool-api'
+      path: '/pool-api'
+      fullPath: '/pool-api'
+      preLoaderRoute: typeof PoolApiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mining': {
@@ -1683,6 +1703,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManifestoRoute: ManifestoRoute,
   MempoolRoute: MempoolRouteWithChildren,
   MiningRoute: MiningRoute,
+  PoolApiRoute: PoolApiRoute,
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   RichlistRoute: RichlistRoute,
@@ -1734,3 +1755,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
