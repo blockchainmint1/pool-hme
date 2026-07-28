@@ -204,7 +204,7 @@ echo
 echo "=== verification ==="
 $LCLI getwalletinfo
 echo "new address : $NEW_ADDR"
-echo "old seed at : $LTC_DIR/wallet.dat.old-seed-$STAMP"
+echo "old seed at : $OLD_WALLET"
 systemctl --no-pager -l status stratum-aws-scrypt | head -12
 echo
 cat <<NEXT
