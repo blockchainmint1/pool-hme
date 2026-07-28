@@ -160,7 +160,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.1" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -171,7 +171,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.1" };
 });
 
 // ============================================================================
@@ -1030,7 +1030,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.5.0",
+    version: "0.5.1",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
