@@ -129,16 +129,6 @@ function Header() {
             HME POOL
           </div>
         </Link>
-        <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
-          <Link
-            to="/"
-            activeOptions={{ exact: true }}
-            className="px-3 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:surface-2 transition-colors"
-            activeProps={{ className: "px-3 py-1.5 rounded-sm text-foreground bg-surface-2" }}
-          >
-            Pool
-          </Link>
-        </nav>
         <div className="flex-1 flex justify-end items-center gap-2">
           <PriceTicker />
           <ThemeToggle />
