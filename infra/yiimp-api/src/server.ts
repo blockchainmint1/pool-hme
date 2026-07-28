@@ -788,14 +788,19 @@ async function minerSummary(address: string, reply: import("fastify").FastifyRep
   if (!account) return reply.code(404).send({ error: "not found" });
 
 
-  const hrAgg = await workerHashrateExpr("workers");
+  // Per-algo rollup from live shares, not the stale `workers` rows.
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT algo, COUNT(*) AS workers_online, SUM(${hrAgg}) AS hashrate,
-            MAX(time) AS last_share
-       FROM workers WHERE userid = ? AND time > UNIX_TIMESTAMP() - 600
-      GROUP BY algo`,
+    `SELECT w.algo AS algo,
+            COUNT(DISTINCT ls.workerid) AS workers_online,
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate,
+            MAX(ls.last_share) AS last_share
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+      WHERE w.userid = ?
+      GROUP BY w.algo`,
     [account.id],
   );
+
   const [payoutAgg] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT COALESCE(SUM(amount),0) AS total_paid,
             COUNT(*) AS payout_count, MAX(time) AS last_payout
