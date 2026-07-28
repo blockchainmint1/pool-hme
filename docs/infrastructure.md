@@ -15,9 +15,9 @@
 | Pool frontend (this repo)            | TanStack Start app · `src/routes/`                                             |
 | Stratum server host                  | `ubuntu@stratum.pool.honest.money` (AWS EC2 · `ip-172-31-83-232`)                 |
 | Stratum binaries & runtime files     | `/var/stratum/` on the host                                                    |
-| Stratum config (rendered)            | `/var/stratum/config/scrypt.conf` (fallback: `/var/stratum/scrypt.conf`)       |
+| Stratum config (rendered, LIVE)      | `/var/stratum/scrypt.conf` — the `config/` dir is retired (`config.UNUSED-20260715`) |
 | Stratum config (source of truth)     | Ansible: `infra/stratum-stack/` · template `scrypt.conf.j2`                    |
-| Stratum log                          | `/var/stratum/scrypt.log`                                                      |
+| Stratum log                          | `/var/stratum/scrypt.log` (systemd `StandardOutput`/`StandardError=append:`) — there is NO `/var/stratum/log/` dir |
 | Systemd unit                         | `stratum-aws-scrypt.service`                                                   |
 | Stratum port (scrypt / LTC)          | `3433`                                                                         |
 | Public stratum URL                   | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                 |
