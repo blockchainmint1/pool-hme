@@ -220,7 +220,7 @@ app.get<{ Params: { symbol: string } }>(
     const [rows] = await pool.query<mysql.RowDataPacket[]>(
       `SELECT id, name, symbol, algo, enable, visible, auto_ready,
               price, difficulty, network_hash, reward,
-              txfee AS pool_fee, mining_fee, deposit_minimum
+              txfee AS pool_fee, deposit_minimum
          FROM coins
         WHERE symbol = ?
         LIMIT 1`,
