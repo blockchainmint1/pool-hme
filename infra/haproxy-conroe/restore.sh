@@ -16,10 +16,12 @@
 # Addressing plan — each container gets a UNIQUE LAN subnet so `ssh 10.X.0.10`
 # from your laptop (when on-site or via a CPE port forward) is unambiguous:
 #
-#   Container 1  →  Beelink 10.1.0.10/24  →  miners 10.1.0.100-.254
-#   Container 2  →  Beelink 10.2.0.10/24  →  miners 10.2.0.100-.254
+#   Container 1  →  Beelink 10.1.0.10/24  →  miners 10.1.0.100-.254   (Conroe)
+#   Container 2  →  Beelink 10.2.0.10/24  →  miners 10.2.0.100-.254   (Conroe)
 #   ...
-#   Container 6  →  Beelink 10.6.0.10/24  →  miners 10.6.0.100-.254
+#   Container 6  →  Beelink 10.6.0.10/24  →  miners 10.6.0.100-.254   (Conroe)
+#   Container 7  →  Beelink 10.7.0.10/24  →  miners 10.7.0.100-.254   (McKinney)
+#   Container 8  →  Beelink 10.8.0.10/24  →  miners 10.8.0.100-.254   (Mansfield)
 #
 set -euo pipefail
 
