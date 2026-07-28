@@ -28,6 +28,7 @@ import { Route as MempoolIndexRouteImport } from './routes/mempool.index'
 import { Route as V1DefaultRouteImport } from './routes/v1.default'
 import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
+import { Route as ApiWalletRouteImport } from './routes/api/wallet'
 import { Route as ApiTxRouteImport } from './routes/api/tx'
 import { Route as ApiStatusRouteImport } from './routes/api/status'
 import { Route as ApiFeeEstimatesRouteImport } from './routes/api/fee-estimates'
@@ -176,6 +177,11 @@ const TxTxidRoute = TxTxidRouteImport.update({
 const BlockHashRoute = BlockHashRouteImport.update({
   id: '/block/$hash',
   path: '/block/$hash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWalletRoute = ApiWalletRouteImport.update({
+  id: '/api/wallet',
+  path: '/api/wallet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTxRoute = ApiTxRouteImport.update({
@@ -473,6 +479,7 @@ export interface FileRoutesByFullPath {
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
+  '/api/wallet': typeof ApiWalletRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -547,6 +554,7 @@ export interface FileRoutesByTo {
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
+  '/api/wallet': typeof ApiWalletRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -623,6 +631,7 @@ export interface FileRoutesById {
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
+  '/api/wallet': typeof ApiWalletRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -700,6 +709,7 @@ export interface FileRouteTypes {
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
+    | '/api/wallet'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -774,6 +784,7 @@ export interface FileRouteTypes {
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
+    | '/api/wallet'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -849,6 +860,7 @@ export interface FileRouteTypes {
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
+    | '/api/wallet'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -925,6 +937,7 @@ export interface RootRouteChildren {
   ApiFeeEstimatesRoute: typeof ApiFeeEstimatesRoute
   ApiStatusRoute: typeof ApiStatusRoute
   ApiTxRoute: typeof ApiTxRouteWithChildren
+  ApiWalletRoute: typeof ApiWalletRoute
   BlockHashRoute: typeof BlockHashRoute
   TxTxidRoute: typeof TxTxidRoute
   V1DefaultRoute: typeof V1DefaultRoute
@@ -1094,6 +1107,13 @@ declare module '@tanstack/react-router' {
       path: '/block/$hash'
       fullPath: '/block/$hash'
       preLoaderRoute: typeof BlockHashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/wallet': {
+      id: '/api/wallet'
+      path: '/api/wallet'
+      fullPath: '/api/wallet'
+      preLoaderRoute: typeof ApiWalletRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tx': {
@@ -1612,6 +1632,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFeeEstimatesRoute: ApiFeeEstimatesRoute,
   ApiStatusRoute: ApiStatusRoute,
   ApiTxRoute: ApiTxRouteWithChildren,
+  ApiWalletRoute: ApiWalletRoute,
   BlockHashRoute: BlockHashRoute,
   TxTxidRoute: TxTxidRoute,
   V1DefaultRoute: V1DefaultRoute,
