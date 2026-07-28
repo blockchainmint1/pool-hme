@@ -74,20 +74,29 @@ const pool = mysql.createPool({
  * expression we can splice into queries (identifier comes from
  * information_schema, never from user input).
  */
-let workersColsCache: Set<string> | null = null;
-async function workersColumns(): Promise<Set<string>> {
-  if (workersColsCache) return workersColsCache;
+const colsCache = new Map<string, Set<string>>();
+async function tableColumns(table: string): Promise<Set<string>> {
+  const cached = colsCache.get(table);
+  if (cached) return cached;
+  let set = new Set<string>();
   try {
     const [rows] = await pool.query<mysql.RowDataPacket[]>(
       `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workers'`,
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table],
     );
-    workersColsCache = new Set(rows.map((r) => String(r.COLUMN_NAME)));
+    set = new Set(rows.map((r) => String(r.COLUMN_NAME)));
   } catch {
-    workersColsCache = new Set<string>();
+    set = new Set<string>();
   }
-  return workersColsCache;
+  colsCache.set(table, set);
+  return set;
 }
+
+async function workersColumns(): Promise<Set<string>> {
+  return tableColumns("workers");
+}
+
 
 /** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
 async function workerHashrateExpr(alias = "w"): Promise<string> {
@@ -151,7 +160,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.1" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -162,7 +171,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.1" };
 });
 
 // ============================================================================
@@ -736,13 +745,19 @@ app.get<{ Params: { address: string } }>(
 
 async function minerSummary(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
+  // Column names vary between yiimp forks (`pending` is absent on this one).
+  const accCols = await tableColumns("accounts");
+  const optional = ["coinid", "balance", "pending", "paid", "last_login"].filter((c) =>
+    accCols.has(c),
+  );
   const [accountRows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT id, username, coinid, balance, pending, paid, last_login
+    `SELECT id, username${optional.length ? ", " + optional.join(", ") : ""}
        FROM accounts WHERE username = ? LIMIT 1`,
     [address],
   );
   const account = accountRows[0];
   if (!account) return reply.code(404).send({ error: "not found" });
+
 
   const hrAgg = await workerHashrateExpr("workers");
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
@@ -1015,7 +1030,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.5.0",
+    version: "0.5.1",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
