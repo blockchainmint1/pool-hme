@@ -25,7 +25,9 @@ export interface AccountWorker {
 
 export interface AccountAlgo {
   algo: string;
-  workers: number;
+  /** yiimp-api aggregates online workers under this key. */
+  workers_online?: number;
+  workers?: number;
   hashrate: number;
   last_share: number;
 }

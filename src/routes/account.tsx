@@ -136,7 +136,7 @@ function AccountPage() {
 
   const data = q.data;
   const totalHash = data?.algos.reduce((s, a) => s + Number(a.hashrate ?? 0), 0) ?? 0;
-  const totalWorkers = data?.algos.reduce((s, a) => s + Number(a.workers ?? 0), 0) ?? 0;
+  const totalWorkers = data?.algos.reduce((s, a) => s + Number(a.workers_online ?? a.workers ?? 0), 0) ?? 0;
   const onlineWorkers =
     data?.workers.filter((w) => workerStatus(w).label === "online").length ?? 0;
 
