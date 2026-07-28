@@ -228,10 +228,11 @@ function AccountPage() {
             />
             <Tile
               label="Workers"
-              value={String(totalWorkers || data.workers.length)}
-              sub={data.algos.map((a) => a.algo).join(", ") || "—"}
+              value={`${onlineWorkers} online`}
+              sub={`${totalWorkers} on record · ${data.algos.map((a) => a.algo).join(", ") || "—"}`}
               icon={<Users className="size-3.5" />}
             />
+
           </div>
 
           {data.hashrate_24h.length > 1 ? (
