@@ -15,9 +15,9 @@
 | Pool frontend (this repo)            | TanStack Start app · `src/routes/`                                             |
 | Stratum server host                  | `ubuntu@stratum.pool.honest.money` (AWS EC2 · `ip-172-31-83-232`)                 |
 | Stratum binaries & runtime files     | `/var/stratum/` on the host                                                    |
-| Stratum config (rendered)            | `/var/stratum/config/scrypt.conf` (fallback: `/var/stratum/scrypt.conf`)       |
+| Stratum config (rendered, LIVE)      | `/var/stratum/scrypt.conf` — the `config/` dir is retired (`config.UNUSED-20260715`) |
 | Stratum config (source of truth)     | Ansible: `infra/stratum-stack/` · template `scrypt.conf.j2`                    |
-| Stratum log                          | `/var/stratum/scrypt.log`                                                      |
+| Stratum log                          | `/var/stratum/scrypt.log` (systemd `StandardOutput`/`StandardError=append:`) — there is NO `/var/stratum/log/` dir |
 | Systemd unit                         | `stratum-aws-scrypt.service`                                                   |
 | Stratum port (scrypt / LTC)          | `3433`                                                                         |
 | Public stratum URL                   | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                 |
@@ -40,7 +40,9 @@ render from Ansible and reload the unit.
 | `LIVE2`, `TXC3`                   | Named build snapshots (TXC3 = TEXITcoin-aware build)                    |
 | `aws`                             | AWS-tuned build                                                         |
 | `3h-logs`, `3h-logs-updated`      | Build variants with 3-hour log rotation                                 |
-| `config/scrypt.conf`              | Rendered runtime config (from Ansible)                                  |
+| `scrypt.conf`                     | **Live** runtime config (rendered from Ansible). `config/` is retired.  |
+| `config.UNUSED-20260715/`         | Old config dir — NOT read by the running service. Do not edit.          |
+| `logs/`                           | Per-coin/rotated artifacts. **Not** the main log.                       |
 | `scrypt.log`                      | Live log; grep here for `set_difficulty`, `aux submit`, `SCRYPT summary diag` |
 
 ## 2b. Coin daemons — binaries, datadirs, wallets (NOT on $PATH)
@@ -67,6 +69,21 @@ Notes:
 - LTC block rewards pay `coins.master_wallet` for the `LTC` row in the
   `yiimpfrontend` DB — rotating the seed without updating that row sends rewards
   to an address the old seed controls.
+- `systemctl start litecoind` can exit **non-zero** with `Can't open PID file …
+  Operation not permitted` while the daemon actually started fine. Never treat
+  that exit code as failure — poll `$LCLI getwalletinfo` instead.
+
+### Hot-wallet rotation log
+
+| Coin | Date       | New pool address                     | Old seed kept at                                  |
+| ---- | ---------- | ------------------------------------ | ------------------------------------------------- |
+| DOGE | 2026-07-2x | `DBBv9bpnNV6tjJDM8q6MpiVPPhjpvatCJT` | swept                                              |
+| LTC  | 2026-07-28 | `LTyp1No4skV378NbYrR7p6d7wRzDCHgFAa` | `~/.litecoin/wallets/pool.old-seed-20260728-085324` (6.27 LTC immature — sweep after ~100 confs) |
+
+Rotation blips the share error rate to 30–50% for the 2–3 minutes the daemon is
+down (all `error=21`, stale/job-not-found). It settles back under ~1% within
+5 minutes. That is expected, not a regression.
+
 
 ## 3. Scrypt merged-mining coin set
 
