@@ -97,6 +97,13 @@ async function workersColumns(): Promise<Set<string>> {
   return tableColumns("workers");
 }
 
+/** first column name present in `cols`, else null */
+function pickCol(cols: Set<string>, candidates: string[]): string | null {
+  for (const c of candidates) if (cols.has(c)) return c;
+  return null;
+}
+
+
 
 /** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
 async function workerHashrateExpr(alias = "w"): Promise<string> {
