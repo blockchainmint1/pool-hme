@@ -121,27 +121,74 @@ start_ltc() {
   for _ in $(seq 1 180); do $LCLI getwalletinfo >/dev/null 2>&1 && return 0; sleep 1; done
   echo "FATAL: litecoind did not come back"; exit 1
 }
+# never leave the parent chain daemon down if we bail mid-way
+on_err() {
+  echo "ERROR: aborting -- bringing litecoind back up"
+  pgrep -x litecoind >/dev/null || { [ -n "$LTC_SVC" ] && systemctl start "$LTC_SVC" || sudo -u ubuntu "$LTC_BIN/litecoind" -conf="$LTC_DIR/litecoin.conf" -daemon; } || true
+}
+trap on_err ERR
+
+# --- resolve where wallet.dat actually lives -----------------------------------
+# Core 0.17+ keeps wallets under <datadir>/wallets/. A `wallet=<name>` line in
+# litecoin.conf means <datadir>/wallets/<name>/wallet.dat (this box: wallet=pool).
+WALLET_NAME="$(sed -n 's/^[[:space:]]*wallet=\(.*\)$/\1/p' "$LTC_DIR/litecoin.conf" 2>/dev/null | head -1)"
+if [ -n "$WALLET_NAME" ] && [ -f "$LTC_DIR/wallets/$WALLET_NAME/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallets/$WALLET_NAME/wallet.dat"
+elif [ -f "$LTC_DIR/wallets/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallets/wallet.dat"; WALLET_NAME=""
+elif [ -f "$LTC_DIR/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallet.dat"; WALLET_NAME=""
+else
+  echo "FATAL: no wallet.dat found under $LTC_DIR (checked wallets/<name>/, wallets/, datadir root)"
+  exit 1
+fi
+log "wallet file: $WALLET_PATH  (named wallet: ${WALLET_NAME:-<default>})"
 
 log "stopping litecoind (service='${LTC_SVC:-manual}')"
 stop_ltc
 
 log "moving old wallet aside"
-mv "$LTC_DIR/wallet.dat" "$LTC_DIR/wallet.dat.old-seed-$STAMP"
-chmod 600 "$LTC_DIR/wallet.dat.old-seed-$STAMP"
+OLD_WALLET="$WALLET_PATH.old-seed-$STAMP"
+mv "$WALLET_PATH" "$OLD_WALLET"
+chmod 600 "$OLD_WALLET"
 
-log "starting litecoind with a fresh wallet"
-start_ltc
+if [ -n "$WALLET_NAME" ]; then
+  # Named wallet: the daemon refuses to start when wallets/<name>/wallet.dat is
+  # gone, so boot once from a temp conf with the wallet= line stripped, create a
+  # fresh ENCRYPTED wallet under the same name, then hand back to the service.
+  TMP_CONF="$LTC_DIR/litecoin.conf.rotate-$STAMP"
+  grep -v '^[[:space:]]*wallet=' "$LTC_DIR/litecoin.conf" > "$TMP_CONF"
+  chown ubuntu:ubuntu "$TMP_CONF"; chmod 644 "$TMP_CONF"
+  TCLI="$LTC_BIN/litecoin-cli -conf=$TMP_CONF -datadir=$LTC_DIR"
+  log "starting litecoind (temp conf, no wallet loaded)"
+  sudo -u ubuntu "$LTC_BIN/litecoind" -conf="$TMP_CONF" -datadir="$LTC_DIR" -daemon
+  for _ in $(seq 1 180); do $TCLI getblockcount >/dev/null 2>&1 && break; sleep 1; done
+  rmdir "$LTC_DIR/wallets/$WALLET_NAME" 2>/dev/null || true
+  log "creating fresh encrypted wallet '$WALLET_NAME'"
+  $TCLI createwallet "$WALLET_NAME" false false "$WALLET_PASSPHRASE" false
+  $TCLI -rpcwallet="$WALLET_NAME" walletpassphrase "$WALLET_PASSPHRASE" 120 >/dev/null
+  NEW_ADDR=$($TCLI -rpcwallet="$WALLET_NAME" getnewaddress "pool-coinbase-$STAMP" legacy 2>/dev/null \
+             || $TCLI -rpcwallet="$WALLET_NAME" getnewaddress "pool-coinbase-$STAMP")
+  $TCLI -rpcwallet="$WALLET_NAME" walletlock >/dev/null 2>&1 || true
+  $TCLI stop >/dev/null 2>&1 || true
+  for _ in $(seq 1 90); do pgrep -x litecoind >/dev/null || break; sleep 1; done
+  rm -f "$TMP_CONF"
+  log "starting litecoind under the normal service/conf"
+  start_ltc
+else
+  log "starting litecoind with a fresh wallet"
+  start_ltc
+  log "encrypting new wallet"
+  $LCLI encryptwallet "$WALLET_PASSPHRASE" || true
+  sleep 5
+  for _ in $(seq 1 120); do pgrep -x litecoind >/dev/null || break; sleep 1; done
+  pgrep -x litecoind >/dev/null || start_ltc
+  log "unlocking briefly to derive the new pool address"
+  $LCLI walletpassphrase "$WALLET_PASSPHRASE" 120 >/dev/null
+  NEW_ADDR=$($LCLI getnewaddress "pool-coinbase-$STAMP" legacy 2>/dev/null || $LCLI getnewaddress "pool-coinbase-$STAMP")
+  $LCLI walletlock >/dev/null 2>&1 || true
+fi
 
-log "encrypting new wallet"
-$LCLI encryptwallet "$WALLET_PASSPHRASE" || true
-sleep 5
-for _ in $(seq 1 120); do pgrep -x litecoind >/dev/null || break; sleep 1; done
-pgrep -x litecoind >/dev/null || start_ltc
-
-log "unlocking briefly to derive the new pool address"
-$LCLI walletpassphrase "$WALLET_PASSPHRASE" 120 >/dev/null
-NEW_ADDR=$($LCLI getnewaddress "pool-coinbase-$STAMP" legacy 2>/dev/null || $LCLI getnewaddress "pool-coinbase-$STAMP")
-$LCLI walletlock >/dev/null 2>&1 || true
 [ -n "$NEW_ADDR" ] || { echo "FATAL: could not derive a new address"; exit 1; }
 log "new LTC pool address: $NEW_ADDR"
 
