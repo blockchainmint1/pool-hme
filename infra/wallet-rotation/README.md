@@ -40,24 +40,33 @@ So rotation = replace the daemon wallet, not edit a config value.
 
 ## Order of operations
 
-Run these in order. Out of order you either lose funds or halt payouts.
+Chosen path: **rotate seeds now, sweep later.** Balances stay in the old
+wallets until everything is confirmed running on the new seeds and all immature
+coinbases have matured.
 
-| # | Script | What it does | Mining impact |
-|---|---|---|---|
-| 0 | — | Create cold DOGE + LTC addresses on hardware you control. Send a test tx **from** them to prove you can spend. | none |
-| 1 | `01-sweep.sh` | Sweep spendable balance to cold, keep a float | none |
-| 2 | `02-rotate-seed.sh` | New encrypted wallet per daemon, old file retained | ~60s daemon restart |
-| 3 | `03-patch-payout-cron.sh` | Teach `doge-payout-cycle.sh` to unlock before `payoutSend` | none |
-| 4 | `04-auto-sweep.sh` | Cron keeping the hot wallet at the float | none |
-| 5 | `05-revoke.sh` | Remove stale key files; prints the AWS IAM checklist | none |
+| # | Script | Status | What it does | Mining impact |
+|---|---|---|---|---|
+| 0 | — | **required** | Create cold DOGE + LTC addresses on hardware you control. Send a test tx **from** them to prove you can spend. | none |
+| 1 | `01-sweep.sh` | **deferred** | Sweep balances to cold — run later, once new seeds are proven and old coinbases have matured | none |
+| 2 | `02-rotate-seed.sh` | **run now** | New encrypted wallet per daemon (DOGE, then LTC), old file retained | ~60s daemon restart |
+| 3 | `03-patch-payout-cron.sh` | **run now** | Teach `doge-payout-cycle.sh` to unlock before `payoutSend` | none |
+| 4 | `04-auto-sweep.sh` | **skipped** | Cron keeping the hot wallet at a float — revisit after step 1 | none |
+| 5 | `05-revoke.sh` | **run now** | Remove stale key files; prints the AWS IAM checklist | none |
+
+### TXC / ISK / ZCU
+
+Not rotated. Their coinbase destinations are fixed at the chain level, so a new
+local seed changes nothing about where rewards land and risks breaking payouts.
+Only DOGE (`getauxblock` → local keypool) and LTC (`getblocktemplate` → local
+`pool` wallet) derive their payout addresses from a rotatable seed.
 
 Best window is immediately after a payout cycle finishes — the cron runs every
 5 minutes, so check the lock file is clear first.
 
-**Keep the old wallet files.** Immature coinbases still belong to the old seed
-and need ~240 confirmations before they can be swept. `02` moves the old file
-aside rather than deleting it; there is a later sweep step in `01` you re-run
-once those mature.
+**Keep the old wallet files.** All current balances plus immature coinbases
+still belong to the old seed. `02` moves the old file aside rather than
+deleting it; `01` is re-run against it later to sweep everything out.
+
 
 ## Safety model
 

@@ -63,9 +63,12 @@ Plan for DOGE (dogecoind):
   4. encryptwallet '<passphrase>'        (daemon auto-restarts, new seed on encrypt)
   5. print new hdmasterkeyid + a sample receive address
 
-LTC / TXC / ISK use the same shape but a per-wallet directory
-($LTC_DIR/wallets/pool/). Rotate DOGE first, confirm a block lands in the new
-wallet, then repeat for the others.
+LTC uses the same shape but a per-wallet directory ($LTC_DIR/wallets/pool/).
+Rotate DOGE first, confirm a block lands in the new wallet, then repeat for LTC.
+
+TXC / ISK / ZCU are NOT rotated here: their coinbase destinations are fixed at
+the chain/consensus level, so a new local seed would not change where rewards
+land and could break payouts. Leave those wallets as-is.
 
 PLAN
 
