@@ -14,6 +14,8 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 **Share counting IS working** — DB `shares` table reflects submissions correctly (valid/invalid/stale counts populate). The `SCRYPT summary diag active=0 valid=0` log line is a broken/stale in-memory counter, NOT a broken pipeline. Do NOT diagnose share-counting bugs from that log line — always cross-check `SELECT ... FROM shares WHERE time > UNIX_TIMESTAMP()-300`.
 **Conroe uplink monitoring**: healthy = ~325+ sessions from 209.34.50.105 (or 13.217.211.175 via haproxy). If per-site session breakdown shows ONLY Mansfield (97.154.36.156) + McKinney (99.107.246.68) and no Conroe IP, Conroe uplink is DOWN — call the site before debugging code.
 
+Coin daemon CLIs are NOT on $PATH: LTC `/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf` (wallet `wallets/pool/wallet.dat`, `wallet=pool`); DOGE `/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf` (wallet.dat at datadir root).
+
 ## Memories
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
 - [yiimp-api deploy](mem://infra/yiimp-api-deploy.md) — How to publish updates to the yiimp-api service (bundle → publish → curl-pipe installer); DB is `yiimpfrontend`; hashstats schema notes
@@ -23,3 +25,4 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 - [Stratum build & ZCU aux patch](mem://infra/stratum-build.md) — Parallel-make link race on algos/sha3 libs; always verify `stratum` mtime before install; `coind_create_job()` early-return patch for ZCU merge-mining.
 - [Stratum source trees](mem://infra/stratum-source-trees.md) — **Authoritative** as of 2026-07-20: running `/var/stratum/stratum` (2026-07-19 17:13) is built from `LIVE-FINAL/`. `perfect1/` has an unused `coind_aux.cpp` merkle-narrowing patch; `live-aux-issue-doge/` is stale scratch. Edit LIVE-FINAL only.
 - [Fleet topology](mem://infra/fleet-topology.md) — 6× Foghashing BC40 containers @ 200 L9s each = 1200 total, Beelink NAT per container, shared WAN 209.34.50.105.
+- [Coin daemon paths](mem://infra/coin-daemon-paths.md) — litecoin-cli/dogecoin-cli full paths, datadirs, wallet file layout, systemd units, passphrase file
