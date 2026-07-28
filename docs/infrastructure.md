@@ -43,7 +43,33 @@ render from Ansible and reload the unit.
 | `config/scrypt.conf`              | Rendered runtime config (from Ansible)                                  |
 | `scrypt.log`                      | Live log; grep here for `set_difficulty`, `aux submit`, `SCRYPT summary diag` |
 
+## 2b. Coin daemons — binaries, datadirs, wallets (NOT on $PATH)
+
+There is **no `litecoin-cli` / `dogecoin-cli` on `$PATH`**. Always use the full
+path plus `-conf=`. Copy-paste these:
+
+```bash
+LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf"
+DCLI="/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf"
+$LCLI getblockcount; $DCLI getblockcount
+```
+
+| Coin | CLI / daemon binaries              | Datadir               | Wallet file                                    | systemd unit |
+| ---- | ---------------------------------- | --------------------- | ---------------------------------------------- | ------------ |
+| LTC  | `/home/ubuntu/litecoin-0.21.4/bin/` | `/home/ubuntu/.litecoin` | `wallets/pool/wallet.dat` (`wallet=pool` in conf — Core 0.17+ layout, **not** datadir root) | `litecoind` |
+| DOGE | `/home/ubuntu/dogecoin-1.14.9/bin/` | `/home/ubuntu/.dogecoin` | `wallet.dat` at datadir root (1.14 legacy layout) | `dogecoind` |
+
+Notes:
+- Wallet passphrase for both lives in `/etc/pool-wallets/passphrase.env` (`WALLET_PASSPHRASE`), mode 600.
+- LTC uses a **named** wallet, so RPCs may need `-rpcwallet=pool`, and a rotation
+  can't just recreate `wallet.dat` — the daemon refuses to start with a missing
+  named wallet (see `infra/wallet-rotation/04-rotate-ltc.sh` temp-conf dance).
+- LTC block rewards pay `coins.master_wallet` for the `LTC` row in the
+  `yiimpfrontend` DB — rotating the seed without updating that row sends rewards
+  to an address the old seed controls.
+
 ## 3. Scrypt merged-mining coin set
+
 
 All five share a single scrypt work unit. Only TXC / ISK / ZCU are actually
 *found* by this pool — LTC and DOGE come in as auxpow credit.
