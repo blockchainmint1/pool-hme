@@ -742,8 +742,9 @@ async function minerSummary(address: string, reply: import("fastify").FastifyRep
   const account = accountRows[0];
   if (!account) return reply.code(404).send({ error: "not found" });
 
+  const hrAgg = await workerHashrateExpr("workers");
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT algo, COUNT(*) AS workers_online, SUM(hashrate) AS hashrate,
+    `SELECT algo, COUNT(*) AS workers_online, SUM(${hrAgg}) AS hashrate,
             MAX(time) AS last_share
        FROM workers WHERE userid = ? AND time > UNIX_TIMESTAMP() - 600
       GROUP BY algo`,
