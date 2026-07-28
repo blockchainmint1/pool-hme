@@ -40,22 +40,38 @@ fi
 
 # --- yiimp DB creds (for updating coins.master_wallet) -------------------------
 YIIMP_KEYS="${YIIMP_KEYS:-/var/web/serverconfig.php}"
-db_query() { mysql --defaults-file=/etc/mysql/debian.cnf -N -B -e "$1" 2>/dev/null; }
-if ! db_query "select 1" >/dev/null 2>&1; then
-  MYSQL_USER="${MYSQL_USER:-}"; MYSQL_PASS="${MYSQL_PASS:-}"; MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
+php_def() { sed -n "s/.*define( *'$1' *, *'\([^']*\)').*/\1/p" "$YIIMP_KEYS" 2>/dev/null | head -1; }
+MYSQL_DB="${MYSQL_DB:-}"
+if [ -z "$MYSQL_DB" ] && [ -r "$YIIMP_KEYS" ]; then MYSQL_DB=$(php_def YAAMP_DBNAME); fi
+MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
+
+DB_MODE=""
+# 1) debian maintenance account (must be able to read the yiimp DB, not just connect)
+if mysql --defaults-file=/etc/mysql/debian.cnf "$MYSQL_DB" -N -B -e "select 1" >/dev/null 2>&1; then
+  DB_MODE="debian"
+  db_query() { mysql --defaults-file=/etc/mysql/debian.cnf "$MYSQL_DB" -N -B -e "$1"; }
+else
+  # 2) explicit env creds, else yiimp serverconfig.php
+  MYSQL_USER="${MYSQL_USER:-}"; MYSQL_PASS="${MYSQL_PASS:-}"
   if [ -z "$MYSQL_USER" ] && [ -r "$YIIMP_KEYS" ]; then
-    # yiimp stores these as: define('YAAMP_DBUSER', '<user>');
-    php_def() { sed -n "s/.*define( *'$1' *, *'\([^']*\)').*/\1/p" "$YIIMP_KEYS" | head -1; }
     MYSQL_USER=$(php_def YAAMP_DBUSER)
     MYSQL_PASS=$(php_def YAAMP_DBPASSWORD)
-    MYSQL_DB=$(php_def YAAMP_DBNAME); MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
   fi
   db_query() { mysql -u"$MYSQL_USER" -p"$MYSQL_PASS" "$MYSQL_DB" -N -B -e "$1"; }
+  if [ -n "$MYSQL_USER" ] && db_query "select 1" >/dev/null 2>&1; then DB_MODE="yiimp:$MYSQL_USER"; fi
 fi
 
-CUR_MASTER=$(db_query "select master_wallet from coins where symbol='LTC' limit 1" 2>/dev/null || true)
+CUR_MASTER=""
+if [ -n "$DB_MODE" ]; then
+  CUR_MASTER=$(db_query "select master_wallet from coins where symbol='LTC' limit 1" 2>/dev/null || true)
+fi
 if [ -z "$CUR_MASTER" ]; then
   echo "FATAL: cannot read coins.master_wallet for LTC."
+  echo "  db      : $MYSQL_DB"
+  echo "  auth    : ${DB_MODE:-none worked}"
+  echo "  config  : $YIIMP_KEYS $([ -r "$YIIMP_KEYS" ] && echo '(readable)' || echo '(NOT readable - run with sudo)')"
+  echo "  user    : ${MYSQL_USER:-<empty>}  pass:$([ -n "${MYSQL_PASS:-}" ] && echo ' set' || echo ' <empty>')"
+  echo "Diagnose:  sudo mysql -u<user> -p<pass> $MYSQL_DB -e \"select symbol,master_wallet from coins where symbol='LTC'\""
   echo "Rotating without DB write access would leave block rewards paying the OLD seed."
   echo "Fix creds (or export MYSQL_USER/MYSQL_PASS) and re-run."
   exit 1
