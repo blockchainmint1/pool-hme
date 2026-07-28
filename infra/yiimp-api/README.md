@@ -176,3 +176,80 @@ The Lovable front-end exposes a thin proxy at
 with CORS and edge caching. See `src/lib/api/yiimp.ts` and
 `src/routes/api/v1/pool.*.ts`.
 
+
+## v0.5.0 — DOGE payout registration (write path)
+
+Reimplements yiimp's `dogeRegister` form so it can be served from
+pool.honest.money. Writes the exact same rows as the PHP page: `accounts`
+(zero-balance LTC account) → `doge_token_history` (token burned forever) →
+`doge_address_links`. The payout pipeline is untouched.
+
+**It ships inert.** `DOGE_REGISTER_ENABLED=0` by default.
+
+### 1. Create the write-scoped MySQL user
+
+```sql
+CREATE USER 'yiimp_reg'@'localhost' IDENTIFIED BY 'PASTE_A_LONG_RANDOM_PASSWORD';
+GRANT SELECT, INSERT         ON yiimpfrontend.accounts           TO 'yiimp_reg'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON yiimpfrontend.doge_address_links TO 'yiimp_reg'@'localhost';
+GRANT SELECT, INSERT         ON yiimpfrontend.doge_token_history TO 'yiimp_reg'@'localhost';
+GRANT SELECT                 ON yiimpfrontend.coins              TO 'yiimp_reg'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+No `DELETE` anywhere. `yiimp_api` stays SELECT-only and is used for every
+read endpoint, including the registration lookup.
+
+### 2. Env
+
+Add to `/etc/yiimp-api/env`:
+
+```
+MYSQL_REG_USER=yiimp_reg
+MYSQL_REG_PASSWORD=<the password above>
+REGISTER_CAPTCHA_SECRET=<openssl rand -hex 32>
+DOGE_REGISTER_ENABLED=0
+```
+
+The service user must be able to read `litecoin.conf` / `dogecoin.conf` for
+`validateaddress`, otherwise set `LTC_RPC_USER` / `LTC_RPC_PASSWORD` and the
+DOGE equivalents explicitly.
+
+### 3. Verify before flipping the switch
+
+```bash
+curl -s https://api.stratum.pool.honest.money/api/v1/doge/status | jq
+# expect: {"enabled":false,"rpc":{"ltc":true,"doge":true}}
+```
+
+Both `rpc` flags must be `true`. If either is false the endpoint will return
+503 rather than write a half-verified row.
+
+Then back up and flip:
+
+```bash
+mysqldump yiimpfrontend accounts doge_address_links doge_token_history \
+  > /var/backups/doge-links-$(date +%Y%m%d-%H%M%S).sql
+sed -i 's/^DOGE_REGISTER_ENABLED=0/DOGE_REGISTER_ENABLED=1/' /etc/yiimp-api/env
+systemctl restart yiimp-api
+```
+
+Register one throwaway pair at https://pool.honest.money/register, then:
+
+```sql
+SELECT * FROM doge_address_links ORDER BY id DESC LIMIT 1;
+SELECT * FROM doge_token_history ORDER BY id DESC LIMIT 1;
+SELECT id, username, coinid, coinsymbol, balance FROM accounts ORDER BY id DESC LIMIT 1;
+```
+
+Shape must match the existing 41 rows. Only then redirect the old PHP page.
+
+### Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/doge/status` | is registration on, are both daemons reachable |
+| GET | `/api/v1/doge/captcha` | signed, stateless, one-shot, 10 min TTL |
+| GET | `/api/v1/doge/registration/lookup?ltc=` | masked DOGE address, never the token |
+| POST | `/api/v1/doge/register` | returns the token exactly once |
+| GET | `/api/v1/doge/token/status?token=` | has the stratum seen this dogelink |
