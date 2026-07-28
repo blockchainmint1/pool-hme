@@ -44,7 +44,7 @@ db_query() { mysql --defaults-file=/etc/mysql/debian.cnf -N -B -e "$1" 2>/dev/nu
 if ! db_query "select 1" >/dev/null 2>&1; then
   MYSQL_USER="${MYSQL_USER:-}"; MYSQL_PASS="${MYSQL_PASS:-}"; MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
   if [ -z "$MYSQL_USER" ] && [ -r "$YIIMP_KEYS" ]; then
-    # yiimp defines these as: define('YAAMP_DBUSER', 'panel');
+    # yiimp stores these as: define('YAAMP_DBUSER', '<user>');
     php_def() { sed -n "s/.*define( *'$1' *, *'\([^']*\)').*/\1/p" "$YIIMP_KEYS" | head -1; }
     MYSQL_USER=$(php_def YAAMP_DBUSER)
     MYSQL_PASS=$(php_def YAAMP_DBPASSWORD)
