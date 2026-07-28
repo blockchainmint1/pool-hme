@@ -736,13 +736,19 @@ app.get<{ Params: { address: string } }>(
 
 async function minerSummary(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
+  // Column names vary between yiimp forks (`pending` is absent on this one).
+  const accCols = await tableColumns("accounts");
+  const optional = ["coinid", "balance", "pending", "paid", "last_login"].filter((c) =>
+    accCols.has(c),
+  );
   const [accountRows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT id, username, coinid, balance, pending, paid, last_login
+    `SELECT id, username${optional.length ? ", " + optional.join(", ") : ""}
        FROM accounts WHERE username = ? LIMIT 1`,
     [address],
   );
   const account = accountRows[0];
   if (!account) return reply.code(404).send({ error: "not found" });
+
 
   const hrAgg = await workerHashrateExpr("workers");
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
