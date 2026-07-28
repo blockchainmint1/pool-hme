@@ -49,7 +49,9 @@ export function lookupGeo(ip: string | null | undefined): GeoRow {
  * Aggregate a list of IPs into a country+region rollup. Never returns
  * per-IP data.
  */
-export function aggregateGeo<T extends { ip: string | null | undefined; hashrate: number }>(
+export function aggregateGeo<
+  T extends { ip: string | null | undefined; hashrate: number; miner_count?: number },
+>(
   rows: T[],
 ): { country: string; region: string; miner_count: number; hashrate: number }[] {
   const bucket = new Map<
@@ -59,12 +61,18 @@ export function aggregateGeo<T extends { ip: string | null | undefined; hashrate
   for (const r of rows) {
     const { country, region } = lookupGeo(r.ip);
     const key = `${country}/${region}`;
+    const minerCount = Number(r.miner_count ?? 1);
     const b = bucket.get(key);
     if (b) {
-      b.miner_count += 1;
+      b.miner_count += minerCount;
       b.hashrate += Number(r.hashrate ?? 0);
     } else {
-      bucket.set(key, { country, region, miner_count: 1, hashrate: Number(r.hashrate ?? 0) });
+      bucket.set(key, {
+        country,
+        region,
+        miner_count: minerCount,
+        hashrate: Number(r.hashrate ?? 0),
+      });
     }
   }
   return [...bucket.values()].sort((a, b) => b.hashrate - a.hashrate);

@@ -43,6 +43,21 @@ mkdir -p "$ENV_DIR"
 if [[ ! -f "$ENV_DIR/env" ]]; then
   cp "$SRC_DIR/.env.example" "$ENV_DIR/env"
   echo "!! Wrote $ENV_DIR/env from template — edit MYSQL_PASSWORD before starting."
+else
+  echo "   preserving existing $ENV_DIR/env; appending missing template keys only"
+  ADDED_ENV_KEYS=0
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    key="${line%%=*}"
+    if ! grep -qE "^${key}=" "$ENV_DIR/env"; then
+      printf '\n%s\n' "$line" >> "$ENV_DIR/env"
+      echo "   + $key"
+      ADDED_ENV_KEYS=1
+    fi
+  done < "$SRC_DIR/.env.example"
+  if [[ "$ADDED_ENV_KEYS" == "0" ]]; then
+    echo "   no missing env keys"
+  fi
 fi
 chown root:"$SERVICE_USER" "$ENV_DIR/env"
 chmod 640 "$ENV_DIR/env"
