@@ -1,106 +1,61 @@
-# Track 1: Expand yiimp-api (this turn)
+## What your dump told us
 
-Building out the yiimp-api service on `stratum.pool.honest.money` so the frontend, third-party dashboards, and the SDK all have real data. Tracks 2–4 (miner reg flow, graph rebuild, workers/locations page) come after this ships.
+**Wallet keys**
+- Only `/home/ubuntu/.dogecoin/wallet.dat` exists at depth ≤4. `litecoind` runs with `-conf=/home/ubuntu/.litecoin/litecoin.conf`, so its wallet is almost certainly `/home/ubuntu/.litecoin/wallet.dat` or `.litecoin/wallets/wallet.dat` — the find just missed it (or the datadir is elsewhere in the conf). Worth one more targeted check.
+- No `litecoin-cli` / `dogecoin-cli` on PATH, but the binaries exist next to the daemons (`/home/ubuntu/litecoin-0.21.4/bin/`, `/home/ubuntu/dogecoin-1.14.9/bin/`). Use the full path; don't install anything.
+- `coins` table has no `wallet` column in this schema — the pool addresses live in the stratum config and/or `coins.master_wallet`/`coins.rpcuser`-adjacent columns. We'll read `SHOW COLUMNS FROM coins` once rather than guessing again.
 
-## The 4 answers that shape this build
+**Registration contract (now fully known)**
+1. POST only, IP rate-limited, captcha.
+2. Format pre-check: LTC = `ltc1…` bech32 or `[LM3]…` base58; DOGE = `[DA9]…` base58 (mainnet mode).
+3. Authoritative check: `validateaddress` RPC on each daemon.
+4. Duplicate check against `doge_address_links`.
+5. Transaction: insert zero-balance row in `accounts` (username = LTC address, coinid/coinsymbol = LTC) → mint token → insert `doge_address_links`.
+6. Token = `strtoupper(substr(bin2hex(random_bytes(16)),0,24))` → 24 hex chars, uppercase. Every token ever issued is burned into `doge_token_history` (UNIQUE key) so it can never be reissued.
+7. Miner passes `dogelink=<TOKEN>` as the stratum password; `DogePayoutCommand::scanTokens` sets `token_last_seen` from `workers.password`, and payouts require `token_required` + a fresh `token_last_seen`.
 
-1. **Active miner = live stratum clients**, not the `workers` MySQL table. The workers table keeps stale rows for hours after disconnect — that's why the number looks wrong. Truth is the `clients=` field on `SCRYPT summary diag` lines emitted every minute by the stratum daemon.
-2. **Locations = country + region from GeoIP**, raw IPs stay admin-only (never in a public response).
-3. **API's unique value = pool-native + merged-mining + realtime + SDK.** All four. Explorer/mempool can't see any of this.
-4. **Scope order:** finish the endpoints first, then everything else has real data to render.
+Nothing in the payout path reads the *web form* — it only reads those three tables. So we can reimplement registration on our side without touching the payout pipeline at all.
 
-## New endpoints on `api.stratum.pool.honest.money`
+## Plan
 
-Read-only, versioned under `/api/v1/*`. Existing `/api/*` stays as a legacy alias for one release.
-
-### Pool-native
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/v1/pool/summary` | one-shot dashboard payload: hashrate per algo, active clients per algo, blocks 24h, last block per coin, luck, fees, effort |
-| `GET /api/v1/pool/hashrate?window=1h\|24h\|7d\|30d` | time-series from `hashstats` (yiimp's own rollup) — pool total + per-algo |
-| `GET /api/v1/pool/blocks/luck?window=24h\|7d\|30d` | actual vs expected blocks per coin (uses network difficulty) |
-| `GET /api/v1/pool/effort` | current round effort per coin: shares since last block ÷ network difficulty |
-| `GET /api/v1/coins/:symbol` | one coin: algo, block reward, network diff, network hashrate, current price (from `coins.price` col), fee, min payout |
-| `GET /api/v1/coins/:symbol/blocks?limit=100` | pool-found blocks for that coin |
-
-### Merged-mining truth (the thing nobody else surfaces)
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/v1/mergedmining/summary` | for each scrypt block round: primary chain solved (TXC/ISK/ZCU), and which auxpow chains (LTC/DOGE) also credited in the same time window |
-| `GET /api/v1/mergedmining/credits?limit=200` | flat feed of every credit event across all 5 coins, source: auxpow vs solo, so consumers can reconstruct "one hash → 5 coins" |
-
-### Miners & workers (with corrected counts)
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/v1/miners/top?limit=50` | leaderboard: address (truncated), hashrate 1h, workers online, algo — no IPs |
-| `GET /api/v1/miners/count` | live from stratum diag: `{scrypt: {clients, active, accepted_ghs}}` — the real "active miners" number |
-| `GET /api/v1/miners/locations` | aggregate `{country, region, miner_count, hashrate}[]` from GeoIP over live IPs; no per-address geo in public response |
-| `GET /api/v1/miner/:address/summary` | already exists — extend with 1h/24h hashrate history |
-| `GET /api/v1/miner/:address/workers` | already exists — add `country_code`, `region` (from live stratum IP+GeoIP), hashrate history |
-| `GET /api/v1/miner/:address/hashrate?window=24h\|7d` | per-miner time-series |
-
-### Realtime
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/v1/stream` (SSE) | server-sent events: `block-found`, `share-batch`, `hashrate-tick`, `client-connected`, `client-disconnected`. SSE first (works everywhere, one-way); WS upgrade later if needed |
-
-## Server-side implementation
-
-### Fixing the miner count
-
-Add `scrapeStratumSummaries()` variants for all active algos, parse `clients` / `active` / `accepted_ghs` / `valid` / `invalid` from the last summary line of each `${algo}.log` in `STRATUM_LOG_DIR`. Cache 30s. Expose at `/api/v1/miners/count` and inline into `/api/v1/pool/summary`.
-
-### GeoIP
-
-Add `geoip-lite` (embedded MaxMind Lite DB, ~30 MB, refreshed monthly via cron). Look up `accounts.IP` on demand, drop octets before returning, aggregate before any public response.
-
-### hashstats time-series
-
-yiimp's `hashstats` table has per-algo hashrate samples every ~2 min. Query with time bucketing.
-
-### SSE stream
-
-Fastify `reply.sse()` via `fastify-sse-v2`. Tail stratum log + poll `blocks`/`workers` deltas, fan out. Backpressure: bounded per-connection queue, drop oldest.
-
-## Frontend wiring (this turn)
-
-- Update `src/lib/pool/pool.functions.ts`: swap `/api/*` calls to `/api/v1/*`, add `getPoolLive` server fn that hits `/api/v1/pool/summary` and `/api/v1/miners/count` in parallel.
-- Wire `blocks24h`, active miners, and per-coin last-block time on the homepage to live numbers.
-- Fix the `17m/18m ago` SSR-vs-client hydration mismatch by rendering relative times only after mount.
-
-## Public docs
-
-- `GET /api/v1/openapi.json` — machine-readable spec (generated from Fastify schemas).
-- Add `docs/api.md` in this repo with copy-pasteable curl examples for every endpoint.
-- Publish `@honestmoney/pool-sdk` (TypeScript, works in Node + browser, WS auto-reconnect) — repo scaffold in `infra/pool-sdk/`. Publish to npm in a later turn.
-
-## Deploy path
-
-I edit `infra/yiimp-api/src/server.ts` + package.json in this repo. Then you run on the box:
-
+### 1. Write-scoped DB user (new, does not disturb anything)
+Create `yiimp_reg` with the minimum grants:
 ```
-cd ~/yiimp-api && git pull && bun install && sudo systemctl restart yiimp-api
+SELECT, INSERT           ON yiimpfrontend.accounts
+SELECT, INSERT, UPDATE   ON yiimpfrontend.doge_address_links
+SELECT, INSERT           ON yiimpfrontend.doge_token_history
+SELECT                   ON yiimpfrontend.coins
 ```
+No DELETE anywhere. Separate credential from `yiimp_api` (which stays SELECT-only), stored as `MYSQL_REG_USER` / `MYSQL_REG_PASSWORD` in `/etc/yiimp-api/env`.
 
-New `geoip-lite` dep adds ~30 MB — first `bun install` takes an extra minute.
+### 2. `yiimp-api` v0.5.0 — registration endpoints
+- `GET  /api/v1/doge/registration/lookup?ltc=<addr>` — returns whether an LTC address already has a link, and the DOGE address masked. Never returns the token.
+- `POST /api/v1/doge/register` — body `{ ltc_address, doge_address, captcha }`.
+  Pipeline mirrors the PHP exactly, in order: rate-limit (IP, 10/hr) → format regex → duplicate check → `validateaddress` via LTC and DOGE RPC → transaction (accounts insert → token mint with history burn → link insert) → return the token **once**.
+- `GET /api/v1/doge/token/status?token=<t>` — returns `active`, `token_last_seen`, and whether the token has been seen by the stratum in the payout window, so miners can self-verify their `dogelink=` is landing. No addresses returned.
+- Reuse the existing regex whitelists; add a Zod-style validator on the body; 24h in-memory + DB-backed rate-limit table is overkill — IP bucket in memory matches the PHP behaviour closely enough.
+- RPC creds read from the existing daemon confs at service start (same way the PHP `WalletRPC` does), never from client input.
 
-## Files touched
+### 3. Captcha
+The PHP uses a simple arithmetic/session captcha. On our side, an HMAC-signed challenge: server issues `{question, nonce, expires, sig}`, client returns the answer plus the signed blob. Stateless, no session store, no third-party dependency.
 
-- `infra/yiimp-api/src/server.ts` — new endpoints
-- `infra/yiimp-api/src/stratum-live.ts` — SSE fan-out + log tailing
-- `infra/yiimp-api/src/geoip.ts` — GeoIP wrapper
-- `infra/yiimp-api/src/hashstats.ts` — time-series queries
-- `infra/yiimp-api/package.json` — add `fastify-sse-v2`, `geoip-lite`
-- `infra/yiimp-api/README.md` — update endpoint list
-- `docs/api.md` — public API docs
-- `src/lib/pool/pool.functions.ts` — call `/api/v1/*`
-- `src/routes/index.tsx` — wire live miner count, fix hydration mismatch
-- `infra/pool-sdk/` — SDK scaffold (published later)
+### 4. New route `src/routes/register.tsx` on pool.honest.money
+- Two-field form (LTC mining address, DOGE payout address) + captcha, matching the existing site design tokens.
+- On success: full-width token panel with copy button, the exact miner config line (`-u <LTC> -p dogelink=<TOKEN>`), and a hard warning that the token is shown once.
+- Error states map 1:1 to the PHP flash messages so behaviour is familiar.
+- Its own `head()` metadata; index.tsx and the mining page swap their `pool.texitcoin.org/site/dogeRegister` links to `/register`.
 
-## Not in this turn
+### 5. Safety around the 41 existing rows
+- Before any write path goes live, take a fresh dump of `accounts`, `doge_address_links`, `doge_token_history` (we already have `/var/backups/doge-links-20260728-033329`).
+- New endpoint is additive only — it never updates or deletes an existing link; a duplicate LTC or DOGE address returns a conflict error, exactly like the PHP.
+- Ship behind an env flag `DOGE_REGISTER_ENABLED=0` by default so the deploy is inert until you flip it and test with one throwaway address pair.
 
-Tracks 2–4 (new registration flow, graph rebuild, workers/locations UI page) — each is a big enough surface that they deserve their own turn once endpoints are live and returning real data.
+### 6. Verification
+- Register one test LTC/DOGE pair, confirm the row lands in all three tables with the same shape as the existing 41.
+- Point a single miner at it with the new token, confirm `scanTokens` picks up `token_last_seen`.
+- Then flip the old PHP page to a redirect.
+
+## Technical notes
+- `accounts` insert must set `coinid`/`coinsymbol` from the LTC row in `coins`, `balance=0`, `donation=0`, `hostaddr` = client IP — otherwise the wallet page and payout join break.
+- Token collision handling: check `doge_address_links` for an active token, then rely on the `doge_token_history` UNIQUE key as the real guard, retrying up to 100 times. Same as PHP.
+- All writes inside a single MySQL transaction with the link insert last, so a failed link never leaves an orphan account row.
