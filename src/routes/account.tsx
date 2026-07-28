@@ -113,11 +113,15 @@ function Section({
 }
 
 function workerStatus(w: AccountWorker): { label: string; cls: string } {
+  const hs = Number(w.hashrate ?? 0);
   const last = Number(w.last_share ?? 0);
-  const age = Math.floor(Date.now() / 1000) - last;
-  if (!last) return { label: "unknown", cls: "text-pool-steel" };
-  if (age < 900) return { label: "online", cls: "text-success" };
-  return { label: "stale", cls: "text-destructive" };
+  const age = last ? Math.floor(Date.now() / 1000) - last : Infinity;
+  // Hashrate is measured over the last 10 minutes of accepted shares, so a
+  // non-zero rate is itself proof the rig is live right now.
+  if (hs > 0 || age < 900) return { label: "online", cls: "text-success" };
+  if (!last) return { label: "idle", cls: "text-pool-steel" };
+  if (age < 86400) return { label: "stale", cls: "text-warning" };
+  return { label: "offline", cls: "text-destructive" };
 }
 
 function AccountPage() {
@@ -135,10 +139,12 @@ function AccountPage() {
   });
 
   const data = q.data;
+  // Per-algo rows already aggregate live (share-backed) hashrate.
   const totalHash = data?.algos.reduce((s, a) => s + Number(a.hashrate ?? 0), 0) ?? 0;
-  const totalWorkers = data?.algos.reduce((s, a) => s + Number(a.workers_online ?? a.workers ?? 0), 0) ?? 0;
   const onlineWorkers =
     data?.workers.filter((w) => workerStatus(w).label === "online").length ?? 0;
+  const totalWorkers = data?.workers.length ?? 0;
+
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
