@@ -32,6 +32,16 @@ import {
 import { aggregateGeo, lookupGeo } from "./geoip.js";
 import { getSessionsBySite } from "./sessions.js";
 import {
+  REGISTER_ENABLED,
+  checkRateLimit,
+  issueCaptcha,
+  lookupLink,
+  registerDogeLink,
+  rpcAvailable,
+  tokenStatus,
+  verifyCaptcha,
+} from "./registration.js";
+import {
   minerHashrateSeries,
   poolHashrateSeries,
   windowConfig,
@@ -71,7 +81,7 @@ const app = Fastify({ logger: { level: "info" }, disableRequestLogging: false })
 
 await app.register(cors, {
   origin: CORS_ORIGINS.length === 0 || CORS_ORIGINS[0] === "*" ? true : CORS_ORIGINS,
-  methods: ["GET", "OPTIONS"],
+  methods: ["GET", "POST", "OPTIONS"],
 });
 await app.register(FastifySSEPlugin);
 
@@ -100,7 +110,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.4.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -111,7 +121,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.4.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.5.0" };
 });
 
 // ============================================================================
@@ -861,6 +871,85 @@ app.get("/api/v1/stream", (req, reply) => {
 });
 
 // ============================================================================
+// DOGE payout registration (write path — see src/registration.ts)
+// ============================================================================
+
+function clientIp(req: import("fastify").FastifyRequest): string {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd.length) return fwd.split(",")[0].trim();
+  return req.ip;
+}
+
+app.get("/api/v1/doge/captcha", async (req, reply) => {
+  if (!REGISTER_ENABLED) return reply.code(503).send({ error: "registration disabled" });
+  reply.header("cache-control", "no-store");
+  return issueCaptcha();
+});
+
+app.get<{ Querystring: { ltc?: string } }>(
+  "/api/v1/doge/registration/lookup",
+  async (req, reply) => {
+    const ltc = String(req.query.ltc ?? "");
+    if (!ADDR_RE.test(ltc)) return reply.code(400).send({ error: "bad address" });
+    reply.header("cache-control", "no-store");
+    return lookupLink(pool, ltc);
+  },
+);
+
+app.get<{ Querystring: { token?: string } }>(
+  "/api/v1/doge/token/status",
+  async (req, reply) => {
+    const token = String(req.query.token ?? "").replace(/^dogelink=/i, "");
+    if (!/^[A-Fa-f0-9]{24}$/.test(token)) {
+      return reply.code(400).send({ error: "bad token" });
+    }
+    reply.header("cache-control", "no-store");
+    return tokenStatus(pool, token);
+  },
+);
+
+app.post<{
+  Body: {
+    ltc_address?: string;
+    doge_address?: string;
+    captcha?: { nonce?: string; expires?: number; sig?: string; answer?: number | string };
+  };
+}>("/api/v1/doge/register", async (req, reply) => {
+  reply.header("cache-control", "no-store");
+
+  if (!REGISTER_ENABLED) {
+    return reply.code(503).send({
+      error: "Registration is not enabled on this server yet.",
+    });
+  }
+
+  const ip = clientIp(req);
+  if (!checkRateLimit(ip)) {
+    return reply.code(429).send({
+      error: "Too many registration attempts from this IP address. Please wait and try again later.",
+    });
+  }
+
+  const body = req.body ?? {};
+  const ltc = typeof body.ltc_address === "string" ? body.ltc_address : "";
+  const doge = typeof body.doge_address === "string" ? body.doge_address : "";
+  if (ltc.length > 120 || doge.length > 120) {
+    return reply.code(400).send({ error: "Address too long." });
+  }
+
+  const captcha = verifyCaptcha(body.captcha ?? {});
+  if (!captcha.ok) return reply.code(400).send({ error: captcha.error, field: "captcha" });
+
+  const result = await registerDogeLink({ ltcAddress: ltc, dogeAddress: doge, ip });
+  return reply.code(result.status).send(result.body);
+});
+
+app.get("/api/v1/doge/status", async () => ({
+  enabled: REGISTER_ENABLED,
+  rpc: rpcAvailable(),
+}));
+
+// ============================================================================
 // OpenAPI doc stub (so SDKs and third parties can discover endpoints)
 // ============================================================================
 
@@ -868,7 +957,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.4.0",
+    version: "0.5.0",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
@@ -897,6 +986,10 @@ app.get("/api/v1/openapi.json", async () => ({
     "/api/v1/miner/{address}/payouts": { get: { summary: "recent payouts" } },
     "/api/v1/miner/{address}/earnings": { get: { summary: "per-block earnings" } },
     "/api/v1/stream": { get: { summary: "SSE: block-found, hashrate-tick" } },
+    "/api/v1/doge/captcha": { get: { summary: "issue a signed captcha challenge" } },
+    "/api/v1/doge/registration/lookup": { get: { summary: "is an LTC address already linked?" } },
+    "/api/v1/doge/register": { post: { summary: "create an LTC->DOGE payout link (returns token once)" } },
+    "/api/v1/doge/token/status": { get: { summary: "has the stratum seen this dogelink token?" } },
   },
 }));
 

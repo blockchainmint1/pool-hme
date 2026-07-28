@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as RichlistRouteImport } from './routes/richlist'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as MempoolRouteImport } from './routes/mempool'
@@ -87,6 +88,11 @@ const TermsRoute = TermsRouteImport.update({
 const RichlistRoute = RichlistRouteImport.update({
   id: '/richlist',
   path: '/richlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -440,6 +446,7 @@ export interface FileRoutesByFullPath {
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -510,6 +517,7 @@ export interface FileRoutesByTo {
   '/manifesto': typeof ManifestoRoute
   '/mining': typeof MiningRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -582,6 +590,7 @@ export interface FileRoutesById {
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -655,6 +664,7 @@ export interface FileRouteTypes {
     | '/mempool'
     | '/mining'
     | '/privacy'
+    | '/register'
     | '/richlist'
     | '/terms'
     | '/address/$addr'
@@ -725,6 +735,7 @@ export interface FileRouteTypes {
     | '/manifesto'
     | '/mining'
     | '/privacy'
+    | '/register'
     | '/richlist'
     | '/terms'
     | '/address/$addr'
@@ -796,6 +807,7 @@ export interface FileRouteTypes {
     | '/mempool'
     | '/mining'
     | '/privacy'
+    | '/register'
     | '/richlist'
     | '/terms'
     | '/address/$addr'
@@ -868,6 +880,7 @@ export interface RootRouteChildren {
   MempoolRoute: typeof MempoolRouteWithChildren
   MiningRoute: typeof MiningRoute
   PrivacyRoute: typeof PrivacyRoute
+  RegisterRoute: typeof RegisterRoute
   RichlistRoute: typeof RichlistRoute
   TermsRoute: typeof TermsRoute
   AddressAddrRoute: typeof AddressAddrRoute
@@ -923,6 +936,13 @@ declare module '@tanstack/react-router' {
       path: '/richlist'
       fullPath: '/richlist'
       preLoaderRoute: typeof RichlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1523,6 +1543,7 @@ const rootRouteChildren: RootRouteChildren = {
   MempoolRoute: MempoolRouteWithChildren,
   MiningRoute: MiningRoute,
   PrivacyRoute: PrivacyRoute,
+  RegisterRoute: RegisterRoute,
   RichlistRoute: RichlistRoute,
   TermsRoute: TermsRoute,
   AddressAddrRoute: AddressAddrRoute,
@@ -1566,13 +1587,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
