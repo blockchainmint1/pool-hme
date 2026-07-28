@@ -102,7 +102,11 @@ else
   exit 1
 fi
 echo "Wallet file : $WALLET_PATH"
-echo "Wallet mode : ${WALLET_NAME:+named wallet '$WALLET_NAME' (createwallet path)}${WALLET_NAME:-default wallet (encryptwallet path)}"
+if [ -n "$WALLET_NAME" ]; then
+  echo "Wallet mode : named wallet '$WALLET_NAME' (createwallet path)"
+else
+  echo "Wallet mode : default wallet (encryptwallet path)"
+fi
 echo
 
 if [ "$CONFIRM" != "CONFIRM_ROTATE" ]; then
@@ -110,8 +114,8 @@ if [ "$CONFIRM" != "CONFIRM_ROTATE" ]; then
     cat <<PLAN
 Plan (named-wallet path, wallet='$WALLET_NAME'):
   1. stop litecoind                        (miners keep hashing; stratum retries GBT)
-  2. mv $WALLET_PATH
-       -> $WALLET_PATH.old-seed-<stamp>
+  2. mv $LTC_DIR/wallets/$WALLET_NAME  (whole wallet dir)
+       -> $LTC_DIR/wallets/$WALLET_NAME.old-seed-<stamp>
   3. start litecoind from a TEMP conf with the 'wallet=' line stripped
      (a named wallet that is missing makes the daemon refuse to boot)
   4. createwallet '$WALLET_NAME' with the passphrase -> fresh ENCRYPTED seed in one step
