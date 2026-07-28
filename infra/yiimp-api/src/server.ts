@@ -624,9 +624,10 @@ app.get("/api/v1/miners/count", async () => {
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) => {
   const limit = clampLimit(req.query.limit, 50, 200);
+  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT a.username AS address,
-            SUM(w.hashrate) AS hashrate,
+            SUM(${hrExpr}) AS hashrate,
             COUNT(*) AS workers,
             MAX(w.time) AS last_share,
             w.algo
