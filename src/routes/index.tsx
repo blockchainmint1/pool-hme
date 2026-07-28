@@ -544,14 +544,12 @@ function ConnectCard() {
         <li className="flex gap-3">
           <span className="font-mono text-pool-steel-hi">1.</span>
           <span>
-            <a
-              href="https://pool.texitcoin.org/site/dogeRegister"
-              target="_blank"
-              rel="noreferrer"
+            <Link
+              to="/register"
               className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint"
             >
               Register LTC/DOGE
-            </a>{" "}
+            </Link>{" "}
             before mining. You'll receive a{" "}
             <span className="font-mono text-pool-steel-hi">dogelink</span> token.
           </span>
