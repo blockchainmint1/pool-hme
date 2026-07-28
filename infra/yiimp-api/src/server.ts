@@ -816,9 +816,15 @@ async function minerWorkers(address: string, reply: import("fastify").FastifyRep
   const enriched = rows.map((r) => {
     const rec = r as unknown as Record<string, unknown> & { ip?: string | null };
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ip, ...rest } = rec;
+    const { ip, subscribe_time, time, ...rest } = rec;
     const { country, region } = lookupGeo(rec.ip);
-    return { ...rest, country, region };
+    return {
+      ...rest,
+      connected_since: subscribe_time ?? null,
+      last_share: time ?? null,
+      country,
+      region,
+    };
   });
   return { workers: enriched };
 }
