@@ -69,6 +69,21 @@ Notes:
 - LTC block rewards pay `coins.master_wallet` for the `LTC` row in the
   `yiimpfrontend` DB — rotating the seed without updating that row sends rewards
   to an address the old seed controls.
+- `systemctl start litecoind` can exit **non-zero** with `Can't open PID file …
+  Operation not permitted` while the daemon actually started fine. Never treat
+  that exit code as failure — poll `$LCLI getwalletinfo` instead.
+
+### Hot-wallet rotation log
+
+| Coin | Date       | New pool address                     | Old seed kept at                                  |
+| ---- | ---------- | ------------------------------------ | ------------------------------------------------- |
+| DOGE | 2026-07-2x | `DBBv9bpnNV6tjJDM8q6MpiVPPhjpvatCJT` | swept                                              |
+| LTC  | 2026-07-28 | `LTyp1No4skV378NbYrR7p6d7wRzDCHgFAa` | `~/.litecoin/wallets/pool.old-seed-20260728-085324` (6.27 LTC immature — sweep after ~100 confs) |
+
+Rotation blips the share error rate to 30–50% for the 2–3 minutes the daemon is
+down (all `error=21`, stale/job-not-found). It settles back under ~1% within
+5 minutes. That is expected, not a regression.
+
 
 ## 3. Scrypt merged-mining coin set
 
