@@ -28,8 +28,10 @@ import { Route as MempoolIndexRouteImport } from './routes/mempool.index'
 import { Route as V1DefaultRouteImport } from './routes/v1.default'
 import { Route as TxTxidRouteImport } from './routes/tx.$txid'
 import { Route as BlockHashRouteImport } from './routes/block.$hash'
+import { Route as ApiWalletExRouteImport } from './routes/api/walletEx'
 import { Route as ApiWalletRouteImport } from './routes/api/wallet'
 import { Route as ApiTxRouteImport } from './routes/api/tx'
+import { Route as ApiTimeRouteImport } from './routes/api/time'
 import { Route as ApiStatusRouteImport } from './routes/api/status'
 import { Route as ApiFeeEstimatesRouteImport } from './routes/api/fee-estimates'
 import { Route as ApiCurrenciesRouteImport } from './routes/api/currencies'
@@ -43,6 +45,7 @@ import { Route as ApiV1PriceRouteImport } from './routes/api/v1/price'
 import { Route as ApiV1FeeEstimatesRouteImport } from './routes/api/v1/fee-estimates'
 import { Route as ApiV1DifficultyAdjustmentRouteImport } from './routes/api/v1/difficulty-adjustment'
 import { Route as ApiTxTxidRouteImport } from './routes/api/tx.$txid'
+import { Route as ApiPoolSplatRouteImport } from './routes/api/pool.$'
 import { Route as ApiMempoolTxidsRouteImport } from './routes/api/mempool.txids'
 import { Route as ApiBlocksStartHeightRouteImport } from './routes/api/blocks.$startHeight'
 import { Route as ApiBlockHashRouteImport } from './routes/api/block.$hash'
@@ -179,6 +182,11 @@ const BlockHashRoute = BlockHashRouteImport.update({
   path: '/block/$hash',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWalletExRoute = ApiWalletExRouteImport.update({
+  id: '/api/walletEx',
+  path: '/api/walletEx',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWalletRoute = ApiWalletRouteImport.update({
   id: '/api/wallet',
   path: '/api/wallet',
@@ -187,6 +195,11 @@ const ApiWalletRoute = ApiWalletRouteImport.update({
 const ApiTxRoute = ApiTxRouteImport.update({
   id: '/api/tx',
   path: '/api/tx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTimeRoute = ApiTimeRouteImport.update({
+  id: '/api/time',
+  path: '/api/time',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiStatusRoute = ApiStatusRouteImport.update({
@@ -254,6 +267,11 @@ const ApiTxTxidRoute = ApiTxTxidRouteImport.update({
   id: '/$txid',
   path: '/$txid',
   getParentRoute: () => ApiTxRoute,
+} as any)
+const ApiPoolSplatRoute = ApiPoolSplatRouteImport.update({
+  id: '/api/pool/$',
+  path: '/api/pool/$',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMempoolTxidsRoute = ApiMempoolTxidsRouteImport.update({
   id: '/api/mempool/txids',
@@ -478,8 +496,10 @@ export interface FileRoutesByFullPath {
   '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
+  '/api/time': typeof ApiTimeRoute
   '/api/tx': typeof ApiTxRouteWithChildren
   '/api/wallet': typeof ApiWalletRoute
+  '/api/walletEx': typeof ApiWalletExRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -489,6 +509,7 @@ export interface FileRoutesByFullPath {
   '/api/block/$hash': typeof ApiBlockHashRouteWithChildren
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/pool/$': typeof ApiPoolSplatRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
@@ -553,8 +574,10 @@ export interface FileRoutesByTo {
   '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
+  '/api/time': typeof ApiTimeRoute
   '/api/tx': typeof ApiTxRouteWithChildren
   '/api/wallet': typeof ApiWalletRoute
+  '/api/walletEx': typeof ApiWalletExRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -564,6 +587,7 @@ export interface FileRoutesByTo {
   '/api/block/$hash': typeof ApiBlockHashRouteWithChildren
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/pool/$': typeof ApiPoolSplatRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
@@ -630,8 +654,10 @@ export interface FileRoutesById {
   '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
+  '/api/time': typeof ApiTimeRoute
   '/api/tx': typeof ApiTxRouteWithChildren
   '/api/wallet': typeof ApiWalletRoute
+  '/api/walletEx': typeof ApiWalletExRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/v1/default': typeof V1DefaultRoute
@@ -641,6 +667,7 @@ export interface FileRoutesById {
   '/api/block/$hash': typeof ApiBlockHashRouteWithChildren
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
+  '/api/pool/$': typeof ApiPoolSplatRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
@@ -708,8 +735,10 @@ export interface FileRouteTypes {
     | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
+    | '/api/time'
     | '/api/tx'
     | '/api/wallet'
+    | '/api/walletEx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -719,6 +748,7 @@ export interface FileRouteTypes {
     | '/api/block/$hash'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
+    | '/api/pool/$'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
@@ -783,8 +813,10 @@ export interface FileRouteTypes {
     | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
+    | '/api/time'
     | '/api/tx'
     | '/api/wallet'
+    | '/api/walletEx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -794,6 +826,7 @@ export interface FileRouteTypes {
     | '/api/block/$hash'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
+    | '/api/pool/$'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
@@ -859,8 +892,10 @@ export interface FileRouteTypes {
     | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
+    | '/api/time'
     | '/api/tx'
     | '/api/wallet'
+    | '/api/walletEx'
     | '/block/$hash'
     | '/tx/$txid'
     | '/v1/default'
@@ -870,6 +905,7 @@ export interface FileRouteTypes {
     | '/api/block/$hash'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
+    | '/api/pool/$'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
@@ -936,8 +972,10 @@ export interface RootRouteChildren {
   ApiCurrenciesRoute: typeof ApiCurrenciesRoute
   ApiFeeEstimatesRoute: typeof ApiFeeEstimatesRoute
   ApiStatusRoute: typeof ApiStatusRoute
+  ApiTimeRoute: typeof ApiTimeRoute
   ApiTxRoute: typeof ApiTxRouteWithChildren
   ApiWalletRoute: typeof ApiWalletRoute
+  ApiWalletExRoute: typeof ApiWalletExRoute
   BlockHashRoute: typeof BlockHashRoute
   TxTxidRoute: typeof TxTxidRoute
   V1DefaultRoute: typeof V1DefaultRoute
@@ -946,6 +984,7 @@ export interface RootRouteChildren {
   ApiBlockHashRoute: typeof ApiBlockHashRouteWithChildren
   ApiBlocksStartHeightRoute: typeof ApiBlocksStartHeightRoute
   ApiMempoolTxidsRoute: typeof ApiMempoolTxidsRoute
+  ApiPoolSplatRoute: typeof ApiPoolSplatRoute
   ApiV1DifficultyAdjustmentRoute: typeof ApiV1DifficultyAdjustmentRoute
   ApiV1FeeEstimatesRoute: typeof ApiV1FeeEstimatesRoute
   ApiV1PriceRoute: typeof ApiV1PriceRoute
@@ -1109,6 +1148,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlockHashRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/walletEx': {
+      id: '/api/walletEx'
+      path: '/api/walletEx'
+      fullPath: '/api/walletEx'
+      preLoaderRoute: typeof ApiWalletExRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/wallet': {
       id: '/api/wallet'
       path: '/api/wallet'
@@ -1121,6 +1167,13 @@ declare module '@tanstack/react-router' {
       path: '/api/tx'
       fullPath: '/api/tx'
       preLoaderRoute: typeof ApiTxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/time': {
+      id: '/api/time'
+      path: '/api/time'
+      fullPath: '/api/time'
+      preLoaderRoute: typeof ApiTimeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/status': {
@@ -1213,6 +1266,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/tx/$txid'
       preLoaderRoute: typeof ApiTxTxidRouteImport
       parentRoute: typeof ApiTxRoute
+    }
+    '/api/pool/$': {
+      id: '/api/pool/$'
+      path: '/api/pool/$'
+      fullPath: '/api/pool/$'
+      preLoaderRoute: typeof ApiPoolSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/mempool/txids': {
       id: '/api/mempool/txids'
@@ -1631,8 +1691,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCurrenciesRoute: ApiCurrenciesRoute,
   ApiFeeEstimatesRoute: ApiFeeEstimatesRoute,
   ApiStatusRoute: ApiStatusRoute,
+  ApiTimeRoute: ApiTimeRoute,
   ApiTxRoute: ApiTxRouteWithChildren,
   ApiWalletRoute: ApiWalletRoute,
+  ApiWalletExRoute: ApiWalletExRoute,
   BlockHashRoute: BlockHashRoute,
   TxTxidRoute: TxTxidRoute,
   V1DefaultRoute: V1DefaultRoute,
@@ -1641,6 +1703,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBlockHashRoute: ApiBlockHashRouteWithChildren,
   ApiBlocksStartHeightRoute: ApiBlocksStartHeightRoute,
   ApiMempoolTxidsRoute: ApiMempoolTxidsRoute,
+  ApiPoolSplatRoute: ApiPoolSplatRoute,
   ApiV1DifficultyAdjustmentRoute: ApiV1DifficultyAdjustmentRoute,
   ApiV1FeeEstimatesRoute: ApiV1FeeEstimatesRoute,
   ApiV1PriceRoute: ApiV1PriceRoute,
