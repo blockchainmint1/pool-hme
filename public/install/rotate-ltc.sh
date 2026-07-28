@@ -87,20 +87,55 @@ echo "Balance     : $($LCLI getbalance 2>/dev/null || echo '?')  (immature: $($L
 echo "coins.master_wallet(LTC): ${CUR_MASTER:-<unreadable>}"
 echo
 
+# --- resolve where wallet.dat actually lives -----------------------------------
+# Core 0.17+ keeps wallets under <datadir>/wallets/. A `wallet=<name>` line in
+# litecoin.conf means <datadir>/wallets/<name>/wallet.dat (this box: wallet=pool).
+WALLET_NAME="$(sed -n 's/^[[:space:]]*wallet=\(.*\)$/\1/p' "$LTC_DIR/litecoin.conf" 2>/dev/null | head -1)"
+if [ -n "$WALLET_NAME" ] && [ -f "$LTC_DIR/wallets/$WALLET_NAME/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallets/$WALLET_NAME/wallet.dat"
+elif [ -f "$LTC_DIR/wallets/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallets/wallet.dat"; WALLET_NAME=""
+elif [ -f "$LTC_DIR/wallet.dat" ]; then
+  WALLET_PATH="$LTC_DIR/wallet.dat"; WALLET_NAME=""
+else
+  echo "FATAL: no wallet.dat found under $LTC_DIR (checked wallets/<name>/, wallets/, datadir root)"
+  exit 1
+fi
+echo "Wallet file : $WALLET_PATH"
+echo "Wallet mode : ${WALLET_NAME:+named wallet '$WALLET_NAME' (createwallet path)}${WALLET_NAME:-default wallet (encryptwallet path)}"
+echo
+
 if [ "$CONFIRM" != "CONFIRM_ROTATE" ]; then
-  cat <<'PLAN'
-Plan:
-  1. stop litecoind                       (miners keep hashing; stratum retries GBT)
-  2. mv wallet.dat -> wallet.dat.old-seed-<stamp>
+  if [ -n "$WALLET_NAME" ]; then
+    cat <<PLAN
+Plan (named-wallet path, wallet='$WALLET_NAME'):
+  1. stop litecoind                        (miners keep hashing; stratum retries GBT)
+  2. mv $WALLET_PATH
+       -> $WALLET_PATH.old-seed-<stamp>
+  3. start litecoind from a TEMP conf with the 'wallet=' line stripped
+     (a named wallet that is missing makes the daemon refuse to boot)
+  4. createwallet '$WALLET_NAME' with the passphrase -> fresh ENCRYPTED seed in one step
+  5. getnewaddress -> NEW_LTC_ADDR, stop, delete temp conf
+  6. start litecoind under the normal service/conf
+  7. UPDATE coins.master_wallet = NEW_LTC_ADDR for LTC
+  8. restart stratum so it picks up the new coinbase address
+  9. print verification (wallet id, new address, DB row, stratum log)
+PLAN
+  else
+    cat <<PLAN
+Plan (default-wallet path):
+  1. stop litecoind
+  2. mv $WALLET_PATH -> $WALLET_PATH.old-seed-<stamp>
   3. start litecoind                       (fresh HD wallet)
   4. encryptwallet '<passphrase>'          (daemon stops; new seed on encrypt)
   5. start litecoind again, getnewaddress  -> NEW_LTC_ADDR
   6. UPDATE coins.master_wallet = NEW_LTC_ADDR for LTC
-  7. restart stratum so it picks up the new coinbase address
-  8. print verification (wallet id, new address, DB row, stratum log)
-
-Old seed keeps immature coinbases -- sweep them after ~100 confs.
+  7. restart stratum, print verification
 PLAN
+  fi
+  echo
+  echo "Old seed keeps immature coinbases -- sweep them after ~100 confs."
+  echo "On any mid-way failure the script restarts litecoind automatically."
   echo
   echo "Re-run with: sudo $0 CONFIRM_ROTATE"
   exit 0
@@ -128,21 +163,8 @@ on_err() {
 }
 trap on_err ERR
 
-# --- resolve where wallet.dat actually lives -----------------------------------
-# Core 0.17+ keeps wallets under <datadir>/wallets/. A `wallet=<name>` line in
-# litecoin.conf means <datadir>/wallets/<name>/wallet.dat (this box: wallet=pool).
-WALLET_NAME="$(sed -n 's/^[[:space:]]*wallet=\(.*\)$/\1/p' "$LTC_DIR/litecoin.conf" 2>/dev/null | head -1)"
-if [ -n "$WALLET_NAME" ] && [ -f "$LTC_DIR/wallets/$WALLET_NAME/wallet.dat" ]; then
-  WALLET_PATH="$LTC_DIR/wallets/$WALLET_NAME/wallet.dat"
-elif [ -f "$LTC_DIR/wallets/wallet.dat" ]; then
-  WALLET_PATH="$LTC_DIR/wallets/wallet.dat"; WALLET_NAME=""
-elif [ -f "$LTC_DIR/wallet.dat" ]; then
-  WALLET_PATH="$LTC_DIR/wallet.dat"; WALLET_NAME=""
-else
-  echo "FATAL: no wallet.dat found under $LTC_DIR (checked wallets/<name>/, wallets/, datadir root)"
-  exit 1
-fi
 log "wallet file: $WALLET_PATH  (named wallet: ${WALLET_NAME:-<default>})"
+
 
 log "stopping litecoind (service='${LTC_SVC:-manual}')"
 stop_ltc
