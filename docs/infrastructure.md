@@ -40,7 +40,9 @@ render from Ansible and reload the unit.
 | `LIVE2`, `TXC3`                   | Named build snapshots (TXC3 = TEXITcoin-aware build)                    |
 | `aws`                             | AWS-tuned build                                                         |
 | `3h-logs`, `3h-logs-updated`      | Build variants with 3-hour log rotation                                 |
-| `config/scrypt.conf`              | Rendered runtime config (from Ansible)                                  |
+| `scrypt.conf`                     | **Live** runtime config (rendered from Ansible). `config/` is retired.  |
+| `config.UNUSED-20260715/`         | Old config dir — NOT read by the running service. Do not edit.          |
+| `logs/`                           | Per-coin/rotated artifacts. **Not** the main log.                       |
 | `scrypt.log`                      | Live log; grep here for `set_difficulty`, `aux submit`, `SCRYPT summary diag` |
 
 ## 2b. Coin daemons — binaries, datadirs, wallets (NOT on $PATH)
