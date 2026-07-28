@@ -105,17 +105,9 @@ function pickCol(cols: Set<string>, candidates: string[]): string | null {
 
 
 
-/** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
-async function workerHashrateExpr(alias = "w"): Promise<string> {
-  const cols = await workersColumns();
-  for (const c of ["hashrate", "speed", "hashrate_bad"]) {
-    if (cols.has(c)) return `COALESCE(${alias}.${c}, 0)`;
-  }
-  // Fall back to difficulty-based estimate over the last share window.
-  // Share difficulty 1 == 2^32 hashes, so H/s = diff * 2^32 / window.
-  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 4294967296 / 600`;
-  return `0`;
-}
+// Per-worker hashrate now comes from the shares table (see below); the old
+// `workers`-column estimate mixed units and produced wrong numbers.
+
 
 /**
  * Live per-worker stats derived from the `shares` table — the only honest
