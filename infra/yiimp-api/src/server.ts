@@ -112,8 +112,29 @@ async function workerHashrateExpr(alias = "w"): Promise<string> {
     if (cols.has(c)) return `COALESCE(${alias}.${c}, 0)`;
   }
   // Fall back to difficulty-based estimate over the last share window.
-  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 65536 / 600`;
+  // Share difficulty 1 == 2^32 hashes, so H/s = diff * 2^32 / window.
+  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 4294967296 / 600`;
   return `0`;
+}
+
+/**
+ * Live per-worker stats derived from the `shares` table — the only honest
+ * source. `workers.time` is the CONNECTION timestamp and stale rows linger
+ * for hours, which is why worker counts and "last share" were wrong.
+ *
+ * hashrate (H/s) = SUM(valid share difficulty) * 2^32 / window seconds.
+ */
+const SHARE_WINDOW_SEC = 600;
+function liveWorkerStatsSubquery(windowSec = SHARE_WINDOW_SEC): string {
+  return `(SELECT s.workerid AS workerid,
+                  MAX(s.time) AS last_share,
+                  SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END)
+                    * 4294967296 / ${windowSec} AS live_hashrate,
+                  SUM(CASE WHEN s.valid = 1 THEN 1 ELSE 0 END) AS live_shares,
+                  SUM(CASE WHEN s.valid = 1 THEN 0 ELSE 1 END) AS live_rejects
+             FROM shares s
+            WHERE s.time > UNIX_TIMESTAMP() - ${windowSec}
+            GROUP BY s.workerid)`;
 }
 
 /** Column list for worker detail rows, skipping columns this fork lacks. */
@@ -123,6 +144,7 @@ async function workerDetailCols(alias = "w"): Promise<string[]> {
     .filter((c) => cols.has(c))
     .map((c) => `${alias}.${c}`);
 }
+
 
 
 const ADDR_RE = /^[A-Za-z0-9]{20,80}$/;
