@@ -30,7 +30,7 @@ cat > "$OUT" <<'HEADER'
 #
 #   curl -fsSL https://pool.honest.money/install/haproxy-conroe.sh | sudo bash
 #
-# You'll be prompted for the container number (1-6). Or pass it inline:
+# You'll be prompted for the container number (1-8). Or pass it inline:
 #
 #   curl -fsSL https://pool.honest.money/install/haproxy-conroe.sh \
 #     | sudo bash -s -- --container 1
@@ -55,7 +55,7 @@ for arg in "$@"; do
     --skip-netplan) SKIP_NETPLAN=1 ;;
     --container=*)  CONTAINER="${arg#*=}" ;;
     --container)    shift; CONTAINER="${1:-}" ;;
-    [1-6])          CONTAINER="$arg" ;;
+    [1-8])          CONTAINER="$arg" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -71,17 +71,19 @@ if [[ $SKIP_NETPLAN -eq 0 && -z "$CONTAINER" ]]; then
   echo "  haproxy-conroe installer"
   echo "=================================================================="
   echo ""
-  echo "  Which container is this Beelink in? (1-6)"
+  echo "  Which container is this Beelink in? (1-8)"
   echo ""
   echo "    Container 1 → LAN 10.1.0.10/24, miners 10.1.0.100-.254"
   echo "    Container 2 → LAN 10.2.0.10/24, miners 10.2.0.100-.254"
   echo "    Container 3 → LAN 10.3.0.10/24, miners 10.3.0.100-.254"
   echo "    Container 4 → LAN 10.4.0.10/24, miners 10.4.0.100-.254"
   echo "    Container 5 → LAN 10.5.0.10/24, miners 10.5.0.100-.254"
-  echo "    Container 6 → LAN 10.6.0.10/24, miners 10.6.0.100-.254"
+  echo "    Container 6 → LAN 10.6.0.10/24, miners 10.6.0.100-.254  (Conroe)"
+  echo "    Container 7 → LAN 10.7.0.10/24, miners 10.7.0.100-.254  (McKinney)"
+  echo "    Container 8 → LAN 10.8.0.10/24, miners 10.8.0.100-.254  (Mansfield)"
   echo ""
-  while [[ ! "$CONTAINER" =~ ^[1-6]$ ]]; do
-    read -rp "  Container number [1-6]: " CONTAINER
+  while [[ ! "$CONTAINER" =~ ^[1-8]$ ]]; do
+    read -rp "  Container number [1-8]: " CONTAINER
   done
   echo ""
   echo "  → installing as container $CONTAINER"

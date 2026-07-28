@@ -4,7 +4,7 @@
 # Idempotent: safe to re-run after every config change in this repo.
 #
 # Usage:
-#   sudo bash restore.sh --container N      # on-site install, N = 1..6
+#   sudo bash restore.sh --container N      # on-site install, N = 1..8
 #   sudo bash restore.sh --skip-netplan     # EC2 burn-in (no LAN, no NAT, no DHCP)
 #
 # On-site topology (one Beelink per container, 6 total):
@@ -16,10 +16,12 @@
 # Addressing plan — each container gets a UNIQUE LAN subnet so `ssh 10.X.0.10`
 # from your laptop (when on-site or via a CPE port forward) is unambiguous:
 #
-#   Container 1  →  Beelink 10.1.0.10/24  →  miners 10.1.0.100-.254
-#   Container 2  →  Beelink 10.2.0.10/24  →  miners 10.2.0.100-.254
+#   Container 1  →  Beelink 10.1.0.10/24  →  miners 10.1.0.100-.254   (Conroe)
+#   Container 2  →  Beelink 10.2.0.10/24  →  miners 10.2.0.100-.254   (Conroe)
 #   ...
-#   Container 6  →  Beelink 10.6.0.10/24  →  miners 10.6.0.100-.254
+#   Container 6  →  Beelink 10.6.0.10/24  →  miners 10.6.0.100-.254   (Conroe)
+#   Container 7  →  Beelink 10.7.0.10/24  →  miners 10.7.0.100-.254   (McKinney)
+#   Container 8  →  Beelink 10.8.0.10/24  →  miners 10.8.0.100-.254   (Mansfield)
 #
 set -euo pipefail
 
@@ -34,7 +36,7 @@ for arg in "$@"; do
     --container)      shift; CONTAINER="${1:-}" ;;
     --wan=*)          FORCE_WAN="${arg#*=}" ;;
     --lan=*)          FORCE_LAN="${arg#*=}" ;;
-    [1-6])            CONTAINER="$arg" ;;  # tolerate `--container 3` split by shell
+    [1-8])            CONTAINER="$arg" ;;  # tolerate `--container 3` split by shell
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -46,8 +48,8 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 if [[ $SKIP_NETPLAN -eq 0 ]]; then
-  if [[ -z "$CONTAINER" || ! "$CONTAINER" =~ ^[1-6]$ ]]; then
-    echo "ERROR: --container N required (N = 1..6)" >&2
+  if [[ -z "$CONTAINER" || ! "$CONTAINER" =~ ^[1-8]$ ]]; then
+    echo "ERROR: --container N required (N = 1..8)" >&2
     echo "  example:  sudo bash restore.sh --container 1" >&2
     exit 2
   fi
@@ -56,7 +58,12 @@ if [[ $SKIP_NETPLAN -eq 0 ]]; then
   LAN_NET="10.${CONTAINER}.0.0/24"
   LAN_POOL_START="10.${CONTAINER}.0.20"
   LAN_POOL_END="10.${CONTAINER}.0.254"
-  echo "==> container ${CONTAINER}  →  Beelink ${LAN_CIDR}  miners ${LAN_POOL_START}-${LAN_POOL_END}  (235 leases)"
+  case "$CONTAINER" in
+    7) SITE="mckinney" ;;
+    8) SITE="mansfield" ;;
+    *) SITE="conroe" ;;
+  esac
+  echo "==> container ${CONTAINER} (${SITE})  →  Beelink ${LAN_CIDR}  miners ${LAN_POOL_START}-${LAN_POOL_END}  (235 leases)"
 fi
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -239,6 +246,7 @@ YAML
       -e "s|__LAN_POOL_START__|$LAN_POOL_START|g" \
       -e "s|__LAN_POOL_END__|$LAN_POOL_END|g" \
       -e "s|__CONTAINER__|$CONTAINER|g" \
+      -e "s|__SITE__|$SITE|g" \
       "$SRC_DIR/config/kea-dhcp4.conf" \
       > /etc/kea/kea-dhcp4.conf
   chmod 0644 /etc/kea/kea-dhcp4.conf

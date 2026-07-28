@@ -93,7 +93,7 @@ running box — edit here, commit, re-run `restore.sh`.
 
 ## What restore.sh does on-site
 
-Invoked as `sudo bash restore.sh --container N` (N = 1..6):
+Invoked as `sudo bash restore.sh --container N` (N = 1..8):
 
 1. Installs `haproxy`, `kea-dhcp4-server`, `iptables-persistent`, tooling.
 2. Detects the two NICs — WAN = whichever holds the default route (DHCP
