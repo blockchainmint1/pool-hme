@@ -17,11 +17,18 @@ export interface AccountWorker {
   shares?: number;
   rejects?: number;
   stales?: number;
+  /** Live counts over the last 10 minutes, from the shares table. */
+  shares_10m?: number;
+  rejects_10m?: number;
   connected_since?: number | null;
+  /** Last accepted share; null when the rig has not submitted recently. */
   last_share?: number | null;
+  /** Last share if any, else the stratum connection timestamp. */
+  last_seen?: number | null;
   country?: string;
   region?: string;
 }
+
 
 export interface AccountAlgo {
   algo: string;

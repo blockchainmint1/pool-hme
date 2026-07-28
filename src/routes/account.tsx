@@ -113,11 +113,15 @@ function Section({
 }
 
 function workerStatus(w: AccountWorker): { label: string; cls: string } {
+  const hs = Number(w.hashrate ?? 0);
   const last = Number(w.last_share ?? 0);
-  const age = Math.floor(Date.now() / 1000) - last;
-  if (!last) return { label: "unknown", cls: "text-pool-steel" };
-  if (age < 900) return { label: "online", cls: "text-success" };
-  return { label: "stale", cls: "text-destructive" };
+  const age = last ? Math.floor(Date.now() / 1000) - last : Infinity;
+  // Hashrate is measured over the last 10 minutes of accepted shares, so a
+  // non-zero rate is itself proof the rig is live right now.
+  if (hs > 0 || age < 900) return { label: "online", cls: "text-success" };
+  if (!last) return { label: "idle", cls: "text-pool-steel" };
+  if (age < 86400) return { label: "stale", cls: "text-warning" };
+  return { label: "offline", cls: "text-destructive" };
 }
 
 function AccountPage() {
@@ -135,10 +139,12 @@ function AccountPage() {
   });
 
   const data = q.data;
+  // Per-algo rows already aggregate live (share-backed) hashrate.
   const totalHash = data?.algos.reduce((s, a) => s + Number(a.hashrate ?? 0), 0) ?? 0;
-  const totalWorkers = data?.algos.reduce((s, a) => s + Number(a.workers_online ?? a.workers ?? 0), 0) ?? 0;
   const onlineWorkers =
     data?.workers.filter((w) => workerStatus(w).label === "online").length ?? 0;
+  const totalWorkers = data?.workers.length ?? 0;
+
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
@@ -222,10 +228,11 @@ function AccountPage() {
             />
             <Tile
               label="Workers"
-              value={String(totalWorkers || data.workers.length)}
-              sub={data.algos.map((a) => a.algo).join(", ") || "—"}
+              value={`${onlineWorkers} online`}
+              sub={`${totalWorkers} on record · ${data.algos.map((a) => a.algo).join(", ") || "—"}`}
               icon={<Users className="size-3.5" />}
             />
+
           </div>
 
           {data.hashrate_24h.length > 1 ? (
@@ -315,8 +322,8 @@ function AccountPage() {
                       <th className="px-3 py-2 text-left">Algo</th>
                       <th className="px-3 py-2 text-right">Hashrate</th>
                       <th className="px-3 py-2 text-right">Diff</th>
-                      <th className="px-3 py-2 text-right">Shares</th>
-                      <th className="px-3 py-2 text-right">Rejects</th>
+                      <th className="px-3 py-2 text-right">Shares 10m</th>
+                      <th className="px-3 py-2 text-right">Rejects 10m</th>
                       <th className="px-3 py-2 text-left">Last share</th>
                       <th className="px-3 py-2 text-left">Status</th>
                     </tr>
@@ -330,14 +337,17 @@ function AccountPage() {
                           <td className="px-3 py-2">{w.algo ?? "—"}</td>
                           <td className="px-3 py-2 text-right">{fmtHash(Number(w.hashrate ?? 0))}</td>
                           <td className="px-3 py-2 text-right">{Number(w.difficulty ?? 0)}</td>
-                          <td className="px-3 py-2 text-right">{Number(w.shares ?? 0)}</td>
-                          <td className="px-3 py-2 text-right">{Number(w.rejects ?? 0)}</td>
-                          <td className="px-3 py-2">{fmtTime(w.last_share)}</td>
+                          <td className="px-3 py-2 text-right">{Number(w.shares_10m ?? 0)}</td>
+                          <td className="px-3 py-2 text-right">{Number(w.rejects_10m ?? 0)}</td>
+                          <td className="px-3 py-2">
+                            {w.last_share ? fmtTime(w.last_share) : "—"}
+                          </td>
                           <td className={`px-3 py-2 ${st.cls}`}>{st.label}</td>
                         </tr>
                       );
                     })}
                   </tbody>
+
                 </table>
               </div>
             )}

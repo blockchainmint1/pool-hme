@@ -105,15 +105,28 @@ function pickCol(cols: Set<string>, candidates: string[]): string | null {
 
 
 
-/** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
-async function workerHashrateExpr(alias = "w"): Promise<string> {
-  const cols = await workersColumns();
-  for (const c of ["hashrate", "speed", "hashrate_bad"]) {
-    if (cols.has(c)) return `COALESCE(${alias}.${c}, 0)`;
-  }
-  // Fall back to difficulty-based estimate over the last share window.
-  if (cols.has("difficulty")) return `COALESCE(${alias}.difficulty, 0) * 65536 / 600`;
-  return `0`;
+// Per-worker hashrate now comes from the shares table (see below); the old
+// `workers`-column estimate mixed units and produced wrong numbers.
+
+
+/**
+ * Live per-worker stats derived from the `shares` table — the only honest
+ * source. `workers.time` is the CONNECTION timestamp and stale rows linger
+ * for hours, which is why worker counts and "last share" were wrong.
+ *
+ * hashrate (H/s) = SUM(valid share difficulty) * 2^32 / window seconds.
+ */
+const SHARE_WINDOW_SEC = 600;
+function liveWorkerStatsSubquery(windowSec = SHARE_WINDOW_SEC): string {
+  return `(SELECT s.workerid AS workerid,
+                  MAX(s.time) AS last_share,
+                  SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END)
+                    * 4294967296 / ${windowSec} AS live_hashrate,
+                  SUM(CASE WHEN s.valid = 1 THEN 1 ELSE 0 END) AS live_shares,
+                  SUM(CASE WHEN s.valid = 1 THEN 0 ELSE 1 END) AS live_rejects
+             FROM shares s
+            WHERE s.time > UNIX_TIMESTAMP() - ${windowSec}
+            GROUP BY s.workerid)`;
 }
 
 /** Column list for worker detail rows, skipping columns this fork lacks. */
@@ -123,6 +136,7 @@ async function workerDetailCols(alias = "w"): Promise<string[]> {
     .filter((c) => cols.has(c))
     .map((c) => `${alias}.${c}`);
 }
+
 
 
 const ADDR_RE = /^[A-Za-z0-9]{20,80}$/;
@@ -640,15 +654,15 @@ app.get("/api/v1/miners/count", async () => {
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) => {
   const limit = clampLimit(req.query.limit, 50, 200);
-  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT a.username AS address,
-            SUM(${hrExpr}) AS hashrate,
-            COUNT(*) AS workers,
-            MAX(w.time) AS last_share,
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate,
+            COUNT(DISTINCT ls.workerid) AS workers,
+            MAX(ls.last_share) AS last_share,
             w.algo
-       FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE w.time > UNIX_TIMESTAMP() - 600
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+       JOIN accounts a ON a.id = w.userid
       GROUP BY a.id, w.algo
       ORDER BY hashrate DESC
       LIMIT ?`,
@@ -671,18 +685,17 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) =
  * Never returns per-IP or per-address data.
  */
 app.get("/api/v1/miners/locations", async () => {
-  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT w.ip AS ip,
             COUNT(DISTINCT w.userid) AS miner_count,
-            SUM(${hrExpr}) AS hashrate
-       FROM shares s
-       JOIN workers w ON w.id = s.workerid
-      WHERE s.time > UNIX_TIMESTAMP() - 600
-        AND w.ip IS NOT NULL
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+      WHERE w.ip IS NOT NULL
         AND w.ip <> ''
       GROUP BY w.ip`,
   );
+
   const buckets = aggregateGeo(
     rows.map((r) => ({
       ip: r.ip as string | null,
@@ -766,14 +779,19 @@ async function minerSummary(address: string, reply: import("fastify").FastifyRep
   if (!account) return reply.code(404).send({ error: "not found" });
 
 
-  const hrAgg = await workerHashrateExpr("workers");
+  // Per-algo rollup from live shares, not the stale `workers` rows.
   const [workerAgg] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT algo, COUNT(*) AS workers_online, SUM(${hrAgg}) AS hashrate,
-            MAX(time) AS last_share
-       FROM workers WHERE userid = ? AND time > UNIX_TIMESTAMP() - 600
-      GROUP BY algo`,
+    `SELECT w.algo AS algo,
+            COUNT(DISTINCT ls.workerid) AS workers_online,
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate,
+            MAX(ls.last_share) AS last_share
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+      WHERE w.userid = ?
+      GROUP BY w.algo`,
     [account.id],
   );
+
   const [payoutAgg] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT COALESCE(SUM(amount),0) AS total_paid,
             COUNT(*) AS payout_count, MAX(time) AS last_payout
@@ -824,32 +842,64 @@ app.get<{ Params: { address: string } }>(
 
 async function minerWorkers(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
-  const hrExpr = await workerHashrateExpr("w");
   const detailCols = await workerDetailCols("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT w.id, ${detailCols.join(", ")}, ${hrExpr} AS hashrate
-       FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE a.username = ? ORDER BY hashrate DESC LIMIT 500`,
+    `SELECT w.id, ${detailCols.join(", ")},
+            COALESCE(ls.live_hashrate, 0) AS hashrate,
+            ls.last_share AS share_time,
+            ls.live_shares AS window_shares,
+            ls.live_rejects AS window_rejects
+       FROM workers w
+       JOIN accounts a ON a.id = w.userid
+       LEFT JOIN ${liveWorkerStatsSubquery()} ls ON ls.workerid = w.id
+      WHERE a.username = ?
+      ORDER BY hashrate DESC, w.time DESC
+      LIMIT 2000`,
     [address],
   );
   // Owner endpoint: include country+region but never the raw IP. If an
   // authenticated "my miner" view lands later we can widen this to include
   // IP for the miner's own address only.
-  const enriched = rows.map((r) => {
+  //
+  // `workers` keeps a row per stratum connection, so a rig that has
+  // reconnected all day shows up many times. Collapse to one row per
+  // worker+algo, keeping the live (share-backed) figures.
+  const byWorker = new Map<string, Record<string, unknown>>();
+  for (const r of rows) {
     const rec = r as unknown as Record<string, unknown> & { ip?: string | null };
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ip, subscribe_time, time, ...rest } = rec;
+    const { ip, subscribe_time, time, share_time, window_shares, window_rejects, ...rest } = rec;
     const { country, region } = lookupGeo(rec.ip);
-    return {
+    const lastShare = share_time != null ? Number(share_time) : null;
+    const row = {
       ...rest,
+      hashrate: Number(rec.hashrate ?? 0),
       connected_since: subscribe_time ?? null,
-      last_share: time ?? null,
+      // Only a real share timestamp counts; `workers.time` is connect time.
+      last_share: lastShare,
+      last_seen: lastShare ?? (time != null ? Number(time) : null),
+      shares_10m: window_shares != null ? Number(window_shares) : 0,
+      rejects_10m: window_rejects != null ? Number(window_rejects) : 0,
       country,
       region,
     };
-  });
+    const key = `${String(rest.worker ?? "")}|${String(rest.algo ?? "")}`;
+    const prev = byWorker.get(key);
+    if (
+      !prev ||
+      Number(row.hashrate) > Number(prev.hashrate ?? 0) ||
+      (Number(row.hashrate) === Number(prev.hashrate ?? 0) &&
+        Number(row.last_seen ?? 0) > Number(prev.last_seen ?? 0))
+    ) {
+      byWorker.set(key, row);
+    }
+  }
+  const enriched = [...byWorker.values()].sort(
+    (a, b) => Number(b.hashrate ?? 0) - Number(a.hashrate ?? 0),
+  );
   return { workers: enriched };
 }
+
 
 app.get<{ Params: { address: string }; Querystring: { limit?: string } }>(
   "/api/miner/:address/payouts",
