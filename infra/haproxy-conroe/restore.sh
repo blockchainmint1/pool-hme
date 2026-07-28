@@ -4,7 +4,7 @@
 # Idempotent: safe to re-run after every config change in this repo.
 #
 # Usage:
-#   sudo bash restore.sh --container N      # on-site install, N = 1..6
+#   sudo bash restore.sh --container N      # on-site install, N = 1..8
 #   sudo bash restore.sh --skip-netplan     # EC2 burn-in (no LAN, no NAT, no DHCP)
 #
 # On-site topology (one Beelink per container, 6 total):
@@ -34,7 +34,7 @@ for arg in "$@"; do
     --container)      shift; CONTAINER="${1:-}" ;;
     --wan=*)          FORCE_WAN="${arg#*=}" ;;
     --lan=*)          FORCE_LAN="${arg#*=}" ;;
-    [1-6])            CONTAINER="$arg" ;;  # tolerate `--container 3` split by shell
+    [1-8])            CONTAINER="$arg" ;;  # tolerate `--container 3` split by shell
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -46,8 +46,8 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 if [[ $SKIP_NETPLAN -eq 0 ]]; then
-  if [[ -z "$CONTAINER" || ! "$CONTAINER" =~ ^[1-6]$ ]]; then
-    echo "ERROR: --container N required (N = 1..6)" >&2
+  if [[ -z "$CONTAINER" || ! "$CONTAINER" =~ ^[1-8]$ ]]; then
+    echo "ERROR: --container N required (N = 1..8)" >&2
     echo "  example:  sudo bash restore.sh --container 1" >&2
     exit 2
   fi

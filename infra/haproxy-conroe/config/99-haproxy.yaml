@@ -8,7 +8,7 @@
 # miners see one gateway (the Beelink's LAN IP) and the landlord CPE
 # sees one device per container.
 #
-# Each container has a UNIQUE LAN subnet (10.N.0.0/24 for N=1..6) so
+# Each container has a UNIQUE LAN subnet (10.N.0.0/24 for N=1..8) so
 # admin access by direct IP is unambiguous. Subnets do not need to
 # be unique for correctness (each is NAT-isolated) — the uniqueness is
 # only there to keep humans from confusing which container they're on.
