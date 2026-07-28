@@ -91,17 +91,6 @@ function ago(sec: number) {
 function PoolHome() {
   return (
     <div className="font-pool-body pool-grid-bg -mt-[1px]">
-      {/* preview banner */}
-      <div className="border-b border-pool-hairline pool-graphite">
-        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-widest">
-          <div className="flex items-center gap-2 text-pool-steel">
-            <span className="size-1.5 rounded-full bg-pool-amber animate-pulse-dot" />
-            preview build · stratum lands soon on{" "}
-            <span className="text-pool-steel-hi">stratum.pool.texitcoin.org</span>
-          </div>
-          <div className="hidden md:block text-pool-steel">honest.money · TXC ecosystem</div>
-        </div>
-      </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-12 gap-6">
         {/* Left rail nav — dashboard shell */}
