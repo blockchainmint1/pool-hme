@@ -62,7 +62,7 @@ export const Route = createFileRoute("/api/currencies")({
               height: last?.height ?? 0,
               workers: algo?.live_clients ?? 0,
               hashrate: Math.round(algo?.hashrate_hs ?? 0),
-              difficulty: Number(d?.difficulty ?? 0),
+              difficulty: Number(d?.difficulty ?? effortDiff.get(c.symbol) ?? 0),
               network_hashrate: Number(d?.network_hash ?? 0),
               reward: Number(d?.reward ?? 0),
               "24h_blocks": summary.blocks_24h_by_symbol[c.symbol] ?? 0,
