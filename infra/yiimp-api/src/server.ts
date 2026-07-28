@@ -662,15 +662,15 @@ app.get("/api/v1/miners/count", async () => {
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) => {
   const limit = clampLimit(req.query.limit, 50, 200);
-  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT a.username AS address,
-            SUM(${hrExpr}) AS hashrate,
-            COUNT(*) AS workers,
-            MAX(w.time) AS last_share,
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate,
+            COUNT(DISTINCT ls.workerid) AS workers,
+            MAX(ls.last_share) AS last_share,
             w.algo
-       FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE w.time > UNIX_TIMESTAMP() - 600
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+       JOIN accounts a ON a.id = w.userid
       GROUP BY a.id, w.algo
       ORDER BY hashrate DESC
       LIMIT ?`,
@@ -693,18 +693,17 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/miners/top", async (req) =
  * Never returns per-IP or per-address data.
  */
 app.get("/api/v1/miners/locations", async () => {
-  const hrExpr = await workerHashrateExpr("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT w.ip AS ip,
             COUNT(DISTINCT w.userid) AS miner_count,
-            SUM(${hrExpr}) AS hashrate
-       FROM shares s
-       JOIN workers w ON w.id = s.workerid
-      WHERE s.time > UNIX_TIMESTAMP() - 600
-        AND w.ip IS NOT NULL
+            COALESCE(SUM(ls.live_hashrate), 0) AS hashrate
+       FROM ${liveWorkerStatsSubquery()} ls
+       JOIN workers w ON w.id = ls.workerid
+      WHERE w.ip IS NOT NULL
         AND w.ip <> ''
       GROUP BY w.ip`,
   );
+
   const buckets = aggregateGeo(
     rows.map((r) => ({
       ip: r.ip as string | null,
