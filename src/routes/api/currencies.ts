@@ -38,6 +38,12 @@ export const Route = createFileRoute("/api/currencies")({
             ),
           );
           const detailBySymbol = new Map(coinsRes.coins.map((c, i) => [c.symbol, details[i]?.coin]));
+          // Coin detail can be unavailable on older backends — fall back to the
+          // network difficulty carried in the pool summary's effort rows.
+          const effortDiff = new Map(
+            summary.effort.map((e) => [e.symbol, Number(e.network_difficulty ?? 0)]),
+          );
+
 
           const now = summary.fetched_at;
           const lastBySymbol = new Map(summary.last_blocks.map((b) => [b.symbol, b]));
