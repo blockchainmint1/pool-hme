@@ -799,13 +799,12 @@ app.get<{ Params: { address: string } }>(
 
 async function minerWorkers(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
+  const hrExpr = await workerHashrateExpr("w");
+  const detailCols = await workerDetailCols("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT w.id, w.worker, w.algo, w.hashrate, w.difficulty,
-            w.subscribe_time AS connected_since,
-            w.time AS last_share,
-            w.shares, w.rejects, w.stales, w.ip
+    `SELECT w.id, ${detailCols.join(", ")}, ${hrExpr} AS hashrate
        FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE a.username = ? ORDER BY w.hashrate DESC LIMIT 500`,
+      WHERE a.username = ? ORDER BY hashrate DESC LIMIT 500`,
     [address],
   );
   // Owner endpoint: include country+region but never the raw IP. If an
