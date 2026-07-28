@@ -42,15 +42,25 @@ fi
 YIIMP_KEYS="${YIIMP_KEYS:-/var/web/serverconfig.php}"
 db_query() { mysql --defaults-file=/etc/mysql/debian.cnf -N -B -e "$1" 2>/dev/null; }
 if ! db_query "select 1" >/dev/null 2>&1; then
-  MYSQL_USER="${MYSQL_USER:-}"; MYSQL_PASS="${MYSQL_PASS:-}"
+  MYSQL_USER="${MYSQL_USER:-}"; MYSQL_PASS="${MYSQL_PASS:-}"; MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
   if [ -z "$MYSQL_USER" ] && [ -r "$YIIMP_KEYS" ]; then
-    MYSQL_USER=$(sed -n "s/.*YIIMP_DB_USER'*, *'\([^']*\)'.*/\1/p;s/.*\$dbuser *= *'\([^']*\)'.*/\1/p" "$YIIMP_KEYS" | head -1)
-    MYSQL_PASS=$(sed -n "s/.*YIIMP_DB_PASS'*, *'\([^']*\)'.*/\1/p;s/.*\$dbpassword *= *'\([^']*\)'.*/\1/p" "$YIIMP_KEYS" | head -1)
+    # yiimp defines these as: define('YAAMP_DBUSER', 'panel');
+    php_def() { sed -n "s/.*define( *'$1' *, *'\([^']*\)').*/\1/p" "$YIIMP_KEYS" | head -1; }
+    MYSQL_USER=$(php_def YAAMP_DBUSER)
+    MYSQL_PASS=$(php_def YAAMP_DBPASSWORD)
+    MYSQL_DB=$(php_def YAAMP_DBNAME); MYSQL_DB="${MYSQL_DB:-yiimpfrontend}"
   fi
-  db_query() { mysql -u"$MYSQL_USER" -p"$MYSQL_PASS" yiimpfrontend -N -B -e "$1"; }
+  db_query() { mysql -u"$MYSQL_USER" -p"$MYSQL_PASS" "$MYSQL_DB" -N -B -e "$1"; }
 fi
 
-CUR_MASTER=$(db_query "select master_wallet from coins where symbol='LTC' limit 1" || true)
+CUR_MASTER=$(db_query "select master_wallet from coins where symbol='LTC' limit 1" 2>/dev/null || true)
+if [ -z "$CUR_MASTER" ]; then
+  echo "FATAL: cannot read coins.master_wallet for LTC."
+  echo "Rotating without DB write access would leave block rewards paying the OLD seed."
+  echo "Fix creds (or export MYSQL_USER/MYSQL_PASS) and re-run."
+  exit 1
+fi
+
 
 echo "=== LTC hot wallet rotation ==="
 echo "Mode        : $([ "$CONFIRM" = "CONFIRM_ROTATE" ] && echo EXECUTE || echo 'DRY RUN')"
