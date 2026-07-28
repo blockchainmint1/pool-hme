@@ -74,20 +74,29 @@ const pool = mysql.createPool({
  * expression we can splice into queries (identifier comes from
  * information_schema, never from user input).
  */
-let workersColsCache: Set<string> | null = null;
-async function workersColumns(): Promise<Set<string>> {
-  if (workersColsCache) return workersColsCache;
+const colsCache = new Map<string, Set<string>>();
+async function tableColumns(table: string): Promise<Set<string>> {
+  const cached = colsCache.get(table);
+  if (cached) return cached;
+  let set = new Set<string>();
   try {
     const [rows] = await pool.query<mysql.RowDataPacket[]>(
       `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'workers'`,
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+      [table],
     );
-    workersColsCache = new Set(rows.map((r) => String(r.COLUMN_NAME)));
+    set = new Set(rows.map((r) => String(r.COLUMN_NAME)));
   } catch {
-    workersColsCache = new Set<string>();
+    set = new Set<string>();
   }
-  return workersColsCache;
+  colsCache.set(table, set);
+  return set;
 }
+
+async function workersColumns(): Promise<Set<string>> {
+  return tableColumns("workers");
+}
+
 
 /** SQL expression yielding a per-worker hashrate (H/s), or 0 when unavailable. */
 async function workerHashrateExpr(alias = "w"): Promise<string> {
