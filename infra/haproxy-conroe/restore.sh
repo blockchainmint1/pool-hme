@@ -246,6 +246,7 @@ YAML
       -e "s|__LAN_POOL_START__|$LAN_POOL_START|g" \
       -e "s|__LAN_POOL_END__|$LAN_POOL_END|g" \
       -e "s|__CONTAINER__|$CONTAINER|g" \
+      -e "s|__SITE__|$SITE|g" \
       "$SRC_DIR/config/kea-dhcp4.conf" \
       > /etc/kea/kea-dhcp4.conf
   chmod 0644 /etc/kea/kea-dhcp4.conf
