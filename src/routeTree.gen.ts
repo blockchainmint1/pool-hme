@@ -31,6 +31,7 @@ import { Route as BlockHashRouteImport } from './routes/block.$hash'
 import { Route as ApiTxRouteImport } from './routes/api/tx'
 import { Route as ApiStatusRouteImport } from './routes/api/status'
 import { Route as ApiFeeEstimatesRouteImport } from './routes/api/fee-estimates'
+import { Route as ApiCurrenciesRouteImport } from './routes/api/currencies'
 import { Route as AddressAddrRouteImport } from './routes/address.$addr'
 import { Route as ApiMempoolIndexRouteImport } from './routes/api/mempool.index'
 import { Route as ApiBlocksIndexRouteImport } from './routes/api/blocks.index'
@@ -190,6 +191,11 @@ const ApiStatusRoute = ApiStatusRouteImport.update({
 const ApiFeeEstimatesRoute = ApiFeeEstimatesRouteImport.update({
   id: '/api/fee-estimates',
   path: '/api/fee-estimates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCurrenciesRoute = ApiCurrenciesRouteImport.update({
+  id: '/api/currencies',
+  path: '/api/currencies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AddressAddrRoute = AddressAddrRouteImport.update({
@@ -463,6 +469,7 @@ export interface FileRoutesByFullPath {
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
@@ -536,6 +543,7 @@ export interface FileRoutesByTo {
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
@@ -611,6 +619,7 @@ export interface FileRoutesById {
   '/richlist': typeof RichlistRoute
   '/terms': typeof TermsRoute
   '/address/$addr': typeof AddressAddrRoute
+  '/api/currencies': typeof ApiCurrenciesRoute
   '/api/fee-estimates': typeof ApiFeeEstimatesRoute
   '/api/status': typeof ApiStatusRoute
   '/api/tx': typeof ApiTxRouteWithChildren
@@ -687,6 +696,7 @@ export interface FileRouteTypes {
     | '/richlist'
     | '/terms'
     | '/address/$addr'
+    | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
@@ -760,6 +770,7 @@ export interface FileRouteTypes {
     | '/richlist'
     | '/terms'
     | '/address/$addr'
+    | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
@@ -834,6 +845,7 @@ export interface FileRouteTypes {
     | '/richlist'
     | '/terms'
     | '/address/$addr'
+    | '/api/currencies'
     | '/api/fee-estimates'
     | '/api/status'
     | '/api/tx'
@@ -909,6 +921,7 @@ export interface RootRouteChildren {
   RichlistRoute: typeof RichlistRoute
   TermsRoute: typeof TermsRoute
   AddressAddrRoute: typeof AddressAddrRoute
+  ApiCurrenciesRoute: typeof ApiCurrenciesRoute
   ApiFeeEstimatesRoute: typeof ApiFeeEstimatesRoute
   ApiStatusRoute: typeof ApiStatusRoute
   ApiTxRoute: typeof ApiTxRouteWithChildren
@@ -1102,6 +1115,13 @@ declare module '@tanstack/react-router' {
       path: '/api/fee-estimates'
       fullPath: '/api/fee-estimates'
       preLoaderRoute: typeof ApiFeeEstimatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/currencies': {
+      id: '/api/currencies'
+      path: '/api/currencies'
+      fullPath: '/api/currencies'
+      preLoaderRoute: typeof ApiCurrenciesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/address/$addr': {
@@ -1588,6 +1608,7 @@ const rootRouteChildren: RootRouteChildren = {
   RichlistRoute: RichlistRoute,
   TermsRoute: TermsRoute,
   AddressAddrRoute: AddressAddrRoute,
+  ApiCurrenciesRoute: ApiCurrenciesRoute,
   ApiFeeEstimatesRoute: ApiFeeEstimatesRoute,
   ApiStatusRoute: ApiStatusRoute,
   ApiTxRoute: ApiTxRouteWithChildren,
