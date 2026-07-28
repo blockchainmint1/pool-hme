@@ -851,32 +851,64 @@ app.get<{ Params: { address: string } }>(
 
 async function minerWorkers(address: string, reply: import("fastify").FastifyReply) {
   if (!ADDR_RE.test(address)) return reply.code(400).send({ error: "bad address" });
-  const hrExpr = await workerHashrateExpr("w");
   const detailCols = await workerDetailCols("w");
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT w.id, ${detailCols.join(", ")}, ${hrExpr} AS hashrate
-       FROM workers w JOIN accounts a ON a.id = w.userid
-      WHERE a.username = ? ORDER BY hashrate DESC LIMIT 500`,
+    `SELECT w.id, ${detailCols.join(", ")},
+            COALESCE(ls.live_hashrate, 0) AS hashrate,
+            ls.last_share AS share_time,
+            ls.live_shares AS window_shares,
+            ls.live_rejects AS window_rejects
+       FROM workers w
+       JOIN accounts a ON a.id = w.userid
+       LEFT JOIN ${liveWorkerStatsSubquery()} ls ON ls.workerid = w.id
+      WHERE a.username = ?
+      ORDER BY hashrate DESC, w.time DESC
+      LIMIT 2000`,
     [address],
   );
   // Owner endpoint: include country+region but never the raw IP. If an
   // authenticated "my miner" view lands later we can widen this to include
   // IP for the miner's own address only.
-  const enriched = rows.map((r) => {
+  //
+  // `workers` keeps a row per stratum connection, so a rig that has
+  // reconnected all day shows up many times. Collapse to one row per
+  // worker+algo, keeping the live (share-backed) figures.
+  const byWorker = new Map<string, Record<string, unknown>>();
+  for (const r of rows) {
     const rec = r as unknown as Record<string, unknown> & { ip?: string | null };
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ip, subscribe_time, time, ...rest } = rec;
+    const { ip, subscribe_time, time, share_time, window_shares, window_rejects, ...rest } = rec;
     const { country, region } = lookupGeo(rec.ip);
-    return {
+    const lastShare = share_time != null ? Number(share_time) : null;
+    const row = {
       ...rest,
+      hashrate: Number(rec.hashrate ?? 0),
       connected_since: subscribe_time ?? null,
-      last_share: time ?? null,
+      // Only a real share timestamp counts; `workers.time` is connect time.
+      last_share: lastShare,
+      last_seen: lastShare ?? (time != null ? Number(time) : null),
+      shares_10m: window_shares != null ? Number(window_shares) : 0,
+      rejects_10m: window_rejects != null ? Number(window_rejects) : 0,
       country,
       region,
     };
-  });
+    const key = `${String(rest.worker ?? "")}|${String(rest.algo ?? "")}`;
+    const prev = byWorker.get(key);
+    if (
+      !prev ||
+      Number(row.hashrate) > Number(prev.hashrate ?? 0) ||
+      (Number(row.hashrate) === Number(prev.hashrate ?? 0) &&
+        Number(row.last_seen ?? 0) > Number(prev.last_seen ?? 0))
+    ) {
+      byWorker.set(key, row);
+    }
+  }
+  const enriched = [...byWorker.values()].sort(
+    (a, b) => Number(b.hashrate ?? 0) - Number(a.hashrate ?? 0),
+  );
   return { workers: enriched };
 }
+
 
 app.get<{ Params: { address: string }; Querystring: { limit?: string } }>(
   "/api/miner/:address/payouts",
