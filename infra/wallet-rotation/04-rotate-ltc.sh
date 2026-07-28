@@ -170,9 +170,17 @@ log "stopping litecoind (service='${LTC_SVC:-manual}')"
 stop_ltc
 
 log "moving old wallet aside"
-OLD_WALLET="$WALLET_PATH.old-seed-$STAMP"
-mv "$WALLET_PATH" "$OLD_WALLET"
-chmod 600 "$OLD_WALLET"
+if [ -n "$WALLET_NAME" ]; then
+  # Move the WHOLE wallet dir: createwallet refuses a path that already exists,
+  # and leaving the old .dat inside wallets/<name>/ would block it.
+  OLD_WALLET="$LTC_DIR/wallets/$WALLET_NAME.old-seed-$STAMP"
+  mv "$LTC_DIR/wallets/$WALLET_NAME" "$OLD_WALLET"
+  chmod 700 "$OLD_WALLET"; chmod 600 "$OLD_WALLET/wallet.dat"
+else
+  OLD_WALLET="$WALLET_PATH.old-seed-$STAMP"
+  mv "$WALLET_PATH" "$OLD_WALLET"
+  chmod 600 "$OLD_WALLET"
+fi
 
 if [ -n "$WALLET_NAME" ]; then
   # Named wallet: the daemon refuses to start when wallets/<name>/wallet.dat is
@@ -185,7 +193,6 @@ if [ -n "$WALLET_NAME" ]; then
   log "starting litecoind (temp conf, no wallet loaded)"
   sudo -u ubuntu "$LTC_BIN/litecoind" -conf="$TMP_CONF" -datadir="$LTC_DIR" -daemon
   for _ in $(seq 1 180); do $TCLI getblockcount >/dev/null 2>&1 && break; sleep 1; done
-  rmdir "$LTC_DIR/wallets/$WALLET_NAME" 2>/dev/null || true
   log "creating fresh encrypted wallet '$WALLET_NAME'"
   $TCLI createwallet "$WALLET_NAME" false false "$WALLET_PASSPHRASE" false
   $TCLI -rpcwallet="$WALLET_NAME" walletpassphrase "$WALLET_PASSPHRASE" 120 >/dev/null
