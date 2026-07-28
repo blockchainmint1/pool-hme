@@ -155,8 +155,10 @@ stop_ltc() {
   echo "FATAL: litecoind still running"; exit 1
 }
 start_ltc() {
-  if [ -n "$LTC_SVC" ]; then systemctl start "$LTC_SVC";
-  else sudo -u ubuntu "$LTC_BIN/litecoind" -conf="$LTC_DIR/litecoin.conf" -daemon; fi
+  # systemd may exit non-zero on "Can't open PID file ... Operation not permitted"
+  # even though the daemon started fine -- never let that abort the rotation.
+  if [ -n "$LTC_SVC" ]; then systemctl start "$LTC_SVC" || true;
+  else sudo -u ubuntu "$LTC_BIN/litecoind" -conf="$LTC_DIR/litecoin.conf" -daemon || true; fi
   for _ in $(seq 1 180); do $LCLI getwalletinfo >/dev/null 2>&1 && return 0; sleep 1; done
   echo "FATAL: litecoind did not come back"; exit 1
 }
