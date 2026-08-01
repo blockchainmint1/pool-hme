@@ -114,12 +114,13 @@ echo "=== verification ==="
 systemctl --no-pager status ltc-unlock.timer | head -6
 MY "SELECT completed, COUNT(*), IFNULL(SUM(amount),0) FROM payouts WHERE idcoin=8 GROUP BY completed"
 echo
-cat <<'NEXT'
-NEXT
+cat <<'EOSUM'
+NEXT STEPS
   * Watch the next payout cycle land:
       watch -n30 "mysql ... -e \"select count(*) from payouts where idcoin=8 and completed=0\""
   * Confirm sends appear on-chain:
       litecoin-cli -rpcwallet=pool listtransactions '*' 10 0 | grep -E 'category|amount|txid'
   * The wallet auto-relocks 5 minutes after the timer stops, so disabling the
     timer (systemctl disable --now ltc-unlock.timer) is enough to re-secure it.
-NEXT
+EOSUM
+
