@@ -20,6 +20,7 @@
 # Optional: raise the per-coin minimum so a miner is only paid once their
 # balance is worth the fee. Set PAYOUT_MIN_LTC / PAYOUT_MIN_DOGE to skip.
 set -euo pipefail
+trap 'echo "FAILED at line $LINENO (exit $?) -- see above for the last step that ran." >&2' ERR
 
 CONFIRM="${1:-}"
 FREQ_SECONDS="${FREQ_SECONDS:-86400}"        # 24h
@@ -86,12 +87,26 @@ else
     echo "      wrote $CRON_D"
     # Drop duplicate entries from root's crontab (an earlier run of this script
     # may have added one there).
-    CRONTAB_NOW="$(crontab -l 2>/dev/null || true)"
+    # crontab(1) is finicky (empty result, no-crontab-for-root, EDITOR checks);
+    # never let it abort the whole run -- the cron.d file above is what matters.
+    set +e
+    CRONTAB_NOW="$(crontab -l 2>/dev/null)"
     if echo "$CRONTAB_NOW" | grep -q "doge-payout-cycle"; then
       echo "$CRONTAB_NOW" > "/var/backups/root-crontab-$STAMP.txt"
-      echo "$CRONTAB_NOW" | grep -v "doge-payout-cycle" | sed '/^$/d' | crontab -
-      echo "      removed duplicate doge line from root crontab (backup: /var/backups/root-crontab-$STAMP.txt)"
+      CLEANED="$(echo "$CRONTAB_NOW" | grep -v "doge-payout-cycle" | sed '/^$/d')"
+      if [ -n "$CLEANED" ]; then
+        printf '%s\n' "$CLEANED" | crontab -
+      else
+        crontab -r 2>/dev/null
+      fi
+      if [ $? -eq 0 ]; then
+        echo "      removed duplicate doge line from root crontab (backup: /var/backups/root-crontab-$STAMP.txt)"
+      else
+        echo "      WARNING: could not rewrite root crontab -- remove the doge line manually:"
+        echo "                 sudo crontab -e"
+      fi
     fi
+    set -e
     echo "      active schedules now:"
     grep -rn "doge-payout-cycle" /etc/cron.d /etc/crontab /var/spool/cron 2>/dev/null | sed 's/^/        /'
   fi
@@ -106,8 +121,12 @@ MYSQL=(mysql "-u${DBU}" "-p${DBP}" yiimpfrontend -N -B -e)
 "${MYSQL[@]}" "SELECT id, symbol, payout_min FROM coins WHERE symbol IN ('LTC','DOGE');" \
   | awk '{printf "      id=%s %s payout_min=%s\n", $1, $2, $3}'
 if [ "$APPLY" = true ]; then
-  [ -n "$PAYOUT_MIN_LTC" ]  && "${MYSQL[@]}" "UPDATE coins SET payout_min=$PAYOUT_MIN_LTC  WHERE symbol='LTC';"
-  [ -n "$PAYOUT_MIN_DOGE" ] && "${MYSQL[@]}" "UPDATE coins SET payout_min=$PAYOUT_MIN_DOGE WHERE symbol='DOGE';"
+  if [ -n "$PAYOUT_MIN_LTC" ]; then
+    "${MYSQL[@]}" "UPDATE coins SET payout_min=$PAYOUT_MIN_LTC  WHERE symbol='LTC';"
+  fi
+  if [ -n "$PAYOUT_MIN_DOGE" ]; then
+    "${MYSQL[@]}" "UPDATE coins SET payout_min=$PAYOUT_MIN_DOGE WHERE symbol='DOGE';"
+  fi
   echo "      after:"
   "${MYSQL[@]}" "SELECT id, symbol, payout_min FROM coins WHERE symbol IN ('LTC','DOGE');" \
     | awk '{printf "      id=%s %s payout_min=%s\n", $1, $2, $3}'
