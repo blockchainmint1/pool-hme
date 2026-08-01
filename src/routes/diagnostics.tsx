@@ -33,8 +33,8 @@ export const Route = createFileRoute("/diagnostics")({
   component: DiagnosticsPage,
 });
 
-function fmtAge(sec: number, now: number): string {
-  if (!sec) return "—";
+function fmtAge(sec: number, now: number | null): string {
+  if (!sec || now === null) return "—";
   const d = Math.max(0, now - sec);
   if (d < 60) return `${d}s ago`;
   if (d < 3600) return `${Math.floor(d / 60)}m ago`;
@@ -52,10 +52,10 @@ function fmtHashrate(hs: number): string {
 
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
-  // Age labels are clock-dependent: render the server's snapshot time during
-  // SSR/hydration, then tick on the client. Using Date.now() directly here
-  // makes the server and client HTML disagree ("28s ago" vs "49s ago").
-  const [now, setNow] = useState(() => data.generated_at ?? Math.floor(Date.now() / 1000));
+  // Age labels are clock-dependent, so they can't be rendered during SSR:
+  // Date.now() on the server disagrees with the client and breaks hydration
+  // ("28s ago" vs "49s ago"). Stay blank until mounted, then tick.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     const tick = () => setNow(Math.floor(Date.now() / 1000));
     tick();
