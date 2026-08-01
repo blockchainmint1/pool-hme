@@ -33,13 +33,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
       },
       { property: "og:title", content: "TEXITcoin Pool — Sound-money mining, made simple" },
       {
         property: "og:description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -47,7 +47,7 @@ export const Route = createFileRoute("/")({
       {
         name: "twitter:description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and 30-minute payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
       },
     ],
   }),
@@ -161,7 +161,7 @@ function PoolHome() {
               <ConnectCard />
             </div>
             <div className="lg:col-span-2 space-y-3">
-              <SectionHeader eyebrow="Fair share" title="Payouts." hint="every 30 minutes" />
+              <SectionHeader eyebrow="Fair share" title="Payouts." hint="once a day, 06:15 UTC" />
               <PayoutCard />
             </div>
           </section>

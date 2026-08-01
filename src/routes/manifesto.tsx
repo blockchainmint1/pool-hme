@@ -46,7 +46,7 @@ function ManifestoPage() {
         </Section>
 
         <Section title="Custody-free by construction.">
-          The pool never holds your coins beyond the ~30-minute payout cycle. You register
+          The pool never holds your coins beyond the once-a-day payout cycle. You register
           your own LTC address, your own DOGE payout address, and the pool routes to them
           directly. There is nothing to hack that would let anyone take your funds.
         </Section>
