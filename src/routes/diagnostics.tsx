@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getPoolDiagnostics } from "@/lib/pool/diagnostics.functions";
 import { ChevronLeft, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -51,7 +52,16 @@ function fmtHashrate(hs: number): string {
 
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
-  const now = Math.floor(Date.now() / 1000);
+  // Age labels are clock-dependent: render the server's snapshot time during
+  // SSR/hydration, then tick on the client. Using Date.now() directly here
+  // makes the server and client HTML disagree ("28s ago" vs "49s ago").
+  const [now, setNow] = useState(() => data.generated_at ?? Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const tick = () => setNow(Math.floor(Date.now() / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
   const healthy = data.health.ok && data.health.db;
 
   return (
