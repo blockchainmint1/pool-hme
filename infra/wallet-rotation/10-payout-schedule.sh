@@ -63,23 +63,41 @@ fi
 echo
 
 # ----------------------------------------------------------------- 2. DOGE ---
+# The real schedule lives in /etc/cron.d/yiimp-doge-payout-cycle (system crontab
+# with a user field), NOT root's crontab. Treat the cron.d file as canonical and
+# strip any duplicate doge lines out of root's crontab.
+CRON_D="${CRON_D:-/etc/cron.d/yiimp-doge-payout-cycle}"
+DOGE_CRON_USER="${DOGE_CRON_USER:-ubuntu}"
+DOGE_LOG="${DOGE_LOG:-/var/web/runtime/doge-payout/cron-wrapper.log}"
 echo "[2/3] DOGE cron entry ($DOGE_CYCLE)"
 if [ ! -f "$DOGE_CYCLE" ]; then
   echo "      WARNING: $DOGE_CYCLE missing -- skipping DOGE schedule."
 else
-  CRONTAB_NOW="$(crontab -l 2>/dev/null || true)"
-  echo "$CRONTAB_NOW" | grep -n "doge-payout-cycle" || echo "      (no existing entry)"
-  NEW_LINE="$DOGE_CRON_MIN $DOGE_CRON_HOUR * * * $DOGE_CYCLE >> /var/log/doge-payout-cycle.log 2>&1"
-  echo "      new:  $NEW_LINE"
+  echo "      existing schedules found:"
+  grep -rn "doge-payout-cycle" /etc/cron.d /etc/crontab /var/spool/cron 2>/dev/null \
+    | sed 's/^/        /' || echo "        (none)"
+  NEW_LINE="$DOGE_CRON_MIN $DOGE_CRON_HOUR * * * $DOGE_CRON_USER cd /var/web && $DOGE_CYCLE >> $DOGE_LOG 2>&1"
+  echo "      new ($CRON_D):  $NEW_LINE"
   if [ "$APPLY" = true ]; then
-    echo "$CRONTAB_NOW" > "/var/backups/root-crontab-$STAMP.txt"
-    { echo "$CRONTAB_NOW" | grep -v "doge-payout-cycle" || true; echo "$NEW_LINE"; } \
-      | sed '/^$/d' | crontab -
-    echo "      crontab backup: /var/backups/root-crontab-$STAMP.txt"
-    crontab -l | grep doge-payout-cycle
+    [ -f "$CRON_D" ] && cp -a "$CRON_D" "/var/backups/$(basename "$CRON_D").bak-$STAMP"
+    printf '# Managed by infra/wallet-rotation/10-payout-schedule.sh (%s)\n# DOGE payouts run once per day; see also YAAMP_PAYMENTS_FREQ.\nSHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\n%s\n' \
+      "$STAMP" "$NEW_LINE" > "$CRON_D"
+    chmod 0644 "$CRON_D"; chown root:root "$CRON_D"
+    echo "      wrote $CRON_D"
+    # Drop duplicate entries from root's crontab (an earlier run of this script
+    # may have added one there).
+    CRONTAB_NOW="$(crontab -l 2>/dev/null || true)"
+    if echo "$CRONTAB_NOW" | grep -q "doge-payout-cycle"; then
+      echo "$CRONTAB_NOW" > "/var/backups/root-crontab-$STAMP.txt"
+      echo "$CRONTAB_NOW" | grep -v "doge-payout-cycle" | sed '/^$/d' | crontab -
+      echo "      removed duplicate doge line from root crontab (backup: /var/backups/root-crontab-$STAMP.txt)"
+    fi
+    echo "      active schedules now:"
+    grep -rn "doge-payout-cycle" /etc/cron.d /etc/crontab /var/spool/cron 2>/dev/null | sed 's/^/        /'
   fi
 fi
 echo
+
 
 # ----------------------------------------------------------- 3. payout_min ---
 echo "[3/3] coins.payout_min"
