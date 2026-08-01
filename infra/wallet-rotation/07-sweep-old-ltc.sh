@@ -51,13 +51,31 @@ echo "Dest addr   : $DEST   (current seed ${CUR_SEED:-unknown})"
 echo
 
 # --- load the old wallet (idempotent) ------------------------------------------
-if ! $OLD getwalletinfo >/dev/null 2>&1; then
+# `loadwallet` on an already-loaded wallet returns error -4 ("already loaded"),
+# which is harmless: a previous dry run may have failed to unload it. Detect with
+# listwallets, and treat a failed load as fatal only if the wallet is still absent.
+is_loaded() { $LCLI listwallets 2>/dev/null | grep -q "\"$OLD_NAME\""; }
+if is_loaded; then
+  log "$OLD_NAME already loaded (left over from an earlier run) -- reusing it"
+else
   log "loading $OLD_NAME"
-  $LCLI loadwallet "$OLD_NAME" >/dev/null
+  $LCLI loadwallet "$OLD_NAME" >/dev/null 2>&1 || true
+  is_loaded || { echo "FATAL: could not load $OLD_NAME"; $LCLI loadwallet "$OLD_NAME"; exit 1; }
 fi
 LOADED=1
-unload_old() { [ "${LOADED:-0}" = 1 ] && { $OLD walletlock >/dev/null 2>&1 || true; $LCLI unloadwallet "$OLD_NAME" >/dev/null 2>&1 || true; }; }
+unload_old() {
+  [ "${LOADED:-0}" = 1 ] || return 0
+  $OLD walletlock >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    is_loaded || { log "unloaded $OLD_NAME"; return 0; }
+    $LCLI unloadwallet "$OLD_NAME" >/dev/null 2>&1 || true
+    sleep 2
+  done
+  echo "WARNING: $OLD_NAME is still loaded (a rescan may still be running)."
+  echo "         Unload it manually before re-running:  $LCLI unloadwallet $OLD_NAME"
+}
 trap 'echo "FAILED -- unloading old wallet"; unload_old' ERR
+
 
 # --- rescan so matured coinbases show up ---------------------------------------
 log "rescanning $OLD_NAME (daemon stays online; this can take several minutes)"
