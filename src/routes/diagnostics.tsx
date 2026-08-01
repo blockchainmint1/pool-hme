@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getPoolDiagnostics } from "@/lib/pool/diagnostics.functions";
 import { ChevronLeft, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -32,8 +33,8 @@ export const Route = createFileRoute("/diagnostics")({
   component: DiagnosticsPage,
 });
 
-function fmtAge(sec: number, now: number): string {
-  if (!sec) return "—";
+function fmtAge(sec: number, now: number | null): string {
+  if (!sec || now === null) return "—";
   const d = Math.max(0, now - sec);
   if (d < 60) return `${d}s ago`;
   if (d < 3600) return `${Math.floor(d / 60)}m ago`;
@@ -51,7 +52,16 @@ function fmtHashrate(hs: number): string {
 
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
-  const now = Math.floor(Date.now() / 1000);
+  // Age labels are clock-dependent, so they can't be rendered during SSR:
+  // Date.now() on the server disagrees with the client and breaks hydration
+  // ("28s ago" vs "49s ago"). Stay blank until mounted, then tick.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Math.floor(Date.now() / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
   const healthy = data.health.ok && data.health.db;
 
   return (
