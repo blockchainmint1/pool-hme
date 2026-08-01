@@ -599,16 +599,17 @@ function CodeCopy({
 // Payout card + countdown
 // ---------------------------------------------------------------------------
 function PayoutCard() {
-  const nextPayout = useMemo(() => nextHalfHourEpoch(), []);
   const [remainingSec, setRemainingSec] = useState(0);
   useEffect(() => {
-    const tick = () => setRemainingSec(Math.max(0, nextPayout - Math.floor(Date.now() / 1000)));
+    const tick = () =>
+      setRemainingSec(Math.max(0, nextDailyPayoutEpoch() - Math.floor(Date.now() / 1000)));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [nextPayout]);
+  }, []);
 
-  const mm = String(Math.floor(remainingSec / 60)).padStart(2, "0");
+  const hh = String(Math.floor(remainingSec / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((remainingSec % 3600) / 60)).padStart(2, "0");
   const ss = String(remainingSec % 60).padStart(2, "0");
 
   return (
@@ -617,6 +618,8 @@ function PayoutCard() {
         Next payout
       </div>
       <div className="font-pool-display font-semibold text-5xl text-pool-steel-hi tabular-nums pool-hash-live">
+        {hh}
+        <span className="text-pool-steel">:</span>
         {mm}
         <span className="text-pool-steel">:</span>
         {ss}
@@ -624,15 +627,15 @@ function PayoutCard() {
       <ul className="space-y-2 text-sm text-pool-steel">
         <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
           <span>Interval</span>
-          <span className="text-pool-steel-hi font-mono">every 30 min</span>
+          <span className="text-pool-steel-hi font-mono">daily · 06:15 UTC</span>
         </li>
         <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
-          <span>Threshold</span>
-          <span className="text-pool-steel-hi font-mono">≥ 0.001</span>
+          <span>Threshold LTC</span>
+          <span className="text-pool-steel-hi font-mono">≥ 0.01</span>
         </li>
         <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
-          <span>Sunday sweep</span>
-          <span className="text-pool-steel-hi font-mono">≥ 0.0001</span>
+          <span>Threshold DOGE</span>
+          <span className="text-pool-steel-hi font-mono">≥ 50</span>
         </li>
         <li className="flex items-center justify-between">
           <span>Payout coins</span>
@@ -640,19 +643,20 @@ function PayoutCard() {
         </li>
       </ul>
       <div className="text-[11px] font-mono text-pool-steel leading-relaxed">
-        TXC / ISK / ZCU are mined for chain security and are not part of the pool payout —
-        by design, so the pool never becomes a distribution bottleneck for TEXITcoin itself.
+        One batched send per day keeps network fees off your earnings. Balances below the
+        threshold simply roll into the next day. TXC / ISK / ZCU are mined for chain security
+        and are not part of the pool payout — by design, so the pool never becomes a
+        distribution bottleneck for TEXITcoin itself.
       </div>
     </div>
   );
 }
 
-function nextHalfHourEpoch() {
+function nextDailyPayoutEpoch() {
   const now = new Date();
-  const m = now.getUTCMinutes();
-  const bump = m < 30 ? 30 - m : 60 - m;
   const then = new Date(now);
-  then.setUTCMinutes(m + bump, 0, 0);
+  then.setUTCHours(6, 15, 0, 0);
+  if (then.getTime() <= now.getTime()) then.setUTCDate(then.getUTCDate() + 1);
   return Math.floor(then.getTime() / 1000);
 }
 
