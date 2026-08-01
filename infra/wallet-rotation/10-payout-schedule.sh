@@ -119,14 +119,23 @@ if [ "$APPLY" != true ]; then
   exit 0
 fi
 
-# yiimp reads serverconfig.php per process; bounce the loops so the new value
-# takes effect immediately instead of at the next natural restart.
-for unit in yiimp-loop2 yiimp-loop2.service loop2; do
-  if systemctl list-units --all --type=service --no-legend | grep -q "^${unit}"; then
-    systemctl restart "$unit" && echo "restarted $unit"
+# yiimp reads serverconfig.php per process; loop2 is a long-running daemon that
+# read the OLD value at boot, so it must be bounced. `systemctl list-units` output
+# is indented/decorated -- use `systemctl cat` to test for existence instead.
+RESTARTED=false
+for unit in yiimp-loop2.service loop2.service; do
+  if systemctl cat "$unit" >/dev/null 2>&1; then
+    systemctl restart "$unit" && echo "restarted $unit" && RESTARTED=true
     break
   fi
 done
+if [ "$RESTARTED" != true ]; then
+  echo "WARNING: no loop2 systemd unit found -- restart it manually or the old"
+  echo "         payment frequency stays live in the running process:"
+  echo "           ps -ef | grep [l]oop2.sh"
+fi
+systemctl restart cron >/dev/null 2>&1 && echo "reloaded cron"
+
 
 cat <<'EOF'
 
