@@ -45,6 +45,9 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const CACHE_MS = 30_000;
+/** Past this age a cached diag snapshot is dropped instead of served as live. */
+const STALE_MAX_MS = 10 * 60_000;
+
 
 export const stratumEvents = new EventEmitter();
 stratumEvents.setMaxListeners(1000);
@@ -67,9 +70,14 @@ export async function getStratumLive(): Promise<Record<string, StratumLive>> {
       if (parsed) {
         cache.set(algo, { value: parsed, fetchedAt: now });
         out[algo] = parsed;
-      } else if (cached) {
+      } else if (cached && now - cached.fetchedAt < STALE_MAX_MS) {
+        // Serve a recent cached value across a transient read failure, but
+        // never pass off an hours-old snapshot as "live".
         out[algo] = cached.value;
+      } else {
+        cache.delete(algo);
       }
+
     }),
   );
   return out;
@@ -78,8 +86,18 @@ export async function getStratumLive(): Promise<Record<string, StratumLive>> {
 async function readSummary(algo: string): Promise<StratumLive | null> {
   try {
     const p = path.join(STRATUM_LOG_DIR, `${algo}.log`);
-    const buf = await tailFile(p, 32 * 1024);
-    const line = lastMatch(buf, /summary diag[^\n]+/gi);
+    // The daemon writes one "summary diag" line per minute, but a busy pool
+    // can emit megabytes of share lines in that same minute. A small tail
+    // therefore often contains NO summary line at all, which used to make us
+    // serve a hours-old cached value forever. Grow the window until we find
+    // one.
+    let line: string | null = null;
+    for (const bytes of [64 * 1024, 1024 * 1024, 8 * 1024 * 1024]) {
+      const buf = await tailFile(p, bytes);
+      line = lastMatch(buf, /summary diag[^\n]+/gi);
+      if (line) break;
+      if (buf.length < bytes) break; // read the whole file already
+    }
     if (!line) return null;
     const kv: Record<string, string> = {};
     for (const m of line.matchAll(/(\w+)=([-+]?[\d.]+)/g)) kv[m[1]] = m[2];
@@ -97,6 +115,7 @@ async function readSummary(algo: string): Promise<StratumLive | null> {
     return null;
   }
 }
+
 
 async function tailFile(p: string, bytes: number): Promise<string> {
   const fh = await fs.open(p, "r");
