@@ -45,6 +45,9 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const CACHE_MS = 30_000;
+/** Past this age a cached diag snapshot is dropped instead of served as live. */
+const STALE_MAX_MS = 10 * 60_000;
+
 
 export const stratumEvents = new EventEmitter();
 stratumEvents.setMaxListeners(1000);
