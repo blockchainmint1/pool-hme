@@ -424,29 +424,30 @@ function AlgoTable() {
 // ---------------------------------------------------------------------------
 function PoolStatsTable() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  // Derive per-coin counts + last-found from the pool-found blocks list.
-  // Windows: 1h / 24h / 7d — computed from block timestamps.
   const now = data.fetchedAt;
-  const buckets = { h1: 3600, h24: 86_400, d7: 7 * 86_400 };
-  type Row = { symbol: string; name: string; h1: number; h24: number; d7: number; last: number };
-  const rows: Record<string, Row> = {};
-  for (const b of data.blocks) {
-    const r = rows[b.symbol] ?? {
-      symbol: b.symbol,
-      name: b.name,
-      h1: 0,
-      h24: 0,
-      d7: 0,
-      last: 0,
-    };
-    const age = now - b.time;
-    if (age <= buckets.h1) r.h1 += 1;
-    if (age <= buckets.h24) r.h24 += 1;
-    if (age <= buckets.d7) r.d7 += 1;
-    if (b.time > r.last) r.last = b.time;
-    rows[b.symbol] = r;
-  }
-  const list = Object.values(rows).sort((a, b) => b.d7 - a.d7);
+
+  // 24h counts come from the API's DB-side aggregate. The `blocks` list is a
+  // truncated recent window (20 rows), so counting it per-window silently
+  // capped every coin at the same number — use it only for names/last-found.
+  const nameBySymbol: Record<string, string> = {};
+  for (const b of data.blocks) nameBySymbol[b.symbol] ??= b.name;
+
+  const list = Object.entries(data.blocks24hBySymbol)
+    .map(([symbol, count]) => ({
+      symbol,
+      name: nameBySymbol[symbol] ?? symbol,
+      h24: Number(count) || 0,
+      last: data.lastFoundBySymbol[symbol] ?? 0,
+    }))
+    .sort((a, b) => b.h24 - a.h24);
+
+  const interval = (n: number) => {
+    if (!n) return "—";
+    const secs = Math.round(86_400 / n);
+    if (secs < 90) return `${secs}s`;
+    if (secs < 5400) return `${Math.round(secs / 60)}m`;
+    return `${(secs / 3600).toFixed(1)}h`;
+  };
 
   return (
     <div className="pool-kpi-panel rounded-lg overflow-hidden">
@@ -456,16 +457,15 @@ function PoolStatsTable() {
             <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
               <th className="text-left px-5 py-3 font-normal">Coin</th>
               <th className="text-left px-3 py-3 font-normal">Symbol</th>
-              <th className="text-right px-3 py-3 font-normal">Blocks 1 h</th>
-              <th className="text-right px-3 py-3 font-normal">24 h</th>
-              <th className="text-right px-3 py-3 font-normal">7 d</th>
+              <th className="text-right px-3 py-3 font-normal">Blocks 24 h</th>
+              <th className="text-right px-3 py-3 font-normal">Avg interval</th>
               <th className="text-right px-5 py-3 font-normal">Last found</th>
             </tr>
           </thead>
           <tbody className="font-mono">
             {list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-6 text-center text-pool-steel">
+                <td colSpan={5} className="px-5 py-6 text-center text-pool-steel">
                   No pool-found blocks yet in the current window.
                 </td>
               </tr>
@@ -477,9 +477,10 @@ function PoolStatsTable() {
               >
                 <td className="px-5 py-3 text-pool-steel-hi">{r.name}</td>
                 <td className="px-3 py-3 text-pool-steel">{r.symbol}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h1}</td>
                 <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.h24}</td>
-                <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">{r.d7}</td>
+                <td className="px-3 py-3 text-right text-pool-steel tabular-nums">
+                  {interval(r.h24)}
+                </td>
                 <td className="px-5 py-3 text-right text-pool-steel tabular-nums">
                   {r.last ? ago(Math.max(0, now - r.last)) : "—"}
                 </td>
@@ -489,12 +490,13 @@ function PoolStatsTable() {
         </table>
       </div>
       <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel">
-        Only TXC · ISK · ZCU are solo-found by this pool. LTC / DOGE credit via auxpow and
-        are not counted here.
+        Counts are 24 h totals from the pool database. TXC · ISK · ZCU are solo-found here;
+        LTC / DOGE are credited via auxpow and land far less often.
       </div>
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Connect card — copy-able stratum config
