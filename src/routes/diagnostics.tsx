@@ -102,16 +102,20 @@ function DiagnosticsPage() {
         {/* Per-algo */}
         <Section title="1 · Stratum health · per algo">
           <Table
-            head={["Algo", "Connected", "Hashing 10m", "Pool hashrate", "Diag valid", "Diag stales", "Updated"]}
+            head={["Algo", "Connected", "Hashing 10m", "Pool hashrate", "Diag valid", "Diag stales", "Diag age", "Hashrate age"]}
             rows={data.algos.map((a) => {
               const s = data.stratum_live[a.algo];
+              const diagStale = !s || now - s.updated_at > 600;
               return [
                 a.algo,
                 <b key="c">{a.live_clients.toLocaleString()}</b>,
                 a.db_workers.toLocaleString(),
                 fmtHashrate(a.hashrate_hs),
-                s ? s.valid.toLocaleString() : "—",
-                s ? s.stales.toLocaleString() : "—",
+                s && !diagStale ? s.valid.toLocaleString() : "—",
+                s && !diagStale ? s.stales.toLocaleString() : "—",
+                <span key="d" className={diagStale ? "text-amber-400" : undefined}>
+                  {s ? `${fmtAge(s.updated_at, now)}${diagStale ? " · stale" : ""}` : "no feed"}
+                </span>,
                 fmtAge(a.hashrate_updated_at, now),
               ];
             })}
@@ -119,8 +123,11 @@ function DiagnosticsPage() {
           <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
             Connected = live stratum TCP sessions (matches old dashboard's "Miners"). Hashing = distinct
             workers that submitted a valid share in the last 10 minutes. A wide gap between the two is a
-            share-counting or vardiff signal.
+            share-counting or vardiff signal. "Diag" columns come from the stratum log's per-minute
+            summary line — a stale age there is a log-tailer problem, not a mining problem; trust
+            Connected / Hashing / Pool hashrate instead.
           </p>
+
         </Section>
 
         {/* Blocks */}
