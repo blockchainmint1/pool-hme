@@ -105,7 +105,7 @@ function DiagnosticsPage() {
             head={["Algo", "Connected", "Hashing 10m", "Pool hashrate", "Diag valid", "Diag stales", "Diag age", "Hashrate age"]}
             rows={data.algos.map((a) => {
               const s = data.stratum_live[a.algo];
-              const diagStale = !s || now - s.updated_at > 600;
+              const diagStale = !s || (now != null && now - s.updated_at > 600);
               return [
                 a.algo,
                 <b key="c">{a.live_clients.toLocaleString()}</b>,
