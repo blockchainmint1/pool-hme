@@ -67,9 +67,14 @@ export async function getStratumLive(): Promise<Record<string, StratumLive>> {
       if (parsed) {
         cache.set(algo, { value: parsed, fetchedAt: now });
         out[algo] = parsed;
-      } else if (cached) {
+      } else if (cached && now - cached.fetchedAt < STALE_MAX_MS) {
+        // Serve a recent cached value across a transient read failure, but
+        // never pass off an hours-old snapshot as "live".
         out[algo] = cached.value;
+      } else {
+        cache.delete(algo);
       }
+
     }),
   );
   return out;
