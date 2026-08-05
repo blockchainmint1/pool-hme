@@ -15,6 +15,7 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 **Conroe uplink monitoring**: healthy = ~325+ sessions from 209.34.50.105 (or 13.217.211.175 via haproxy). If per-site session breakdown shows ONLY Mansfield (97.154.36.156) + McKinney (99.107.246.68) and no Conroe IP, Conroe uplink is DOWN — call the site before debugging code.
 
 Coin daemon CLIs are NOT on $PATH: LTC `/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf` (wallet `wallets/pool/wallet.dat`, `wallet=pool`); DOGE `/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf` (wallet.dat at datadir root).
+DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when the parent LTC round credits, so a daily run strands blocks as `no_shares`. Batching is `MIN_PAYOUT_DOGE`, not the interval.
 
 ## Memories
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
@@ -26,3 +27,4 @@ Coin daemon CLIs are NOT on $PATH: LTC `/home/ubuntu/litecoin-0.21.4/bin/litecoi
 - [Stratum source trees](mem://infra/stratum-source-trees.md) — **Authoritative** as of 2026-07-20: running `/var/stratum/stratum` (2026-07-19 17:13) is built from `LIVE-FINAL/`. `perfect1/` has an unused `coind_aux.cpp` merkle-narrowing patch; `live-aux-issue-doge/` is stale scratch. Edit LIVE-FINAL only.
 - [Fleet topology](mem://infra/fleet-topology.md) — 6× Foghashing BC40 containers @ 200 L9s each = 1200 total, Beelink NAT per container, shared WAN 209.34.50.105.
 - [Coin daemon paths](mem://infra/coin-daemon-paths.md) — litecoin-cli/dogecoin-cli full paths, datadirs, wallet file layout, systemd units, passphrase file
+- [DOGE payout cadence](mem://infra/doge-payout-cadence.md) — Why the DOGE cycle runs every 10 min (Yiimp share purge), the 246 stranded blocks, float-sweep destination
