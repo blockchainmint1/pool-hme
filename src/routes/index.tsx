@@ -185,6 +185,15 @@ function PoolHome() {
             <FoundBlocks />
           </section>
 
+          <section id="resilience" className="space-y-3">
+            <SectionHeader
+              eyebrow="Failover strategy"
+              title="The pool heals itself."
+              hint="watchdog · alerts · auto-rented hashpower"
+            />
+            <ResilienceBand />
+          </section>
+
           <section id="learn" className="space-y-3">
             <SectionHeader
               eyebrow="Learn & build"
@@ -194,6 +203,7 @@ function PoolHome() {
             <LearnBand />
           </section>
         </div>
+
       </div>
     </div>
   );
