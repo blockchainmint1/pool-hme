@@ -24,6 +24,8 @@ HEADER
   echo "const __nhapi_code = $(node -e "process.stdout.write(JSON.stringify(require('fs').readFileSync('src/nicehash-api.cjs','utf8')))");"
   echo "// ============================================================ src/pool-api.cjs"
   echo "const __poolapi_code = $(node -e "process.stdout.write(JSON.stringify(require('fs').readFileSync('src/pool-api.cjs','utf8')))");"
+  echo "// ============================================================ src/telegram.cjs"
+  echo "const __telegram_code = $(node -e "process.stdout.write(JSON.stringify(require('fs').readFileSync('src/telegram.cjs','utf8')))");"
   echo "// ============================================================ src/watcher.cjs"
   echo "const __watcher_code = $(node -e "process.stdout.write(JSON.stringify(require('fs').readFileSync('src/watcher.cjs','utf8')))");"
   cat <<'LOADER'
@@ -37,6 +39,7 @@ const __dir = path.join(__dirname || process.cwd(), "_v");
 const BUNDLED = {
   "nicehash-api.cjs": __nhapi_code,
   "pool-api.cjs": __poolapi_code,
+  "telegram.cjs": __telegram_code,
   "watcher.cjs": __watcher_code,
 };
 function compileVirtual(filename, source, parent) {
