@@ -27,22 +27,42 @@ HEADER
   echo "// ============================================================ src/watcher.cjs"
   echo "const __watcher_code = $(node -e "process.stdout.write(JSON.stringify(require('fs').readFileSync('src/watcher.cjs','utf8')))");"
   cat <<'LOADER'
-// --- load bundled modules from in-memory strings ---
+// --- in-memory module loader for bundled sources ---
+// Relative require("./nicehash-api.cjs") inside the bundled modules resolves
+// to these virtual files via a Module._load hook.
 const Module = require("module");
+const path = require("path");
 const vm = require("vm");
-function loadFromSource(filename, source) {
-  const m = new Module(filename, module);
+const __dir = path.join(__dirname || process.cwd(), "_v");
+const BUNDLED = {
+  "nicehash-api.cjs": __nhapi_code,
+  "pool-api.cjs": __poolapi_code,
+  "watcher.cjs": __watcher_code,
+};
+function compileVirtual(filename, source, parent) {
+  const m = new Module(filename, parent);
   m.filename = filename;
-  m.paths = Module._nodeModulePaths(require("path").dirname(filename));
+  m.paths = Module._nodeModulePaths(path.dirname(filename));
+  Module._cache[filename] = m;
   const wrapped = Module.wrap(source);
   const fn = vm.runInThisContext(wrapped, { filename });
-  fn.call(m.exports, m.exports, require, m, filename, require("path").dirname(filename));
+  fn.call(m.exports, m.exports, (req) => Module._load(req, m, false), m, filename, path.dirname(filename));
   return m.exports;
 }
-const __dir = require("path").join(__dirname || process.cwd(), "_bundled");
-loadFromSource(require("path").join(__dir, "nicehash-api.cjs"), __nhapi_code);
-loadFromSource(require("path").join(__dir, "pool-api.cjs"), __poolapi_code);
-loadFromSource(require("path").join(__dir, "watcher.cjs"), __watcher_code);
+const origLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (parent && typeof request === "string" && request.startsWith(".")) {
+    const base = path.basename(path.normalize(path.join(path.dirname(parent.filename), request)));
+    if (Object.prototype.hasOwnProperty.call(BUNDLED, base)) {
+      const vfile = path.join(__dir, base);
+      if (Module._cache[vfile]) return Module._cache[vfile].exports;
+      return compileVirtual(vfile, BUNDLED[base], parent);
+    }
+  }
+  return origLoad.call(this, request, parent, isMain);
+};
+// Run the watcher as the main module.
+compileVirtual(path.join(__dir, "watcher.cjs"), __watcher_code, null);
 LOADER
 } > "$OUT"
 
