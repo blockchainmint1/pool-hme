@@ -19,7 +19,8 @@
  *   REFILL_THRESHOLD_BTC=0.005
  *   DAILY_BTC_CAP=0  (0 = disabled; set a number to enforce a hard daily guard)
  *   MAX_CONCURRENT_ORDERS=2
- *   BID_MARGIN=0.10  BID_FLOOR_PRICE=0.0088  BID_MAX_PRICE=0.05
+ *   BID_MARGIN=0 BID_TICK=0.0001 BID_FLOOR_PRICE=0 BID_MAX_PRICE=0.05
+ *   BID_BUMP_EVERY_MIN=10  BID_FILL_FRACTION=0.85
  *   POLL_INTERVAL_SEC=30  RECOVER_CONFIRMATIONS=3
  *   STATE_FILE=/var/lib/nicehash-watcher/state.json
  *   DRY_RUN=false
@@ -59,9 +60,13 @@ const CFG = {
   refillThresholdBtc: num("REFILL_THRESHOLD_BTC", 0.005),
   dailyBtcCap: num("DAILY_BTC_CAP", 0),
   maxConcurrentOrders: num("MAX_CONCURRENT_ORDERS", 2),
-  bidMargin: num("BID_MARGIN", 0.10),
-  bidFloorPrice: num("BID_FLOOR_PRICE", 0.0088),
+  bidMargin: num("BID_MARGIN", 0),
+  bidTick: num("BID_TICK", 0.0001),
+  bidFloorPrice: num("BID_FLOOR_PRICE", 0),
   bidMaxPrice: num("BID_MAX_PRICE", 0.05),
+  bidBumpEveryMin: num("BID_BUMP_EVERY_MIN", 10),
+  bidFillFraction: num("BID_FILL_FRACTION", 0.85),
+
   pollIntervalSec: num("POLL_INTERVAL_SEC", 30),
   recoverConfirmations: num("RECOVER_CONFIRMATIONS", 3),
   alertCooldownMin: num("ALERT_COOLDOWN_MIN", 30),
@@ -160,22 +165,54 @@ function dailyCapReached(state) {
 }
 
 // ---- bidding ----------------------------------------------------------------
-function computeBid(orderBook) {
-  const orders =
-    (orderBook && orderBook.stats && orderBook.stats.BTC &&
-      orderBook.stats.BTC.orders) ||
-    [];
-  const alive = orders.filter((o) => o.alive && Number(o.acceptedSpeed) > 0);
-  const top = alive.length
-    ? Math.max(...alive.map((o) => Number(o.price)))
-    : CFG.bidFloorPrice;
-  let bid = top * (1 + CFG.bidMargin);
+// Depth-aware clearing price. NiceHash serves orders in descending price order,
+// so to get `need` TH/s we only have to outbid the marginal order that sits at
+// (totalAvailable - need) of cumulative demand. Bidding top-of-book + margin
+// massively overpays when we only want a few TH/s out of a deep market.
+function computeBid(orderBook, needThs) {
+  const stats =
+    (orderBook && orderBook.stats && orderBook.stats.BTC) || {};
+  const orders = stats.orders || [];
+  const alive = orders.filter((o) => o.alive && Number(o.price) > 0);
+  const totalAvail = Number(stats.totalSpeed) || 0;
+  const need = Math.max(0.1, Number(needThs) || 0);
+
+  const sorted = [...alive].sort((a, b) => Number(b.price) - Number(a.price));
+  const top = sorted.length ? Number(sorted[0].price) : CFG.bidFloorPrice;
+
+  // Walk the book from the top: the price we must beat is the one where the
+  // hashpower still unclaimed above us drops below what we need.
+  let clearing = sorted.length ? Number(sorted[sorted.length - 1].price) : CFG.bidFloorPrice;
+  if (totalAvail > 0) {
+    let cum = 0;
+    let found = false;
+    for (const o of sorted) {
+      cum += Number(o.limit || o.payedAmount || o.acceptedSpeed || 0);
+      if (totalAvail - cum < need) {
+        clearing = Number(o.price);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Plenty of spare hashpower even below the whole book — the cheapest
+      // filling order is enough to clear.
+      const filling = sorted.filter((o) => Number(o.acceptedSpeed) > 0);
+      clearing = filling.length
+        ? Number(filling[filling.length - 1].price)
+        : clearing;
+    }
+  }
+
+  let bid = clearing + CFG.bidTick;
+  if (CFG.bidMargin > 0) bid = Math.max(bid, clearing * (1 + CFG.bidMargin));
   if (bid < CFG.bidFloorPrice) bid = CFG.bidFloorPrice;
   const capped = bid > CFG.bidMaxPrice;
   if (capped) bid = CFG.bidMaxPrice;
   // round to 8 decimals
-  return { bid: Math.round(bid * 1e8) / 1e8, top, capped };
+  return { bid: Math.round(bid * 1e8) / 1e8, top, clearing, totalAvail, capped };
 }
+
 
 function orderRemainingBtc(o) {
   if (o == null) return null;
@@ -407,12 +444,14 @@ async function main() {
       log("ERROR fetching order book:", { error: String(e.message) });
       return;
     }
-    const { bid, top, capped } = computeBid(orderBook);
-    const limit = round8(Math.min(deficit, CFG.rentCapThs));
+    const limit0 = round8(Math.min(deficit, CFG.rentCapThs));
+    const { bid, top, clearing, totalAvail, capped } = computeBid(orderBook, limit0);
+    const limit = limit0;
     if (limit < 0.5) {
       log("Deficit too small to open an order:", { deficit, limit });
       return;
     }
+
     const amount = round8(CFG.orderAmountBtc);
     const body = {
       market: "BTC",
@@ -423,7 +462,7 @@ async function main() {
       limit,
       poolId: pid,
     };
-    log("Creating rental order:", { bid, top, limit, amount, capped, poolId: pid, dryRun: CFG.dryRun });
+    log("Creating rental order:", { bid, clearing, top, marketAvailThs: totalAvail, limit, amount, capped, poolId: pid, dryRun: CFG.dryRun });
     if (CFG.dryRun) {
       log("[DRY_RUN] would POST /main/api/v2/hashpower/order", body);
       return;
@@ -432,7 +471,7 @@ async function main() {
       const created = await client.createOrder(body);
       const id = created && created.id;
       if (id) {
-        state.active_orders.push({ id, created_at: Date.now(), amount, limit, price: bid });
+        state.active_orders.push({ id, created_at: Date.now(), amount, limit, price: bid, price_changed_at: Date.now() });
         state.spend_today.btc = round8(state.spend_today.btc + amount);
         state.last_action = `created ${id}`;
         log("Order created:", { id, bid, limit, amount });
@@ -467,8 +506,36 @@ async function main() {
       const acceptedThs = Number((order.acceptedSpeed || 0));
       log("order status:", { id: ao.id, alive, acceptedSpeed: acceptedThs, limit: order.limit, remaining });
 
-      // refill if budget low and still needed
+      // Price escalation: we deliberately open at the depth-derived clearing
+      // price (cheap). If the order is not filling, nudge the price up one tick
+      // at a time — NiceHash only allows price increases on STANDARD orders, so
+      // starting low and stepping up is strictly cheaper than opening high.
       const stillNeeded = actual < target;
+      if (stillNeeded && alive && order.limit > 0) {
+        const fill = acceptedThs / Number(order.limit);
+        const sinceBump = Date.now() - (ao.price_changed_at || ao.created_at || 0);
+        const cur = Number(order.price || ao.price || 0);
+        if (
+          fill < CFG.bidFillFraction &&
+          sinceBump > CFG.bidBumpEveryMin * 60 * 1000 &&
+          cur > 0 && cur < CFG.bidMaxPrice
+        ) {
+          const next = round8(Math.min(cur + CFG.bidTick, CFG.bidMaxPrice));
+          log("Underfilled — bumping price one tick:", { id: ao.id, from: cur, to: next, fill: round8(fill) });
+          if (!CFG.dryRun) {
+            try {
+              await client.updatePriceAndLimit(ao.id, { price: next, limit: Number(order.limit) });
+              ao.price = next;
+              ao.price_changed_at = Date.now();
+            } catch (e) {
+              log("WARN: price bump failed:", { id: ao.id, error: String(e.message), status: e.status });
+              ao.price_changed_at = Date.now();
+            }
+          }
+        }
+      }
+
+      // refill if budget low and still needed
       if (stillNeeded && alive) {
         let doRefill = false;
         if (remaining != null) {
@@ -482,6 +549,7 @@ async function main() {
           await refill(state, ao.id);
         }
       }
+
 
       // scale up: if this order is saturated at its limit and we still need more,
       // and we have room for another concurrent order, create a second order.
