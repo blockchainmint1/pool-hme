@@ -43,9 +43,10 @@ cat > "$ENV_FILE" <<'EOF'
 # Fill in the four REQUIRED values, then `systemctl restart nicehash-watcher`.
 
 # REQUIRED — NiceHash API v2 credentials (https://www.nicehash.com/my/api/v2)
-NICEHASH_API_KEY=
-NICEHASH_API_SECRET=
-NICEHASH_ORG_ID=
+# Either name set works: NICEHASH_API_KEY/SECRET/ORG_ID or the short aliases.
+NICEHASH_API=
+NICEHASH_SECRET=
+NICEHASH_ORGANIZATION=
 # REQUIRED — payout address for the rental NiceHash pool (LTC mainnet)
 RENTAL_LTC_ADDR=
 
@@ -76,6 +77,13 @@ BID_MAX_PRICE=0.05
 POLL_INTERVAL_SEC=30
 RECOVER_CONFIRMATIONS=3
 
+# Telegram alerts — fires when hashrate drops below TRIGGER_FRACTION of target,
+# on recovery, and on order placed/cancelled/failed. Leave blank to disable.
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+ALERTS_ENABLED=true
+ALERT_COOLDOWN_MIN=30
+
 # Set DRY_RUN=true to log actions without spending.
 DRY_RUN=false
 EOF
@@ -83,13 +91,23 @@ chmod 0600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
 # Preserve any values the admin already filled in (re-install keeps config).
-if [ "${NICEHASH_API_KEY:-}" ] || [ "${NICEHASH_API_SECRET:-}" ] || [ "${NICEHASH_ORG_ID:-}" ] || [ "${RENTAL_LTC_ADDR:-}" ]; then
-  echo "==> Applying provided env values from the pipe environment"
-  [ -n "${NICEHASH_API_KEY:-}" ] && sed -i "s|^NICEHASH_API_KEY=.*|NICEHASH_API_KEY=$NICEHASH_API_KEY|" "$ENV_FILE"
-  [ -n "${NICEHASH_API_SECRET:-}" ] && sed -i "s|^NICEHASH_API_SECRET=.*|NICEHASH_API_SECRET=$NICEHASH_API_SECRET|" "$ENV_FILE"
-  [ -n "${NICEHASH_ORG_ID:-}" ] && sed -i "s|^NICEHASH_ORG_ID=.*|NICEHASH_ORG_ID=$NICEHASH_ORG_ID|" "$ENV_FILE"
-  [ -n "${RENTAL_LTC_ADDR:-}" ] && sed -i "s|^RENTAL_LTC_ADDR=.*|RENTAL_LTC_ADDR=$RENTAL_LTC_ADDR|" "$ENV_FILE"
-fi
+set_env() {
+  local key="$1" val="$2"
+  [ -n "$val" ] || return 0
+  if grep -q "^$key=" "$ENV_FILE"; then
+    sed -i "s|^$key=.*|$key=$val|" "$ENV_FILE"
+  else
+    echo "$key=$val" >> "$ENV_FILE"
+  fi
+}
+
+echo "==> Applying any env values provided in the pipe environment"
+set_env NICEHASH_API "${NICEHASH_API:-${NICEHASH_API_KEY:-}}"
+set_env NICEHASH_SECRET "${NICEHASH_SECRET:-${NICEHASH_API_SECRET:-}}"
+set_env NICEHASH_ORGANIZATION "${NICEHASH_ORGANIZATION:-${NICEHASH_ORG_ID:-}}"
+set_env RENTAL_LTC_ADDR "${RENTAL_LTC_ADDR:-}"
+set_env TELEGRAM_BOT_TOKEN "${TELEGRAM_BOT_TOKEN:-}"
+set_env TELEGRAM_CHAT_ID "${TELEGRAM_CHAT_ID:-}"
 
 # ---- systemd unit -----------------------------------------------------------
 echo "==> Installing systemd unit $UNIT"
