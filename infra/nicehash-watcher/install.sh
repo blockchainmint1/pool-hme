@@ -68,10 +68,16 @@ REFILL_THRESHOLD_BTC=0.005
 # Set a number (e.g. 2.0) to enforce an emergency spend ceiling.
 DAILY_BTC_CAP=0
 
-# Bidding — bid = top_of_market * (1 + BID_MARGIN), floored/capped.
-BID_MARGIN=0.10
-BID_FLOOR_PRICE=0.0088
+# Bidding — depth-aware: bid the clearing price needed to win our few TH/s out
+# of the market's available speed, plus one tick. Start cheap, then step up by
+# BID_TICK every BID_BUMP_EVERY_MIN if the order fills below BID_FILL_FRACTION.
+BID_MARGIN=0
+BID_TICK=0.0001
+BID_FLOOR_PRICE=0
 BID_MAX_PRICE=0.05
+BID_BUMP_EVERY_MIN=10
+BID_FILL_FRACTION=0.85
+
 
 # Cadence
 POLL_INTERVAL_SEC=30
