@@ -511,3 +511,23 @@ the parent chain check happens on a different path from `valid++`.
 6. ZCU `getblocktemplate` (unchanged, still low priority).
 
 
+
+## 11. Doctors (read-only diagnostics)
+
+Two curl-pipe scripts, source in `infra/pool-doctor/`, served from
+`public/install/`. Both change nothing — safe to run any time.
+
+```bash
+curl -fsSL https://pool.honest.money/install/payout-doctor.sh | sudo bash
+curl -fsSL https://pool.honest.money/install/zcu-doctor.sh    | sudo bash
+```
+
+- **payout-doctor** walks the whole LTC/DOGE payout chain: `YAAMP_PAYMENTS_FREQ`,
+  loop2/cron, `payouts` rows + errmsg histogram, unpaid `accounts` balances,
+  block maturity, LTC wallet `unlocked_until` + `ltc-unlock.timer`, dogecoind
+  wallet, `/etc/cron.d/yiimp-doge-payout-cycle`, `doge_payout_ledger`, and the
+  last on-chain sends from each wallet.
+- **zcu-doctor** proves what the ZCU geth node answers (`eth_blockNumber`,
+  `eth_getWork`, `eth_chainId`) versus what the stratum asks for
+  (`getblocktemplate`, `getauxblock`, `validateaddress`), plus ZCU lines in
+  `scrypt.log` and the aux-submit counts per coin for contrast.
