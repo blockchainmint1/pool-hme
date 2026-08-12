@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
 import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
+import { ResilienceBand } from "@/components/pool/ResilienceBand";
 
 const poolSummaryQuery = queryOptions({
   queryKey: ["pool", "summary"],
