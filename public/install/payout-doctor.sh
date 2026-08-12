@@ -49,9 +49,19 @@ echo "-- distinct errors on pending rows:"
 MYT "SELECT c.symbol, LEFT(IFNULL(p.errmsg,'(null)'),80) errmsg, COUNT(*) n
      FROM payouts p JOIN coins c ON c.id=p.idcoin WHERE p.completed=0 GROUP BY 1,2 ORDER BY n DESC LIMIT 15"
 
+hr "3b. the 5 stuck LTC pending payout rows"
+MYT "SELECT p.id, p.idcoin, p.account_id, p.amount, p.fee, p.tx, p.completed,
+            LEFT(IFNULL(p.errmsg,'(null)'),60) errmsg, FROM_UNIXTIME(p.time) t
+     FROM payouts p WHERE p.completed=0 ORDER BY p.id DESC LIMIT 20"
+
 hr "4. unpaid balances waiting in accounts"
-MYT "SELECT c.symbol, COUNT(*) accounts_, ROUND(SUM(a.balance),6) balance, ROUND(SUM(a.pending),6) pending_
-     FROM accounts a JOIN coins c ON c.id=a.coinid WHERE a.balance>0 OR a.pending>0 GROUP BY c.symbol"
+echo "-- accounts columns:"; MY "SHOW COLUMNS FROM accounts" | awk '{printf "%s ", $1}'; echo
+MYT "SELECT c.symbol, COUNT(*) accounts_, ROUND(SUM(a.balance),6) balance
+     FROM accounts a JOIN coins c ON c.id=a.coinid WHERE a.balance>0 GROUP BY c.symbol"
+echo "-- top 10 LTC/DOGE accounts by unpaid balance:"
+MYT "SELECT a.id, c.symbol, a.username, ROUND(a.balance,6) balance
+     FROM accounts a JOIN coins c ON c.id=a.coinid
+     WHERE c.symbol IN ('LTC','DOGE') AND a.balance>0 ORDER BY a.balance DESC LIMIT 10"
 
 hr "5. blocks vs credits (last 7 days)"
 MYT "SELECT c.symbol, COUNT(*) blocks_, SUM(b.category='generate') matured, SUM(b.category='immature') immature,
@@ -59,8 +69,21 @@ MYT "SELECT c.symbol, COUNT(*) blocks_, SUM(b.category='generate') matured, SUM(
      FROM blocks b JOIN coins c ON c.id=b.coin_id
      WHERE b.time > UNIX_TIMESTAMP()-7*86400 GROUP BY c.symbol ORDER BY c.symbol"
 
+# Autodetect daemon paths from the running processes (overrides the defaults above).
+detect() { # detect <daemon-name> -> sets D_BIN D_CONF D_DIR
+  local name=$1 line bin
+  line=$(ps -ef | grep -E "[/ ]${name}( |$)" | grep -v grep | head -1)
+  bin=$(echo "$line" | grep -oE '/[^ ]*'"$name" | head -1)
+  D_BIN=$(dirname "${bin:-/usr/local/bin/$name}")
+  D_DIR=$(echo "$line" | grep -oE '\-datadir=[^ ]+' | cut -d= -f2)
+  D_CONF=$(echo "$line" | grep -oE '\-conf=[^ ]+' | cut -d= -f2)
+  [ -z "$D_CONF" ] && D_CONF="${D_DIR:-$HOME/.${name%d}}/${name%d}.conf"
+}
+
 hr "6. LTC wallet + unlock timer"
-CONF="$LTC_DIR/litecoin.conf"
+detect litecoind; LTC_BIN=${D_BIN:-$LTC_BIN}; LTC_CONF=${D_CONF}
+echo "   litecoind: bin=$LTC_BIN conf=$LTC_CONF"
+CONF="${LTC_CONF:-$LTC_DIR/litecoin.conf}"
 WALLET=$(sed -n 's/^[[:space:]]*wallet=\(.*\)$/\1/p' "$CONF" 2>/dev/null | head -1); WALLET=${WALLET:-pool}
 LCLI="$LTC_BIN/litecoin-cli -conf=$CONF -rpcwallet=$WALLET"
 $LCLI getwalletinfo 2>&1 | grep -E 'walletname|"balance"|unconfirmed|immature|unlocked_until' | sed 's/^/   /'
@@ -69,7 +92,9 @@ systemctl status ltc-unlock.timer --no-pager -n 3 2>&1 | sed 's/^/   /'
 journalctl -u ltc-unlock.service -n 10 --no-pager 2>/dev/null | sed 's/^/   /'
 
 hr "7. DOGE wallet"
-DCONF="$DOGE_DIR/dogecoin.conf"
+detect dogecoind; DOGE_BIN=${D_BIN:-$DOGE_BIN}; DCONF=${D_CONF:-$DOGE_DIR/dogecoin.conf}
+echo "   dogecoind: bin=$DOGE_BIN conf=$DCONF"
+ps -ef | grep [d]ogecoind | sed 's/^/   /' || echo "   !! dogecoind is NOT running"
 DCLI="$DOGE_BIN/dogecoin-cli -conf=$DCONF"
 $DCLI getwalletinfo 2>&1 | grep -E 'walletname|"balance"|unconfirmed|immature|unlocked_until' | sed 's/^/   /'
 $DCLI getinfo 2>&1 | grep -E '"blocks"|"errors"|"balance"' | sed 's/^/   /'
@@ -77,11 +102,31 @@ $DCLI getinfo 2>&1 | grep -E '"blocks"|"errors"|"balance"' | sed 's/^/   /'
 hr "8. DOGE custom payout cycle"
 ls -l "$DOGE_CYCLE" 2>&1 | sed 's/^/   /'
 grep -rn "doge-payout-cycle" /etc/cron.d /etc/crontab /var/spool/cron 2>/dev/null | sed 's/^/   /' || echo "   (no cron entry!)"
-echo "-- last 60 lines of $DOGE_LOG"
-tail -n 60 "$DOGE_LOG" 2>&1 | sed 's/^/   /'
-echo "-- doge_payout_ledger:"
-MYT "SELECT COUNT(*) rows_, SUM(paid=1) paid, SUM(paid=0) unpaid, FROM_UNIXTIME(MAX(created_at)) last_row FROM doge_payout_ledger" 2>&1 | sed 's/^/   /'
-MYT "SELECT * FROM doge_payout_ledger ORDER BY id DESC LIMIT 8" 2>&1 | sed 's/^/   /'
+for L in /var/log/doge-payout-cycle.log "$DOGE_LOG"; do
+  [ -f "$L" ] || continue
+  echo "-- $L  (size $(stat -c%s "$L"), mtime $(date -u -d @$(stat -c%Y "$L") '+%Y-%m-%d %H:%M UTC'))"
+  tail -n 40 "$L" | sed 's/^/   /'
+done
+echo "-- doge_payout_ledger by status:"
+MYT "SELECT status, COUNT(*) n, ROUND(SUM(amount),4) amount,
+            FROM_UNIXTIME(MIN(created_at)) oldest, FROM_UNIXTIME(MAX(created_at)) newest,
+            FROM_UNIXTIME(MAX(updated_at)) last_touch
+     FROM doge_payout_ledger GROUP BY status ORDER BY n DESC"
+echo "-- stuck immature rows (block_confirmations vs maturity_confirmations):"
+MYT "SELECT block_id, COUNT(*) rows_, MIN(block_confirmations) conf_min, MAX(block_confirmations) conf_max,
+            MAX(maturity_confirmations) need, ROUND(SUM(amount),4) amount,
+            FROM_UNIXTIME(MAX(updated_at)) last_touch
+     FROM doge_payout_ledger WHERE status='immature' GROUP BY block_id ORDER BY block_id DESC LIMIT 10"
+echo "-- ledger rows created per day, last 14 days:"
+MYT "SELECT DATE(FROM_UNIXTIME(created_at)) d, COUNT(*) n, ROUND(SUM(amount),2) amount
+     FROM doge_payout_ledger WHERE created_at > UNIX_TIMESTAMP()-14*86400 GROUP BY d ORDER BY d"
+echo "-- token window / cadence settings inside the cycle script:"
+grep -nE 'TOKEN_WINDOW_HOURS|MATURITY|CONFIRM|MIN_PAYOUT|DRY_RUN|LOCK|exit ' "$DOGE_CYCLE" 2>/dev/null | head -30 | sed 's/^/   /'
+echo "-- run the cycle script read-only to see where it stops:"
+sudo -u ubuntu bash -c "DRY_RUN=1 timeout 90 bash '$DOGE_CYCLE'" 2>&1 | tail -n 40 | sed 's/^/   /'
+echo "-- doge_address_links freshness (token_seen_at drives eligibility):"
+MYT "SELECT COUNT(*) links, SUM(FROM_UNIXTIME(token_seen_at) > NOW()-INTERVAL 7 DAY) seen_7d,
+            FROM_UNIXTIME(MAX(token_seen_at)) newest_token FROM doge_address_links"
 
 hr "9. recent on-chain sends from each wallet"
 echo "-- LTC last 8 send txs:"
