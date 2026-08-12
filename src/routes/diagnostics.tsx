@@ -327,6 +327,44 @@ function DiagnosticsPage() {
           )}
         </Section>
 
+        {/* Pool wallets */}
+        <Section title="7 · Pool wallet balances · pending payout">
+          <Table
+            head={["Wallet", "Address", "Balance", "Total received", "Total sent", "Txs"]}
+            rows={wallets.wallets.map((w) => [
+              w.label,
+              <a
+                key={w.address}
+                href={w.explorer}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-dotted hover:text-pool-mint break-all"
+              >
+                {w.address}
+              </a>,
+              w.error
+                ? `— (${w.error})`
+                : `${(w.balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${w.symbol}`,
+              w.received === null
+                ? "—"
+                : w.received.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+              w.spent === null
+                ? "—"
+                : w.spent.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+              w.txCount === null ? "—" : w.txCount.toLocaleString(),
+            ])}
+          />
+          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
+            Rotated hot wallets (DOGE 2026-07-2x, LTC 2026-07-28) — seeds held by us, old addresses
+            orphaned and never reused. Balances read from the public chain explorer, cached 60s. Payouts
+            run once daily at 06:15 UTC, so a healthy day looks like the balance stepping down each
+            morning. Balance sitting far above the daily payout total means blocks were mined but never
+            allocated into the payout ledger.
+          </p>
+        </Section>
+
+
+
       </div>
     </div>
   );
