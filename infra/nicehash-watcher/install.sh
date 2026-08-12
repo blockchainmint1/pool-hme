@@ -84,6 +84,13 @@ TELEGRAM_CHAT_ID=
 ALERTS_ENABLED=true
 ALERT_COOLDOWN_MIN=30
 
+# Remote watchdog on pool.honest.money — the watcher POSTs a heartbeat each
+# cycle and asks the site to run outside-in health checks every MONITOR_EVERY_SEC
+# (site-side Telegram alerts). Blank MONITOR_TOKEN disables it.
+MONITOR_URL=https://pool.honest.money/api/public/monitor
+MONITOR_TOKEN=
+MONITOR_EVERY_SEC=300
+
 # Set DRY_RUN=true to log actions without spending.
 DRY_RUN=false
 EOF
@@ -108,6 +115,8 @@ set_env NICEHASH_ORGANIZATION "${NICEHASH_ORGANIZATION:-${NICEHASH_ORG_ID:-}}"
 set_env RENTAL_LTC_ADDR "${RENTAL_LTC_ADDR:-}"
 set_env TELEGRAM_BOT_TOKEN "${TELEGRAM_BOT_TOKEN:-}"
 set_env TELEGRAM_CHAT_ID "${TELEGRAM_CHAT_ID:-}"
+set_env MONITOR_TOKEN "${MONITOR_TOKEN:-}"
+set_env MONITOR_URL "${MONITOR_URL:-}"
 
 # ---- systemd unit -----------------------------------------------------------
 echo "==> Installing systemd unit $UNIT"

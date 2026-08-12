@@ -61,6 +61,9 @@ export const Route = createFileRoute('/api/public/nicehash-env')({
             get('RENTAL_LTC_ADDR') || 'LTyp1No4skV378NbYrR7p6d7wRzDCHgFAa',
           ),
           envLine('POOL_API_BASE', get('POOL_API_BASE') || 'https://api.stratum.pool.honest.money'),
+          envLine('MONITOR_URL', 'https://pool.honest.money/api/public/monitor'),
+          envLine('MONITOR_TOKEN', get('MONITOR_TOKEN')),
+          envLine('MONITOR_EVERY_SEC', '300'),
           envLine('DRY_RUN', 'false'),
           '',
         ].join('\n')

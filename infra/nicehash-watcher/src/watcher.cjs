@@ -65,6 +65,9 @@ const CFG = {
   pollIntervalSec: num("POLL_INTERVAL_SEC", 30),
   recoverConfirmations: num("RECOVER_CONFIRMATIONS", 3),
   alertCooldownMin: num("ALERT_COOLDOWN_MIN", 30),
+  monitorUrl: process.env.MONITOR_URL || "https://pool.honest.money/api/public/monitor",
+  monitorToken: env("MONITOR_TOKEN"),
+  monitorEverySec: num("MONITOR_EVERY_SEC", 300),
   stateFile: process.env.STATE_FILE || "/var/lib/nicehash-watcher/state.json",
   dryRun: /^1|true|yes$/i.test(process.env.DRY_RUN || "false"),
 };
@@ -73,6 +76,38 @@ function num(name, def) {
   const v = process.env[name];
   const n = v === undefined || v === "" ? def : Number(v);
   return Number.isFinite(n) ? n : def;
+}
+
+// --- remote watchdog on pool.honest.money -----------------------------------
+// POST a heartbeat every cycle so the site can show "watcher alive", and every
+// MONITOR_EVERY_SEC ask the site to run its own outside-in health checks (which
+// also catches "this box fell off the internet", since the site notices the
+// heartbeat going stale).
+let _lastMonitorRun = 0;
+async function pingMonitor(payload) {
+  if (!CFG.monitorToken || !CFG.monitorUrl) return;
+  const url = `${CFG.monitorUrl}?token=${encodeURIComponent(CFG.monitorToken)}`;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    log("WARN: heartbeat POST failed:", { error: String(e.message) });
+  }
+  const now = Date.now();
+  if (now - _lastMonitorRun < CFG.monitorEverySec * 1000) return;
+  _lastMonitorRun = now;
+  try {
+    const res = await fetch(url, { method: "GET" });
+    const body = await res.json();
+    if (body && body.overall && body.overall !== "ok") {
+      log("remote watchdog:", { overall: body.overall, alerts_sent: body.alerts_sent });
+    }
+  } catch (e) {
+    log("WARN: remote watchdog GET failed:", { error: String(e.message) });
+  }
 }
 
 function log(msg, obj) {
@@ -284,6 +319,15 @@ async function main() {
       trigger_below: round8(triggerThreshold),
       active_orders: state.active_orders.length,
       spend_today: state.spend_today.btc,
+    });
+
+    // 2a-bis. Heartbeat + remote watchdog (pool.honest.money side alerting).
+    await pingMonitor({
+      actual_ths: round8(actual),
+      target_ths: round8(target),
+      active_orders: state.active_orders.length,
+      spend_today_btc: round8(state.spend_today.btc),
+      dry_run: CFG.dryRun,
     });
 
     // 2b. Telegram alerting on the 75%-of-target threshold
