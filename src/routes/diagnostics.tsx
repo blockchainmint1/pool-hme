@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getPoolDiagnostics } from "@/lib/pool/diagnostics.functions";
 import { getMonitorReport } from "@/lib/monitor/monitor.functions";
+import { getWalletBalances } from "@/lib/pool/wallets.functions";
 import { ChevronLeft, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const diagnosticsQuery = queryOptions({
@@ -18,6 +19,14 @@ const monitorQuery = queryOptions({
   staleTime: 20_000,
   refetchInterval: 30_000,
 });
+
+const walletsQuery = queryOptions({
+  queryKey: ["pool", "wallets"],
+  queryFn: () => getWalletBalances(),
+  staleTime: 60_000,
+  refetchInterval: 90_000,
+});
+
 
 export const Route = createFileRoute("/diagnostics")({
   head: () => ({
