@@ -160,22 +160,54 @@ function dailyCapReached(state) {
 }
 
 // ---- bidding ----------------------------------------------------------------
-function computeBid(orderBook) {
-  const orders =
-    (orderBook && orderBook.stats && orderBook.stats.BTC &&
-      orderBook.stats.BTC.orders) ||
-    [];
-  const alive = orders.filter((o) => o.alive && Number(o.acceptedSpeed) > 0);
-  const top = alive.length
-    ? Math.max(...alive.map((o) => Number(o.price)))
-    : CFG.bidFloorPrice;
-  let bid = top * (1 + CFG.bidMargin);
+// Depth-aware clearing price. NiceHash serves orders in descending price order,
+// so to get `need` TH/s we only have to outbid the marginal order that sits at
+// (totalAvailable - need) of cumulative demand. Bidding top-of-book + margin
+// massively overpays when we only want a few TH/s out of a deep market.
+function computeBid(orderBook, needThs) {
+  const stats =
+    (orderBook && orderBook.stats && orderBook.stats.BTC) || {};
+  const orders = stats.orders || [];
+  const alive = orders.filter((o) => o.alive && Number(o.price) > 0);
+  const totalAvail = Number(stats.totalSpeed) || 0;
+  const need = Math.max(0.1, Number(needThs) || 0);
+
+  const sorted = [...alive].sort((a, b) => Number(b.price) - Number(a.price));
+  const top = sorted.length ? Number(sorted[0].price) : CFG.bidFloorPrice;
+
+  // Walk the book from the top: the price we must beat is the one where the
+  // hashpower still unclaimed above us drops below what we need.
+  let clearing = sorted.length ? Number(sorted[sorted.length - 1].price) : CFG.bidFloorPrice;
+  if (totalAvail > 0) {
+    let cum = 0;
+    let found = false;
+    for (const o of sorted) {
+      cum += Number(o.limit || o.payedAmount || o.acceptedSpeed || 0);
+      if (totalAvail - cum < need) {
+        clearing = Number(o.price);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Plenty of spare hashpower even below the whole book — the cheapest
+      // filling order is enough to clear.
+      const filling = sorted.filter((o) => Number(o.acceptedSpeed) > 0);
+      clearing = filling.length
+        ? Number(filling[filling.length - 1].price)
+        : clearing;
+    }
+  }
+
+  let bid = clearing + CFG.bidTick;
+  if (CFG.bidMargin > 0) bid = Math.max(bid, clearing * (1 + CFG.bidMargin));
   if (bid < CFG.bidFloorPrice) bid = CFG.bidFloorPrice;
   const capped = bid > CFG.bidMaxPrice;
   if (capped) bid = CFG.bidMaxPrice;
   // round to 8 decimals
-  return { bid: Math.round(bid * 1e8) / 1e8, top, capped };
+  return { bid: Math.round(bid * 1e8) / 1e8, top, clearing, totalAvail, capped };
 }
+
 
 function orderRemainingBtc(o) {
   if (o == null) return null;
