@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getPoolDiagnostics } from "@/lib/pool/diagnostics.functions";
 import { getMonitorReport } from "@/lib/monitor/monitor.functions";
+import { getWalletBalances } from "@/lib/pool/wallets.functions";
 import { ChevronLeft, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const diagnosticsQuery = queryOptions({
@@ -18,6 +19,14 @@ const monitorQuery = queryOptions({
   staleTime: 20_000,
   refetchInterval: 30_000,
 });
+
+const walletsQuery = queryOptions({
+  queryKey: ["pool", "wallets"],
+  queryFn: () => getWalletBalances(),
+  staleTime: 60_000,
+  refetchInterval: 90_000,
+});
+
 
 export const Route = createFileRoute("/diagnostics")({
   head: () => ({
@@ -35,7 +44,9 @@ export const Route = createFileRoute("/diagnostics")({
     Promise.all([
       context.queryClient.ensureQueryData(diagnosticsQuery),
       context.queryClient.ensureQueryData(monitorQuery),
+      context.queryClient.ensureQueryData(walletsQuery),
     ]),
+
   errorComponent: ({ error }) => (
     <div className="max-w-3xl mx-auto p-8 text-pool-steel-hi">
       <h1 className="text-xl font-mono mb-2">Diagnostics unavailable</h1>
@@ -65,6 +76,8 @@ function fmtHashrate(hs: number): string {
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
   const { data: watchdog } = useSuspenseQuery(monitorQuery);
+  const { data: wallets } = useSuspenseQuery(walletsQuery);
+
   // Age labels are clock-dependent, so they can't be rendered during SSR:
   // Date.now() on the server disagrees with the client and breaks hydration
   // ("28s ago" vs "49s ago"). Stay blank until mounted, then tick.
@@ -313,6 +326,44 @@ function DiagnosticsPage() {
             />
           )}
         </Section>
+
+        {/* Pool wallets */}
+        <Section title="7 · Pool wallet balances · pending payout">
+          <Table
+            head={["Wallet", "Address", "Balance", "Total received", "Total sent", "Txs"]}
+            rows={wallets.wallets.map((w) => [
+              w.label,
+              <a
+                key={w.address}
+                href={w.explorer}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-dotted hover:text-pool-mint break-all"
+              >
+                {w.address}
+              </a>,
+              w.error
+                ? `— (${w.error})`
+                : `${(w.balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${w.symbol}`,
+              w.received === null
+                ? "—"
+                : w.received.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+              w.spent === null
+                ? "—"
+                : w.spent.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+              w.txCount === null ? "—" : w.txCount.toLocaleString(),
+            ])}
+          />
+          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
+            Rotated hot wallets (DOGE 2026-07-2x, LTC 2026-07-28) — seeds held by us, old addresses
+            orphaned and never reused. Balances read from the public chain explorer, cached 60s. Payouts
+            run once daily at 06:15 UTC, so a healthy day looks like the balance stepping down each
+            morning. Balance sitting far above the daily payout total means blocks were mined but never
+            allocated into the payout ledger.
+          </p>
+        </Section>
+
+
 
       </div>
     </div>
