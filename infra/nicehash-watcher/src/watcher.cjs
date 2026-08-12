@@ -443,12 +443,14 @@ async function main() {
       log("ERROR fetching order book:", { error: String(e.message) });
       return;
     }
-    const { bid, top, capped } = computeBid(orderBook);
-    const limit = round8(Math.min(deficit, CFG.rentCapThs));
+    const limit0 = round8(Math.min(deficit, CFG.rentCapThs));
+    const { bid, top, clearing, totalAvail, capped } = computeBid(orderBook, limit0);
+    const limit = limit0;
     if (limit < 0.5) {
       log("Deficit too small to open an order:", { deficit, limit });
       return;
     }
+
     const amount = round8(CFG.orderAmountBtc);
     const body = {
       market: "BTC",
