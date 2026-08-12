@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# install.sh — installs the NiceHash auto-purchase watcher as a systemd service.
+#
+# Usage:
+#   curl -fsSL https://pool.honest.money/install/nicehash-watcher.sh | sudo bash
+#
+# Required env (provide before piping, or edit the env file after install):
+#   NICEHASH_API_KEY, NICEHASH_API_SECRET, NICEHASH_ORG_ID, RENTAL_LTC_ADDR
+#
+# Optional env (defaults shown):
+#   POOL_API_BASE, POOL_HOST, MIN_TARGET_THS, TRIGGER_FRACTION, RENT_CAP_THS,
+#   ORDER_AMOUNT_BTC, REFILL_AMOUNT_BTC, DAILY_BTC_CAP, MAX_CONCURRENT_ORDERS,
+#   BID_MARGIN, BID_FLOOR_PRICE, BID_MAX_PRICE, POLL_INTERVAL_SEC, DRY_RUN
+set -euo pipefail
+
+SRC_DIR="/opt/nicehash-watcher"
+ENV_FILE="/etc/nicehash-watcher.env"
+STATE_DIR="/var/lib/nicehash-watcher"
+UNIT="/etc/systemd/system/nicehash-watcher.service"
+
+# Locate the bundle shipped beside this script, or download it.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLE="$SRC_DIR/bundle.cjs"
+
+echo "==> Installing nicehash-watcher to $SRC_DIR"
+mkdir -p "$SRC_DIR" "$STATE_DIR"
+chmod 0755 "$SRC_DIR" "$STATE_DIR"
+
+if [ -f "$SCRIPT_DIR/bundle.cjs" ]; then
+  cp -f "$SCRIPT_DIR/bundle.cjs" "$BUNDLE"
+elif [ -f "$SRC_DIR/src/watcher.cjs" ]; then
+  : # dev install — source files already present
+else
+  echo "==> Downloading bundle from pool.honest.money"
+  curl -fsSL https://pool.honest.money/install/nicehash-watcher-bundle.cjs -o "$BUNDLE"
+fi
+chmod 0644 "$BUNDLE"
+
+# ---- env file ---------------------------------------------------------------
+echo "==> Writing env file $ENV_FILE"
+cat > "$ENV_FILE" <<'EOF'
+# NiceHash auto-purchase watcher configuration.
+# Fill in the four REQUIRED values, then `systemctl restart nicehash-watcher`.
+
+# REQUIRED — NiceHash API v2 credentials (https://www.nicehash.com/my/api/v2)
+NICEHASH_API_KEY=
+NICEHASH_API_SECRET=
+NICEHASH_ORG_ID=
+# REQUIRED — payout address for the rental NiceHash pool (LTC mainnet)
+RENTAL_LTC_ADDR=
+
+# Pool stats API (yiimp-api). Leave default unless overridden.
+POOL_API_BASE=https://api.stratum.pool.honest.money
+POOL_HOST=stratum.pool.honest.money:3533
+
+# Strategy
+MIN_TARGET_THS=19
+TRIGGER_FRACTION=0.75
+RENT_CAP_THS=19
+MAX_CONCURRENT_ORDERS=2
+
+# Budget
+ORDER_AMOUNT_BTC=0.02
+REFILL_AMOUNT_BTC=0.02
+REFILL_THRESHOLD_BTC=0.005
+# DAILY_BTC_CAP=0 disables the hard daily guard (honours "at any cost").
+# Set a number (e.g. 2.0) to enforce an emergency spend ceiling.
+DAILY_BTC_CAP=0
+
+# Bidding — bid = top_of_market * (1 + BID_MARGIN), floored/capped.
+BID_MARGIN=0.10
+BID_FLOOR_PRICE=0.0088
+BID_MAX_PRICE=0.05
+
+# Cadence
+POLL_INTERVAL_SEC=30
+RECOVER_CONFIRMATIONS=3
+
+# Set DRY_RUN=true to log actions without spending.
+DRY_RUN=false
+EOF
+chmod 0600 "$ENV_FILE"
+chown root:root "$ENV_FILE"
+
+# Preserve any values the admin already filled in (re-install keeps config).
+if [ "${NICEHASH_API_KEY:-}" ] || [ "${NICEHASH_API_SECRET:-}" ] || [ "${NICEHASH_ORG_ID:-}" ] || [ "${RENTAL_LTC_ADDR:-}" ]; then
+  echo "==> Applying provided env values from the pipe environment"
+  [ -n "${NICEHASH_API_KEY:-}" ] && sed -i "s|^NICEHASH_API_KEY=.*|NICEHASH_API_KEY=$NICEHASH_API_KEY|" "$ENV_FILE"
+  [ -n "${NICEHASH_API_SECRET:-}" ] && sed -i "s|^NICEHASH_API_SECRET=.*|NICEHASH_API_SECRET=$NICEHASH_API_SECRET|" "$ENV_FILE"
+  [ -n "${NICEHASH_ORG_ID:-}" ] && sed -i "s|^NICEHASH_ORG_ID=.*|NICEHASH_ORG_ID=$NICEHASH_ORG_ID|" "$ENV_FILE"
+  [ -n "${RENTAL_LTC_ADDR:-}" ] && sed -i "s|^RENTAL_LTC_ADDR=.*|RENTAL_LTC_ADDR=$RENTAL_LTC_ADDR|" "$ENV_FILE"
+fi
+
+# ---- systemd unit -----------------------------------------------------------
+echo "==> Installing systemd unit $UNIT"
+cat > "$UNIT" <<EOF
+[Unit]
+Description=NiceHash auto-purchase hashrate watcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=$ENV_FILE
+WorkingDirectory=$SRC_DIR
+ExecStart=/usr/bin/node $BUNDLE
+Restart=always
+RestartSec=10
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=$STATE_DIR
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Detect node path (fallback to /usr/bin/node)
+NODE_BIN="$(command -v node || true)"
+if [ -n "$NODE_BIN" ] && [ "$NODE_BIN" != "/usr/bin/node" ]; then
+  sed -i "s|^ExecStart=.*|ExecStart=$NODE_BIN $BUNDLE|" "$UNIT"
+fi
+
+systemctl daemon-reload
+systemctl enable --now nicehash-watcher.service 2>/dev/null || true
+
+echo
+echo "==> Installed. Status:"
+systemctl --no-pager --full status nicehash-watcher.service 2>/dev/null | head -20 || true
+echo
+echo "NEXT STEPS:"
+echo "  1. Edit credentials:  sudo nano $ENV_FILE"
+echo "  2. Restart:           sudo systemctl restart nicehash-watcher"
+echo "  3. Tail logs:          sudo journalctl -u nicehash-watcher -f"
+echo
+echo "The watcher stays in standby (logs 'no API credentials') until you fill"
+echo "the four REQUIRED values and restart. No money is spent until the pool"
+echo "hashrate drops below ${TRIGGER_FRACTION:-0.75} of the target."
