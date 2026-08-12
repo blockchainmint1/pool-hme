@@ -76,6 +76,8 @@ function fmtHashrate(hs: number): string {
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
   const { data: watchdog } = useSuspenseQuery(monitorQuery);
+  const { data: wallets } = useSuspenseQuery(walletsQuery);
+
   // Age labels are clock-dependent, so they can't be rendered during SSR:
   // Date.now() on the server disagrees with the client and breaks hydration
   // ("28s ago" vs "49s ago"). Stay blank until mounted, then tick.
