@@ -44,7 +44,9 @@ export const Route = createFileRoute("/diagnostics")({
     Promise.all([
       context.queryClient.ensureQueryData(diagnosticsQuery),
       context.queryClient.ensureQueryData(monitorQuery),
+      context.queryClient.ensureQueryData(walletsQuery),
     ]),
+
   errorComponent: ({ error }) => (
     <div className="max-w-3xl mx-auto p-8 text-pool-steel-hi">
       <h1 className="text-xl font-mono mb-2">Diagnostics unavailable</h1>
