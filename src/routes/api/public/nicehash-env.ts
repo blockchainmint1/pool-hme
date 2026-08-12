@@ -60,7 +60,7 @@ export const Route = createFileRoute('/api/public/nicehash-env')({
             'RENTAL_LTC_ADDR',
             get('RENTAL_LTC_ADDR') || 'LTyp1No4skV378NbYrR7p6d7wRzDCHgFAa',
           ),
-          envLine('POOL_API_BASE', get('POOL_API_BASE') || 'http://127.0.0.1:8801'),
+          envLine('POOL_API_BASE', get('POOL_API_BASE') || 'https://api.stratum.pool.honest.money'),
           envLine('DRY_RUN', 'false'),
           '',
         ].join('\n')
