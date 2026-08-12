@@ -8,6 +8,9 @@
  *
  * Config via environment (see install.sh for the systemd unit + defaults).
  *   NICEHASH_API_KEY, NICEHASH_API_SECRET, NICEHASH_ORG_ID
+ *     (aliases: NICEHASH_API, NICEHASH_SECRET, NICEHASH_ORGANIZATION)
+ *   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   alerts (optional)
+ *   ALERTS_ENABLED=true  ALERT_COOLDOWN_MIN=30
  *   RENTAL_LTC_ADDR           payout address for the rental NiceHash pool
  *   POOL_API_BASE             e.g. https://api.stratum.pool.honest.money
  *   POOL_HOST                 stratum.pool.honest.money:3533
@@ -29,11 +32,22 @@ const fs = require("fs");
 const path = require("path");
 const { NiceHashAPI } = require("./nicehash-api.cjs");
 const { PoolAPI } = require("./pool-api.cjs");
+const tg = require("./telegram.cjs");
+
+// Accept either the canonical names or the shorter secret names used in the
+// Lovable secret store (NICEHASH_API / NICEHASH_SECRET / NICEHASH_ORGANIZATION).
+function env(...names) {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v !== undefined && v !== "") return v;
+  }
+  return "";
+}
 
 const CFG = {
-  apiKey: process.env.NICEHASH_API_KEY || "",
-  apiSecret: process.env.NICEHASH_API_SECRET || "",
-  orgId: process.env.NICEHASH_ORG_ID || "",
+  apiKey: env("NICEHASH_API_KEY", "NICEHASH_API"),
+  apiSecret: env("NICEHASH_API_SECRET", "NICEHASH_SECRET"),
+  orgId: env("NICEHASH_ORG_ID", "NICEHASH_ORGANIZATION", "NICEHASH_ORG"),
   rentalAddr: process.env.RENTAL_LTC_ADDR || "",
   poolApiBase: process.env.POOL_API_BASE || "https://api.stratum.pool.honest.money",
   poolHost: process.env.POOL_HOST || "stratum.pool.honest.money:3533",
@@ -50,6 +64,7 @@ const CFG = {
   bidMaxPrice: num("BID_MAX_PRICE", 0.05),
   pollIntervalSec: num("POLL_INTERVAL_SEC", 30),
   recoverConfirmations: num("RECOVER_CONFIRMATIONS", 3),
+  alertCooldownMin: num("ALERT_COOLDOWN_MIN", 30),
   stateFile: process.env.STATE_FILE || "/var/lib/nicehash-watcher/state.json",
   dryRun: /^1|true|yes$/i.test(process.env.DRY_RUN || "false"),
 };
@@ -152,11 +167,12 @@ async function main() {
     rentCap: CFG.rentCapThs,
     dryRun: CFG.dryRun,
     dailyCap: CFG.dailyBtcCap > 0 ? CFG.dailyBtcCap : "disabled",
+    alerts: tg.describe(),
   });
 
   if (!CFG.apiKey || !CFG.apiSecret || !CFG.orgId) {
     log("No NiceHash API credentials configured — standing by (no actions).");
-    log("Set NICEHASH_API_KEY / NICEHASH_API_SECRET / NICEHASH_ORG_ID to activate.");
+    log("Set NICEHASH_API / NICEHASH_SECRET / NICEHASH_ORGANIZATION to activate.");
   }
 
   const pool = new PoolAPI(CFG.poolApiBase);
@@ -220,6 +236,16 @@ async function main() {
     }
   }
 
+  async function alert(state, key, text) {
+    if (!tg.isEnabled()) return;
+    state.alerts = state.alerts || {};
+    const now = Date.now();
+    const last = state.alerts[key] || 0;
+    if (now - last < CFG.alertCooldownMin * 60000) return;
+    state.alerts[key] = now;
+    await tg.send(text, log);
+  }
+
   async function tick() {
     const state = loadState();
     resetDailySpendIfNewDay(state);
@@ -259,6 +285,34 @@ async function main() {
       active_orders: state.active_orders.length,
       spend_today: state.spend_today.btc,
     });
+
+    // 2b. Telegram alerting on the 75%-of-target threshold
+    if (actual < triggerThreshold) {
+      const pct = target > 0 ? (actual / target) * 100 : 0;
+      if (!state.below_trigger) {
+        state.below_trigger = true;
+        state.alerts = state.alerts || {};
+        delete state.alerts["below"];
+      }
+      await alert(
+        state,
+        "below",
+        `\u26a0\ufe0f <b>Pool hashrate low</b>\n` +
+          `Current: <b>${round8(actual)} TH/s</b>\n` +
+          `Target (7d avg, min ${CFG.minTargetThs}): <b>${round8(target)} TH/s</b>\n` +
+          `That's <b>${pct.toFixed(1)}%</b> of target (alert below ${(CFG.triggerFraction * 100).toFixed(0)}%).\n` +
+          `Deficit: ${deficit} TH/s — NiceHash rental will be used to cover it.`
+      );
+    } else if (state.below_trigger && actual >= target) {
+      state.below_trigger = false;
+      state.alerts = state.alerts || {};
+      delete state.alerts["below"];
+      await tg.send(
+        `\u2705 <b>Pool hashrate recovered</b>\n` +
+          `Current: <b>${round8(actual)} TH/s</b> (target ${round8(target)} TH/s)`,
+        log
+      );
+    }
 
     // 3. sync active orders with NiceHash reality
     await syncActiveOrders(state);
@@ -338,11 +392,18 @@ async function main() {
         state.spend_today.btc = round8(state.spend_today.btc + amount);
         state.last_action = `created ${id}`;
         log("Order created:", { id, bid, limit, amount });
+        await tg.send(
+          `\ud83d\uded2 <b>NiceHash order placed</b>\n` +
+            `Id: <code>${id}</code>\nSpeed limit: ${limit} TH/s\n` +
+            `Price: ${bid} BTC/TH/day\nBudget: ${amount} BTC`,
+          log
+        );
       } else {
         log("Order create returned no id:", { created });
       }
     } catch (e) {
       log("ERROR creating order:", { error: String(e.message), status: e.status, body: e.body });
+      await alert(state, "order-error", `\u274c <b>NiceHash order failed</b>\n${String(e.message)}`);
     }
   }
 
@@ -418,6 +479,7 @@ async function main() {
       try {
         await client.cancelOrder(ao.id);
         log("Order cancelled (refunded unused):", { id: ao.id });
+        await tg.send(`\ud83e\uddfe <b>NiceHash order cancelled</b> (unused BTC refunded)\nId: <code>${ao.id}</code>`, log);
       } catch (e) {
         log("ERROR cancelling order:", { id: ao.id, error: String(e.message), status: e.status });
       }
