@@ -19,7 +19,7 @@ STATE_DIR="/var/lib/nicehash-watcher"
 UNIT="/etc/systemd/system/nicehash-watcher.service"
 
 # Locate the bundle shipped beside this script, or download it.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}" 2>/dev/null || echo .)" && pwd)"
 BUNDLE="$SRC_DIR/bundle.cjs"
 
 echo "==> Installing nicehash-watcher to $SRC_DIR"
