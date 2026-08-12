@@ -505,8 +505,36 @@ async function main() {
       const acceptedThs = Number((order.acceptedSpeed || 0));
       log("order status:", { id: ao.id, alive, acceptedSpeed: acceptedThs, limit: order.limit, remaining });
 
-      // refill if budget low and still needed
+      // Price escalation: we deliberately open at the depth-derived clearing
+      // price (cheap). If the order is not filling, nudge the price up one tick
+      // at a time — NiceHash only allows price increases on STANDARD orders, so
+      // starting low and stepping up is strictly cheaper than opening high.
       const stillNeeded = actual < target;
+      if (stillNeeded && alive && order.limit > 0) {
+        const fill = acceptedThs / Number(order.limit);
+        const sinceBump = Date.now() - (ao.price_changed_at || ao.created_at || 0);
+        const cur = Number(order.price || ao.price || 0);
+        if (
+          fill < CFG.bidFillFraction &&
+          sinceBump > CFG.bidBumpEveryMin * 60 * 1000 &&
+          cur > 0 && cur < CFG.bidMaxPrice
+        ) {
+          const next = round8(Math.min(cur + CFG.bidTick, CFG.bidMaxPrice));
+          log("Underfilled — bumping price one tick:", { id: ao.id, from: cur, to: next, fill: round8(fill) });
+          if (!CFG.dryRun) {
+            try {
+              await client.updatePriceAndLimit(ao.id, { price: next, limit: Number(order.limit) });
+              ao.price = next;
+              ao.price_changed_at = Date.now();
+            } catch (e) {
+              log("WARN: price bump failed:", { id: ao.id, error: String(e.message), status: e.status });
+              ao.price_changed_at = Date.now();
+            }
+          }
+        }
+      }
+
+      // refill if budget low and still needed
       if (stillNeeded && alive) {
         let doRefill = false;
         if (remaining != null) {
@@ -520,6 +548,7 @@ async function main() {
           await refill(state, ao.id);
         }
       }
+
 
       // scale up: if this order is saturated at its limit and we still need more,
       // and we have room for another concurrent order, create a second order.
