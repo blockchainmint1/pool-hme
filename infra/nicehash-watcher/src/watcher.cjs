@@ -461,7 +461,7 @@ async function main() {
       limit,
       poolId: pid,
     };
-    log("Creating rental order:", { bid, top, limit, amount, capped, poolId: pid, dryRun: CFG.dryRun });
+    log("Creating rental order:", { bid, clearing, top, marketAvailThs: totalAvail, limit, amount, capped, poolId: pid, dryRun: CFG.dryRun });
     if (CFG.dryRun) {
       log("[DRY_RUN] would POST /main/api/v2/hashpower/order", body);
       return;
