@@ -1,0 +1,26 @@
+[Unit]
+Description=nicehash-proxy (stratum shim for rental services)
+After=network.target
+
+[Service]
+Type=simple
+User=nicehash-proxy
+Group=nicehash-proxy
+EnvironmentFile=/etc/nicehash-proxy/env
+WorkingDirectory=/opt/nicehash-proxy
+ExecStart=/usr/bin/node /opt/nicehash-proxy/proxy.cjs
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/nicehash-proxy
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
