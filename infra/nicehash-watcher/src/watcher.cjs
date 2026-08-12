@@ -470,7 +470,7 @@ async function main() {
       const created = await client.createOrder(body);
       const id = created && created.id;
       if (id) {
-        state.active_orders.push({ id, created_at: Date.now(), amount, limit, price: bid });
+        state.active_orders.push({ id, created_at: Date.now(), amount, limit, price: bid, price_changed_at: Date.now() });
         state.spend_today.btc = round8(state.spend_today.btc + amount);
         state.last_action = `created ${id}`;
         log("Order created:", { id, bid, limit, amount });
