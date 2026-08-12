@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
 import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
+import { ResilienceBand } from "@/components/pool/ResilienceBand";
 
 const poolSummaryQuery = queryOptions({
   queryKey: ["pool", "summary"],
@@ -104,7 +105,9 @@ function PoolHome() {
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
+          <RailLink href="#resilience" icon={ShieldCheck}  label="Failover" />
           <Link
+
             to="/diagnostics"
             className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
           >
@@ -184,6 +187,15 @@ function PoolHome() {
             <FoundBlocks />
           </section>
 
+          <section id="resilience" className="space-y-3">
+            <SectionHeader
+              eyebrow="Failover strategy"
+              title="The pool heals itself."
+              hint="watchdog · alerts · auto-rented hashpower"
+            />
+            <ResilienceBand />
+          </section>
+
           <section id="learn" className="space-y-3">
             <SectionHeader
               eyebrow="Learn & build"
@@ -193,6 +205,7 @@ function PoolHome() {
             <LearnBand />
           </section>
         </div>
+
       </div>
     </div>
   );
