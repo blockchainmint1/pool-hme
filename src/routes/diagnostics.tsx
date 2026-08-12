@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { getPoolDiagnostics } from "@/lib/pool/diagnostics.functions";
+import { getMonitorReport } from "@/lib/monitor/monitor.functions";
 import { ChevronLeft, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const diagnosticsQuery = queryOptions({
@@ -9,6 +10,13 @@ const diagnosticsQuery = queryOptions({
   queryFn: () => getPoolDiagnostics(),
   staleTime: 15_000,
   refetchInterval: 20_000,
+});
+
+const monitorQuery = queryOptions({
+  queryKey: ["pool", "watchdog"],
+  queryFn: () => getMonitorReport(),
+  staleTime: 20_000,
+  refetchInterval: 30_000,
 });
 
 export const Route = createFileRoute("/diagnostics")({
@@ -23,7 +31,11 @@ export const Route = createFileRoute("/diagnostics")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(diagnosticsQuery),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(diagnosticsQuery),
+      context.queryClient.ensureQueryData(monitorQuery),
+    ]),
   errorComponent: ({ error }) => (
     <div className="max-w-3xl mx-auto p-8 text-pool-steel-hi">
       <h1 className="text-xl font-mono mb-2">Diagnostics unavailable</h1>
@@ -52,6 +64,7 @@ function fmtHashrate(hs: number): string {
 
 function DiagnosticsPage() {
   const { data } = useSuspenseQuery(diagnosticsQuery);
+  const { data: watchdog } = useSuspenseQuery(monitorQuery);
   // Age labels are clock-dependent, so they can't be rendered during SSR:
   // Date.now() on the server disagrees with the client and breaks hydration
   // ("28s ago" vs "49s ago"). Stay blank until mounted, then tick.
@@ -98,6 +111,66 @@ function DiagnosticsPage() {
             </span>
           </div>
         </header>
+
+        {/* Watchdog */}
+        <Section title="0 · Watchdog · Telegram alerting">
+          <div className="flex flex-wrap items-center gap-3 px-1 pb-3 text-xs font-mono">
+            <span
+              className={`px-2 py-1 rounded border ${
+                watchdog.overall === "ok"
+                  ? "border-pool-mint/30 text-pool-mint"
+                  : watchdog.overall === "warn"
+                    ? "border-amber-400/40 text-amber-400"
+                    : "border-red-500/40 text-red-400"
+              }`}
+            >
+              {watchdog.overall === "ok"
+                ? "all checks passing"
+                : watchdog.overall === "warn"
+                  ? "warning"
+                  : "alerting"}
+            </span>
+            <span className="text-pool-steel">
+              scrypt {watchdog.metrics.scrypt_ths.toFixed(2)} TH/s · target{" "}
+              {watchdog.metrics.target_ths.toFixed(2)} TH/s · 7d avg{" "}
+              {watchdog.metrics.avg7d_ths.toFixed(2)} TH/s
+            </span>
+            <span className="text-pool-steel">
+              rental watcher:{" "}
+              {watchdog.watcher
+                ? `heartbeat ${fmtAge(watchdog.watcher.received_at, now)} · ${watchdog.watcher.active_orders} order(s)`
+                : "no heartbeat yet"}
+            </span>
+          </div>
+          <Table
+            head={["Check", "Status", "Detail"]}
+            rows={watchdog.checks.map((c) => [
+              c.label,
+              <span
+                key="s"
+                className={
+                  c.severity === "ok"
+                    ? "text-pool-mint"
+                    : c.severity === "warn"
+                      ? "text-amber-400"
+                      : "text-red-400"
+                }
+              >
+                {c.severity}
+              </span>,
+              <span key="d" className="text-pool-steel">
+                {c.detail}
+              </span>,
+            ])}
+          />
+          <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
+            These same checks run server-side on a schedule and push to the Telegram ops channel:
+            a problem alerts once per 30 minutes while it persists, and sends a single all-clear on
+            recovery. Thresholds: hashrate below 75% of max(7d avg, 19 TH/s), zero live sessions,
+            TXC/ISK with no block for 15m (warn) or 30m (alert), stale stats feed, and a missing
+            rental-watcher heartbeat.
+          </p>
+        </Section>
 
         {/* Per-algo */}
         <Section title="1 · Stratum health · per algo">

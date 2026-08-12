@@ -47,6 +47,7 @@ import { Route as ApiV1FeeEstimatesRouteImport } from './routes/api/v1/fee-estim
 import { Route as ApiV1DifficultyAdjustmentRouteImport } from './routes/api/v1/difficulty-adjustment'
 import { Route as ApiTxTxidRouteImport } from './routes/api/tx.$txid'
 import { Route as ApiPublicNicehashEnvRouteImport } from './routes/api/public/nicehash-env'
+import { Route as ApiPublicMonitorRouteImport } from './routes/api/public/monitor'
 import { Route as ApiPoolSplatRouteImport } from './routes/api/pool.$'
 import { Route as ApiMempoolTxidsRouteImport } from './routes/api/mempool.txids'
 import { Route as ApiBlocksStartHeightRouteImport } from './routes/api/blocks.$startHeight'
@@ -278,6 +279,11 @@ const ApiTxTxidRoute = ApiTxTxidRouteImport.update({
 const ApiPublicNicehashEnvRoute = ApiPublicNicehashEnvRouteImport.update({
   id: '/api/public/nicehash-env',
   path: '/api/public/nicehash-env',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicMonitorRoute = ApiPublicMonitorRouteImport.update({
+  id: '/api/public/monitor',
+  path: '/api/public/monitor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPoolSplatRoute = ApiPoolSplatRouteImport.update({
@@ -523,6 +529,7 @@ export interface FileRoutesByFullPath {
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/pool/$': typeof ApiPoolSplatRoute
+  '/api/public/monitor': typeof ApiPublicMonitorRoute
   '/api/public/nicehash-env': typeof ApiPublicNicehashEnvRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
@@ -603,6 +610,7 @@ export interface FileRoutesByTo {
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/pool/$': typeof ApiPoolSplatRoute
+  '/api/public/monitor': typeof ApiPublicMonitorRoute
   '/api/public/nicehash-env': typeof ApiPublicNicehashEnvRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
@@ -685,6 +693,7 @@ export interface FileRoutesById {
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/pool/$': typeof ApiPoolSplatRoute
+  '/api/public/monitor': typeof ApiPublicMonitorRoute
   '/api/public/nicehash-env': typeof ApiPublicNicehashEnvRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
@@ -768,6 +777,7 @@ export interface FileRouteTypes {
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
     | '/api/pool/$'
+    | '/api/public/monitor'
     | '/api/public/nicehash-env'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
@@ -848,6 +858,7 @@ export interface FileRouteTypes {
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
     | '/api/pool/$'
+    | '/api/public/monitor'
     | '/api/public/nicehash-env'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
@@ -929,6 +940,7 @@ export interface FileRouteTypes {
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
     | '/api/pool/$'
+    | '/api/public/monitor'
     | '/api/public/nicehash-env'
     | '/api/tx/$txid'
     | '/api/v1/difficulty-adjustment'
@@ -1010,6 +1022,7 @@ export interface RootRouteChildren {
   ApiBlocksStartHeightRoute: typeof ApiBlocksStartHeightRoute
   ApiMempoolTxidsRoute: typeof ApiMempoolTxidsRoute
   ApiPoolSplatRoute: typeof ApiPoolSplatRoute
+  ApiPublicMonitorRoute: typeof ApiPublicMonitorRoute
   ApiPublicNicehashEnvRoute: typeof ApiPublicNicehashEnvRoute
   ApiV1DifficultyAdjustmentRoute: typeof ApiV1DifficultyAdjustmentRoute
   ApiV1FeeEstimatesRoute: typeof ApiV1FeeEstimatesRoute
@@ -1305,6 +1318,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/nicehash-env'
       fullPath: '/api/public/nicehash-env'
       preLoaderRoute: typeof ApiPublicNicehashEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/monitor': {
+      id: '/api/public/monitor'
+      path: '/api/public/monitor'
+      fullPath: '/api/public/monitor'
+      preLoaderRoute: typeof ApiPublicMonitorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/pool/$': {
@@ -1745,6 +1765,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBlocksStartHeightRoute: ApiBlocksStartHeightRoute,
   ApiMempoolTxidsRoute: ApiMempoolTxidsRoute,
   ApiPoolSplatRoute: ApiPoolSplatRoute,
+  ApiPublicMonitorRoute: ApiPublicMonitorRoute,
   ApiPublicNicehashEnvRoute: ApiPublicNicehashEnvRoute,
   ApiV1DifficultyAdjustmentRoute: ApiV1DifficultyAdjustmentRoute,
   ApiV1FeeEstimatesRoute: ApiV1FeeEstimatesRoute,
