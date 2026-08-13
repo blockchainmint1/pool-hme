@@ -16,7 +16,7 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 MODE="$(printf '%s' "${1:-INSTALL}" | tr '[:lower:]' '[:upper:]')"
-VER="v1"
+VER="v2"
 SYNC_UNIT=zcu-mainnet-yiimp-block-sync
 echo "zcu-sync-timer $VER  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
@@ -38,7 +38,7 @@ if [ "$MODE" = "STATUS" ]; then
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
     http://127.0.0.1:8747 2>/dev/null | grep -o '0x[0-9a-fA-F]*')
   [ -n "${TIP:-}" ] && echo "  geth tip  : $((TIP))"
-  DBH=$(mysql yiimpfrontend -N -B -e \
+  DBH=$(timeout 8 mysql yiimpfrontend -N -B -e \
     "SELECT COALESCE(MAX(b.height),0) FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'" 2>/dev/null)
   echo "  yiimp DB  : ${DBH:-?}"
   echo "  --- next runs"; systemctl list-timers zcu-sync.timer --no-pager 2>/dev/null | head -3
@@ -66,8 +66,10 @@ Persistent=true
 WantedBy=timers.target
 EOF
 systemctl daemon-reload
-systemctl enable --now zcu-sync.timer >/dev/null 2>&1
-systemctl start "$SYNC_UNIT" >/dev/null 2>&1 || true
+systemctl enable zcu-sync.timer >/dev/null 2>&1
+systemctl start --no-block zcu-sync.timer >/dev/null 2>&1
+# --no-block: the oneshot can take many minutes on a big backfill; never hold the installer
+systemctl start --no-block "$SYNC_UNIT" >/dev/null 2>&1 || true
 
 echo "  installed: $SYNC_UNIT now runs every 120s"
 echo "  timer   : $(systemctl is-active zcu-sync.timer)"
