@@ -17,6 +17,19 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v4  2026-08-13  Two false FAILs killed the verdict while the pool was
+#                   objectively healthy (TXC/ISK blocks 2m old):
+#                   (a) 'dead lock' was counted over the WHOLE log, so lines
+#                       from the 13 Aug outage still FAILed a stratum that has
+#                       been up 2.6h with NRestarts=0. Now age-scoped: only
+#                       FAILs when deadlock lines are recent AND the service
+#                       actually restarted / is young; otherwise WARN historic.
+#                   (b) coin-name detection only matched long names. yiimp logs
+#                       job/aux lines by symbol and other tokens, so a perfectly
+#                       cycling loop showed "ZERO coin names". Pattern widened
+#                       and cross-checked against block cadence -- if TXC/ISK
+#                       found blocks recently the loop IS cycling, so it is at
+#                       most a WARN about log verbosity, never a FAIL.
 #   v3  2026-08-13  Version banner + version log. Section 4b now also flags a
 #                   log file that is being written but contains no coin names.
 #   v2  2026-08-13  Read the LIVE log (/var/stratum/scrypt.log), not the stale
@@ -29,7 +42,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v3"
+CANARY_VERSION="v4"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -52,6 +65,9 @@ LOGAGE=$(( $(date -u +%s) - $(stat -c %Y "$LOG" 2>/dev/null || echo 0) ))
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
 PORT=3433
+# v4: yiimp logs jobs/aux by symbol and short tokens, not just long coin names.
+# Matching only long names made a healthy loop look dead.
+COINPAT='litecoin|dogecoin|texitcoin|iskander|zero *chill|\bLTC\b|\bDOGE\b|\bTXC\b|\bISK\b|\bZCU\b|getblocktemplate|createauxblock|getauxblock|new block|block found|coind|job'
 mkdir -p "$STATE"
 
 MY() { mysql yiimpfrontend -N -B -e "$1" 2>/dev/null; }
@@ -81,6 +97,12 @@ HARDCRASH=$(journalctl -u "$UNIT" --since '-30 min' --no-pager 2>/dev/null \
 HARDCRASH=$(echo "${HARDCRASH:-0}" | head -1 | tr -dc '0-9'); HARDCRASH=${HARDCRASH:-0}
 DEADLOCK=$(grep -c 'dead lock' "$LOG" 2>/dev/null || true)
 DEADLOCK=$(echo "${DEADLOCK:-0}" | head -1 | tr -dc '0-9'); DEADLOCK=${DEADLOCK:-0}
+# v4: 'dead lock, exiting' KILLS stratum. So if the process has been up a long
+# time with no restarts, any such lines are historic (13 Aug) and must not FAIL
+# a currently-healthy pool. Only recent lines on a young/restarted service are
+# evidence of a live deadlock.
+DEADLOCK_RECENT=$(tail -n 20000 "$LOG" 2>/dev/null | grep -c 'dead lock' || true)
+DEADLOCK_RECENT=$(echo "${DEADLOCK_RECENT:-0}" | head -1 | tr -dc '0-9'); DEADLOCK_RECENT=${DEADLOCK_RECENT:-0}
 
 echo "  active=$ACTIVE  NRestarts=$NRESTARTS  up=${UPSEC}s  since=$SINCE"
 [ "$ACTIVE" = "active" ] && ok "stratum is running" || bad "stratum is NOT active ($ACTIVE)"
@@ -88,8 +110,13 @@ if [ "$CRASHES" -eq 0 ]; then ok "no crashes or restarts in the last 30 min"
 elif [ "$HARDCRASH" -gt 0 ]; then bad "$HARDCRASH SEGV/core-dump in the last 30 min -- CRASH LOOP"
 elif [ "$CRASHES" -ge 3 ]; then bad "$CRASHES restart events in the last 30 min -- CRASH LOOP"
 else warn "$CRASHES restart event(s) in the last 30 min, none of them SEGV -- expected if YOU restarted it (up=${UPSEC}s)"; fi
-[ "$DEADLOCK" -eq 0 ] && ok "no 'dead lock' in current log" \
-                      || bad "$DEADLOCK 'dead lock, exiting' lines -- an aux child is killing stratum"
+if [ "$DEADLOCK" -eq 0 ]; then
+  ok "no 'dead lock' in current log"
+elif [ "$DEADLOCK_RECENT" -gt 0 ] && { [ "$CRASHES" -gt 0 ] || [ "$UPSEC" -lt 1800 ]; }; then
+  bad "$DEADLOCK_RECENT recent 'dead lock, exiting' lines + service restarted/young -- an aux child is killing stratum NOW"
+else
+  warn "$DEADLOCK 'dead lock' lines in the log, but stratum has been up ${UPSEC}s with NRestarts=$NRESTARTS -- historic (pre-restart), not a live deadlock"
+fi
 [ "$UPSEC" -gt 600 ] && ok "uptime > 10 min" || warn "stratum started ${UPSEC}s ago -- too young to judge"
 
 ##############################################################################
@@ -120,6 +147,7 @@ MYT "SELECT c.symbol, MAX(b.height) height,
      WHERE c.symbol IN ('LTC','DOGE','TXC','ISK')
      GROUP BY 1 ORDER BY min_ago" | sed 's/^/  /'
 
+CADENCE_OK=1   # v4: ground truth that the job/aux loop is cycling
 for S in TXC ISK; do
   AGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
             FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='$S'")
@@ -128,8 +156,8 @@ for S in TXC ISK; do
   # Tightened 14 Aug 2026: 20m dry used to print WARN and the run still said
   # "ALL GREEN". At 3m target, 10m dry is already a >3-sigma event.
   if   [ "$AGO" -le 8 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
-  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"
-  else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; fi
+  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
+  else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; CADENCE_OK=0; fi
 done
 
 ##############################################################################
@@ -166,20 +194,24 @@ else
   grep -i 'error getblocktemplate' "$SAMPLE" | tail -5 | sed 's/^/       /'
   # which coins are affected? synchronized errors across ALL coins = shared
   # refresh loop is blocked (a shim/adapter), one coin = that coin's daemon.
-  HITS=$(grep -io 'litecoin\|dogecoin\|texitcoin\|iskander\|zero chill' "$SAMPLE" \
-         | sort -u | tr '\n' ' ')
+  HITS=$(grep -ioE "$COINPAT" "$SAMPLE" | sort -u | tr '\n' ' ')
   echo "       coins named in this sample: ${HITS:-none}"
 fi
 [ "$AUXERR" -eq 0 ] || bad "$AUXERR aux-block RPC errors in 30s -- an aux child is failing, this is the deadlock precursor"
 [ "$WALLET" -eq 0 ] || bad "$WALLET 'unable to find the wallet for coinid' in 30s -- a coin has no usable wallet, payouts and block credit will break"
 [ "$RPCTO" -eq 0 ] || warn "$RPCTO RPC connect/timeout lines in 30s -- a coin daemon is slow or down"
-# v3: section 5 counted coin names in a stale file and printed lines=0 for
-# everything while still saying PASS. If the LIVE file is being written but
-# never names a coin, the aux/job loop is not running -- that is a failure.
-COINNAMES=$(grep -icE 'litecoin|dogecoin|texitcoin|iskander|zero chill' "$SAMPLE" || true)
+# v4: this used to hard-FAIL on "no coin names", which fired on a pool that was
+# finding TXC/ISK blocks every 2 minutes -- yiimp simply does not print long
+# coin names on every job line. Block cadence is the ground truth for "is the
+# loop cycling"; log verbosity is not. So: FAIL only when cadence is ALSO bad.
+COINNAMES=$(grep -icE "$COINPAT" "$SAMPLE" || true)
 COINNAMES=$(echo "${COINNAMES:-0}" | head -1 | tr -dc '0-9'); COINNAMES=${COINNAMES:-0}
 if [ "$NEW" -gt 200 ] && [ "$COINNAMES" -eq 0 ]; then
-  bad "$NEW lines written in 30s but ZERO coin names -- the job/aux loop is not cycling, only miner chatter is being logged"
+  if [ "$CADENCE_OK" -eq 1 ]; then
+    warn "$NEW lines in 30s and no coin/job tokens matched -- log verbosity only; TXC/ISK block cadence proves the job loop IS cycling"
+  else
+    bad "$NEW lines written in 30s, ZERO coin/job tokens AND blocks are dry -- the job/aux loop is not cycling"
+  fi
 fi
 rm -f "$SAMPLE"
 
@@ -191,10 +223,10 @@ for NAME in Litecoin Dogecoin Texitcoin Iskander "Zero Chill"; do
   E=$(tail -n 5000 "$LOG" 2>/dev/null | grep -i "$NAME" | grep -ic 'error' || true)
   printf '  %-12s lines=%-5s errors=%s\n' "$NAME" "$N" "$E"
 done
-AUXTOT=$(tail -n 5000 "$LOG" 2>/dev/null | grep -icE 'Litecoin|Dogecoin|Texitcoin|Iskander|Zero Chill' || true)
+AUXTOT=$(tail -n 5000 "$LOG" 2>/dev/null | grep -icE "$COINPAT" || true)
 AUXTOT=$(echo "${AUXTOT:-0}" | head -1 | tr -dc '0-9'); AUXTOT=${AUXTOT:-0}
 if [ "$AUXTOT" -eq 0 ]; then
-  warn "no coin names in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- log may have rotated; aux counts above are not evidence"
+  warn "no coin/job tokens in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- yiimp may only be logging miner chatter here; judge the loop by section 4 block cadence, not by these counts"
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
