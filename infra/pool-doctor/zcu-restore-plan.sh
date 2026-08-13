@@ -41,38 +41,57 @@ for b in "$ZCU_BIN" "$LIVE_BIN"; do
 done
 
 hr "2. WHAT WE WOULD LOSE -- files changed in LIVE since the ZCU build"
-[ -d "$ZCU_SRC" ] && [ -d "$LIVE_SRC" ] || { echo "   one of the trees is missing; set ZCU_SRC=/LIVE_SRC= and re-run"; }
-if [ -d "$ZCU_SRC" ] && [ -d "$LIVE_SRC" ]; then
-  echo "   -- .cpp/.h files that DIFFER (these carry the 15-20 Jul work):"
-  diff -rq --include='*.cpp' --include='*.h' "$ZCU_SRC" "$LIVE_SRC" 2>/dev/null \
-    | grep '^Files' | sed 's/^/      /'
-  echo
-  echo "   -- size of each difference (lines changed), biggest first:"
-  diff -rq --include='*.cpp' --include='*.h' "$ZCU_SRC" "$LIVE_SRC" 2>/dev/null \
-    | awk '/^Files/{print $2, $4}' | while read -r a b; do
-        n=$(diff "$a" "$b" 2>/dev/null | grep -c '^[<>]')
-        printf '%6s  %s\n' "$n" "$(basename "$a")"
-      done | sort -rn | sed 's/^/      /'
+# NOTE: GNU diff has NO --include option (only --exclude). v1 used --include and
+# silently produced nothing. We enumerate the source files ourselves instead.
+if [ ! -d "$ZCU_SRC" ] || [ ! -d "$LIVE_SRC" ]; then
+  echo "   one of the trees is missing; set ZCU_SRC= / LIVE_SRC= and re-run"
+else
+  WORK=$(mktemp)
+  ( cd "$ZCU_SRC" && find . -maxdepth 1 \( -name '*.cpp' -o -name '*.h' \) -printf '%f\n' ) | sort -u \
+  | while read -r n; do
+      a="$ZCU_SRC/$n"; b="$LIVE_SRC/$n"
+      if [ ! -f "$b" ]; then echo "MISSING-IN-LIVE $n"; continue; fi
+      c=$(diff "$a" "$b" 2>/dev/null | grep -c '^[<>]')
+      [ "$c" -gt 0 ] && echo "$c $n"
+    done > "$WORK"
+  ( cd "$LIVE_SRC" && find . -maxdepth 1 \( -name '*.cpp' -o -name '*.h' \) -printf '%f\n' ) \
+  | while read -r n; do
+      [ -f "$ZCU_SRC/$n" ] || echo "NEW-IN-LIVE $n"
+    done >> "$WORK"
+  echo "   -- files present only on one side:"
+  grep -E '^(MISSING-IN-LIVE|NEW-IN-LIVE)' "$WORK" | sed 's/^/      /' || true
+  echo "   -- files that DIFFER, by lines changed (biggest first). THIS is the worklist:"
+  grep -E '^[0-9]+ ' "$WORK" | sort -rn | awk '{printf "      %6s  %s\n", $1, $2}'
+  echo "   -- total differing files: $(grep -cE '^[0-9]+ ' "$WORK")"
 fi
 
-hr "3. the actual diffs, per file (this is the forward-port worklist)"
-if [ -d "$ZCU_SRC" ] && [ -d "$LIVE_SRC" ]; then
-  diff -rq --include='*.cpp' --include='*.h' "$ZCU_SRC" "$LIVE_SRC" 2>/dev/null \
-    | awk '/^Files/{print $2, $4}' | while read -r a b; do
-        echo "   ---------- $(basename "$a") ----------"
-        diff -u "$a" "$b" 2>/dev/null | head -120 | sed 's/^/      /'
-      done
+hr "3. the actual diffs, per file (forward-port worklist)"
+if [ -d "$ZCU_SRC" ] && [ -d "$LIVE_SRC" ] && [ -f "${WORK:-/nonexistent}" ]; then
+  grep -E '^[0-9]+ ' "$WORK" | sort -rn | awk '{print $2}' | while read -r n; do
+    echo "   ---------- $n  ($(grep -E "^[0-9]+ $n\$" "$WORK" | awk '{print $1}') lines) ----------"
+    diff -u "$ZCU_SRC/$n" "$LIVE_SRC/$n" 2>/dev/null | sed -n '3,140p' | sed 's/^/      /'
+  done
+  rm -f "$WORK"
 fi
 
 hr "4. is the DOGE fix in the CODE or the CONFIG?"
 echo "   (if auxpow_rpc_mode only appears in scrypt.conf, restoring the old binary costs nothing on DOGE)"
 grep -rn 'auxpow_rpc_mode' /var/stratum/scrypt.conf 2>/dev/null | sed 's/^/      conf: /'
-grep -rln 'auxpow_rpc_mode' "$LIVE_SRC" "$ZCU_SRC" 2>/dev/null | sed 's/^/      src:  /'
+echo "   -- SOURCE files only (v1 wrongly matched .o object files):"
+grep -rln 'auxpow_rpc_mode' "$LIVE_SRC" "$ZCU_SRC" \
+  --include='*.cpp' --include='*.h' 2>/dev/null | sed 's/^/      src:  /'
+echo "   -- where DOGE auxpow mode is set (DB coins row wins over conf):"
+SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
+eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*define( *'YAAMP_DBPASSWORD' *, *'\([^']*\)').*/DBP='\1'/p" "$SERVERCONFIG" 2>/dev/null)"
+mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e \
+  "SELECT id,symbol,enable,auxpow,rpcencoding,rpcport FROM coins WHERE symbol IN ('DOGE','TXC','ISK','ZCU','LTC')" 2>&1 \
+  | grep -v '^mysql:' | sed 's/^/      /'
 echo "   -- does the ZCU-era binary understand auxpow_rpc_mode at all?"
 for b in "$ZCU_BIN" "$LIVE_BIN"; do
   [ -f "$b" ] && printf '      %-46s auxpow_rpc_mode=%s\n' "$(basename "$b")" \
     "$(strings -a "$b" | grep -c 'auxpow_rpc_mode')"
 done
+
 
 hr "5. config compatibility -- would scrypt.conf still parse?"
 echo "   -- coin sections currently configured:"
