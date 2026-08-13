@@ -21,10 +21,15 @@ LOG=/var/stratum/logs/stratum-current.log
 # stratum opens a NEW log file on restart; follow the freshest MAIN log.
 # client-*.log only holds per-miner chatter -- coin names never appear there,
 # which made section 5 report lines=0 for everything.
-NEWEST=$(ls -t /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
+# NOTE (14 Aug 2026): the *live* file stratum writes to is /var/stratum/scrypt.log.
+# logs/stratum-current.log is a rotated snapshot and can be hours stale -- grepping
+# it is how we missed 90 minutes of 'error getblocktemplate'. Always pick the
+# most-recently-written candidate, scrypt.log included.
+NEWEST=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
 [ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | grep -v '/client-' | head -1)
 [ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | head -1)
 [ -n "${NEWEST:-}" ] && LOG="$NEWEST"
+LOGAGE=$(( $(date -u +%s) - $(stat -c %Y "$LOG" 2>/dev/null || echo 0) ))
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
 PORT=3433
