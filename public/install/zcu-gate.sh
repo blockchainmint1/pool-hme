@@ -29,6 +29,9 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 MODE="${1:-INSTALL}"
+MODE="$(printf '%s' "$MODE" | tr '[:lower:]' '[:upper:]')"
+# START / RESTART / UP are all aliases for INSTALL -- installing IS starting
+case "$MODE" in START|RESTART|UP) MODE=INSTALL ;; esac
 GETH_PORT=${GETH_PORT:-8747}
 PORT=${ADAPTER_PORT:-8749}
 CAP=/var/log/zcu-capture.jsonl
@@ -36,13 +39,19 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+
+case "$MODE" in
+  INSTALL|STOP|STATUS) ;;
+  *) echo "  unknown mode '$MODE'. Use INSTALL (aka START), STOP, or STATUS."; exit 1 ;;
+esac
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"
 
 ##############################################################################
 if [ "$MODE" = "STOP" ]; then
+  systemctl disable --now zcu-gate >/dev/null 2>&1 && echo "  zcu-gate.service stopped and disabled" || true
   pkill -f 'adapter-gate.py'    && echo "  gate adapter stopped"    || echo "  gate was not running"
   pkill -f 'adapter-capture.py' && echo "  shadow adapter stopped"  || true
   sleep 1
@@ -54,6 +63,7 @@ fi
 ##############################################################################
 if [ "$MODE" = "STATUS" ]; then
 hr "gate status"
+systemctl --no-pager -l status zcu-gate 2>/dev/null | head -8 || echo "  no zcu-gate.service"
 pgrep -f adapter-gate.py >/dev/null && echo "  adapter-gate.py RUNNING" || echo "  adapter-gate.py NOT running"
 ss -ltn 2>/dev/null | grep ":$PORT" || echo "  nothing on :$PORT"
 python3 - "$CAP" <<'PY'
@@ -84,10 +94,12 @@ fi
 ##############################################################################
 if [ "$MODE" = "INSTALL" ]; then
 hr "1. stand down any other adapter first"
+systemctl stop zcu-gate >/dev/null 2>&1 || true
 if pgrep -f 'adapter-capture.py' >/dev/null; then
   echo "  stopping shadow adapter (capture-only) to take its port"
   pkill -f 'adapter-capture.py'; sleep 2
 fi
+pkill -f 'adapter-gate.py' >/dev/null 2>&1 && sleep 2 || true
 if ss -ltn 2>/dev/null | grep -q ":$PORT"; then
   echo "  REFUSING: something is still listening on :$PORT."
   echo "  Stop it first:  sudo pkill -f '/opt/zcu-adapter/adapter'"
@@ -388,16 +400,45 @@ chmod 755 "$PY"
 touch "$CAP"; chmod 600 "$CAP"
 echo "  wrote $PY"
 
-hr "3. start it"
-GETH_URL="http://127.0.0.1:$GETH_PORT" LISTEN_PORT="$PORT" CAPTURE_FILE="$CAP" \
-  ZCU_DRY_RUN="${ZCU_DRY_RUN:-0}" MAX_FWD_PER_MIN="${MAX_FWD_PER_MIN:-6}" \
-  nohup python3 "$PY" >"$LOG" 2>&1 &
-sleep 2
+hr "3. install the systemd unit and start it"
+cat > /etc/zcu-gate.env <<EOF
+GETH_URL=http://127.0.0.1:$GETH_PORT
+LISTEN_PORT=$PORT
+CAPTURE_FILE=$CAP
+ZCU_DRY_RUN=${ZCU_DRY_RUN:-0}
+MAX_FWD_PER_MIN=${MAX_FWD_PER_MIN:-6}
+EOF
+chmod 600 /etc/zcu-gate.env
+cat > /etc/systemd/system/zcu-gate.service <<EOF
+[Unit]
+Description=ZCU target-gated auxpow adapter (bitcoind RPC -> geth)
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/zcu-gate.env
+ExecStart=/usr/bin/python3 $PY
+Restart=always
+RestartSec=5
+StandardOutput=append:$LOG
+StandardError=append:$LOG
+
+[Install]
+WantedBy=multi-user.target
+EOF
+touch "$LOG"; chmod 640 "$LOG"
+systemctl daemon-reload
+systemctl enable --now zcu-gate >/dev/null 2>&1 || systemctl enable zcu-gate >/dev/null 2>&1
+systemctl restart zcu-gate
+for i in $(seq 1 10); do ss -ltn 2>/dev/null | grep -q ":$PORT" && break; sleep 1; done
 if ss -ltn 2>/dev/null | grep -q ":$PORT"; then
-  echo "  listening on :$PORT   dry_run=${ZCU_DRY_RUN:-0}"
+  echo "  listening on :$PORT   dry_run=${ZCU_DRY_RUN:-0}   (systemd unit zcu-gate, survives reboot)"
 else
-  echo "  FAILED to start -- see $LOG"; tail -20 "$LOG"; exit 1
+  echo "  FAILED to start -- see $LOG"; tail -20 "$LOG"
+  systemctl --no-pager -l status zcu-gate | head -20
+  exit 1
 fi
+
 
 hr "4. smoke test the read path"
 curl -s -m 10 -H 'content-type: application/json' \
