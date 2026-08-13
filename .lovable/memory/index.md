@@ -17,6 +17,7 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 
 Coin daemon CLIs are NOT on $PATH: LTC `/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf` (wallet `wallets/pool/wallet.dat`, `wallet=pool`); DOGE `/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf` (wallet.dat at datadir root).
 DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when the parent LTC round credits, so a daily run strands blocks as `no_shares`. Batching is `MIN_PAYOUT_DOGE`, not the interval.
+`auxpow_rpc_mode = 1` allowlist in stratum `db.cpp` is `ISK || TXC || ZCU` — DOGE must NEVER be in it (mode 1 = ~20% DOGE accept).
 
 ## Memories
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
