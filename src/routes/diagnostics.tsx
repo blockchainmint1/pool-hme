@@ -355,12 +355,14 @@ function DiagnosticsPage() {
             ])}
           />
           <p className="text-[11px] text-pool-steel font-mono mt-2 px-1">
-            Rotated hot wallets (DOGE 2026-07-2x, LTC 2026-07-28) — seeds held by us, old addresses
-            orphaned and never reused. Balances read from the public chain explorer, cached 60s. Payouts
-            run once daily at 06:15 UTC, so a healthy day looks like the balance stepping down each
-            morning. Balance sitting far above the daily payout total means blocks were mined but never
-            allocated into the payout ledger.
+            Caution: this is a single-address explorer view of the rotated receive address, not the
+            daemon wallet total. The daemon holds coins across many change addresses, so this figure
+            reads far LOW compared to <span className="text-pool-mint">getwalletinfo</span> on the box
+            (e.g. ~20k here vs ~426k spendable). Use it for send activity, not for float. Real float and
+            share/payout reconciliation come from{" "}
+            <span className="text-pool-mint">payout-reconcile.sh</span>.
           </p>
+
         </Section>
 
 
