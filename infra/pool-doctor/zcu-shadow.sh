@@ -29,7 +29,7 @@ CAP=/var/log/zcu-capture.jsonl
 PY=/opt/zcu-adapter/adapter-capture.py
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-shadow v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-shadow v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"

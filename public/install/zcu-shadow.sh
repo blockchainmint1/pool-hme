@@ -29,7 +29,7 @@ CAP=/var/log/zcu-capture.jsonl
 PY=/opt/zcu-adapter/adapter-capture.py
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-shadow v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-shadow v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"
@@ -161,6 +161,11 @@ async def m_createauxblock(rid, p):
     res = r.get("result") or {}
     h = (res.get("hash") or "").lower().replace("0x", "")
     if h:
+        if h not in WORK:
+            # Record the exact work shape we hand stratum. If stratum never
+            # submits, the answer is usually in these fields (missing chainid,
+            # 0x-prefixed hash, target vs _target, byte order), not in luck.
+            record("auxwork", {"reply": res, "keys": sorted(res.keys())})
         WORK[h] = res
         if len(WORK) > 512:
             for k in list(WORK)[:256]:
@@ -382,6 +387,99 @@ for i, s in enumerate(subs[-10:], 1):
 print("\n  Summary rule: we do NOT re-enable real ZCU submits until at least one")
 print("  captured blob prints 'WOULD BE ACCEPTED'.")
 PY
+fi
+
+##############################################################################
+# ANALYZE -- read-only. Answers "why has stratum not submitted anything?" by
+# diffing OUR aux work reply against the aux children that DO work (TXC/ISK).
+if [ "$MODE" = "ANALYZE" ]; then
+
+hr "A. what stratum has actually asked us for"
+if [ -f "$CAP" ]; then
+  python3 - "$CAP" <<'PY'
+import sys, json, collections
+kinds = collections.Counter()
+last = {}
+for line in open(sys.argv[1]):
+    try: o = json.loads(line)
+    except Exception: continue
+    kinds[o.get("kind")] += 1
+    last[o.get("kind")] = o
+for k, v in kinds.most_common():
+    print(f"  {k:<14} {v}")
+aw = last.get("auxwork")
+if aw:
+    print("\n  our createauxblock reply keys:", aw.get("keys"))
+    for k, v in (aw.get("reply") or {}).items():
+        print(f"    {k:<14} {str(v)[:80]}")
+else:
+    print("\n  NO auxwork recorded yet -- stratum has not called createauxblock")
+    print("  since this build. That alone explains zero submits.")
+PY
+else
+  echo "  no capture file"
+fi
+
+hr "B. the same call on the aux children that DO find blocks"
+python3 - <<'PY'
+import json, re, urllib.request, base64
+conf = "/var/stratum/scrypt.conf"
+try:
+    txt = open(conf).read()
+except Exception as e:
+    print("  cannot read", conf, e); raise SystemExit(0)
+
+# crude block parse: name { ... } sections carrying rpc creds
+blocks = re.findall(r'(\w[\w \-]*)\s*\{([^}]*)\}', txt)
+def field(b, k):
+    m = re.search(rf'{k}\s*=\s*(\S+)', b)
+    return m.group(1).strip('"') if m else None
+
+def call(url, user, pw, method, params):
+    body = json.dumps({"jsonrpc":"2.0","id":1,"method":method,"params":params}).encode()
+    req = urllib.request.Request(url, data=body,
+        headers={"content-type":"application/json",
+                 "authorization":"Basic "+base64.b64encode(f"{user}:{pw}".encode()).decode()})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.load(r)
+
+seen = 0
+for name, b in blocks:
+    url = field(b, "rpcurl") or field(b, "rpchost")
+    user = field(b, "rpcuser"); pw = field(b, "rpcpasswd") or field(b, "rpcpassword")
+    if not (url and user):
+        continue
+    if not url.startswith("http"):
+        url = "http://" + url
+    label = name.strip()
+    for m in ("getauxblock", "createauxblock"):
+        try:
+            r = call(url, user, pw, m, [] if m == "getauxblock" else ["dummy"])
+        except Exception as e:
+            continue
+        res = r.get("result")
+        if isinstance(res, dict):
+            seen += 1
+            print(f"\n  [{label}] {m} keys={sorted(res.keys())}")
+            for k, v in res.items():
+                print(f"      {k:<14} {str(v)[:80]}")
+            break
+if not seen:
+    print("  no aux child answered -- check creds parse (this section is best-effort)")
+PY
+
+hr "C. does stratum log any ZCU job / aux activity?"
+LOG=$(ls -t /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
+echo "  log: ${LOG:-none}"
+[ -n "${LOG:-}" ] && tail -20000 "$LOG" | grep -iE 'zero chill|zcu' | tail -15
+
+hr "D. read"
+cat <<'TXT'
+  Compare A and B field-for-field. The working children (TXC/ISK) define the
+  contract stratum expects. Any key they return that we do not -- chainid,
+  coinbasevalue, _target, previousblockhash -- is a candidate for why stratum
+  takes our work and then never produces a submit for it.
+TXT
 fi
 
 ##############################################################################
