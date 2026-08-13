@@ -39,12 +39,34 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v3  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 case "$MODE" in
-  INSTALL|STOP|STATUS) ;;
-  *) echo "  unknown mode '$MODE'. Use INSTALL (aka START), STOP, or STATUS."; exit 1 ;;
+  INSTALL|STOP|STATUS|ARM|DISARM) ;;
+  *) echo "  unknown mode '$MODE'. Use INSTALL (aka START), ARM, DISARM, STOP, or STATUS."; exit 1 ;;
 esac
+
+##############################################################################
+# ARM  = ZCU_DRY_RUN=0, real winners forwarded to geth
+# DISARM = ZCU_DRY_RUN=1, pure shadow, forwards nothing (still ACKs everything)
+if [ "$MODE" = "ARM" ] || [ "$MODE" = "DISARM" ]; then
+  V=0; [ "$MODE" = "DISARM" ] && V=1
+  [ -f /etc/zcu-gate.env ] || { echo "  /etc/zcu-gate.env missing -- run START first"; exit 1; }
+  if grep -q '^ZCU_DRY_RUN=' /etc/zcu-gate.env; then
+    sed -i "s/^ZCU_DRY_RUN=.*/ZCU_DRY_RUN=$V/" /etc/zcu-gate.env
+  else
+    echo "ZCU_DRY_RUN=$V" >> /etc/zcu-gate.env
+  fi
+  systemctl restart zcu-gate
+  for i in $(seq 1 10); do ss -ltn 2>/dev/null | grep -q ":$PORT" && break; sleep 1; done
+  ss -ltn 2>/dev/null | grep -q ":$PORT" \
+    && echo "  gate restarted, dry_run=$V ($([ "$V" = 0 ] && echo 'ARMED -- winners forward to geth' || echo 'shadow -- forwards nothing'))" \
+    || { echo "  gate did NOT come back on :$PORT"; tail -20 "$LOG"; exit 1; }
+  echo "  stratum untouched: active=$(systemctl is-active "$UNIT") NRestarts=$(systemctl show "$UNIT" -p NRestarts --value)"
+  exit 0
+fi
+
+
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"
