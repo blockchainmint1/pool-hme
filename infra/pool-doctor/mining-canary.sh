@@ -17,6 +17,10 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v6  2026-08-13  ZCU added to section 4 block cadence (and to the baseline
+#                   height set). Only judged when the gate is ARMED; a dry ZCU
+#                   with accepted gate blocks is reported as a yiimp-sync issue,
+#                   never as a mining failure. Limits WARN 30m / FAIL 60m.
 #   v5  2026-08-13  New section 5b: ZCU chain progress -- geth tip delta between
 #                   canary runs, yiimp DB lag vs geth (what the homepage reads),
 #                   block-sync failure detection, and ambiguous-auxpow counter.
@@ -45,7 +49,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v5"
+CANARY_VERSION="v6"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -361,7 +365,7 @@ hr "6. baseline compare"
 ##############################################################################
 NOW_HEIGHTS=$(MY "SELECT GROUP_CONCAT(CONCAT(s,'=',h) ORDER BY s) FROM (
    SELECT c.symbol s, MAX(b.height) h FROM blocks b JOIN coins c ON c.id=b.coin_id
-   WHERE c.symbol IN ('LTC','DOGE','TXC','ISK') GROUP BY 1) x")
+   WHERE c.symbol IN ('LTC','DOGE','TXC','ISK','ZCU') GROUP BY 1) x")
 if [ "$MODE" = "BASELINE" ]; then
   { echo "BASE_TS=$(date -u +%s)"
     echo "BASE_HEIGHTS='$NOW_HEIGHTS'"
