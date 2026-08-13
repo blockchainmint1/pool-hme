@@ -20,7 +20,7 @@ ADAPTER=${ADAPTER:-/opt/zcu-adapter/adapter.py}
 ADAPTER_PORT=${ADAPTER_PORT:-8749}
 GETH_PORT=${GETH_PORT:-8747}
 
-echo "zcu-doctor  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  host=$(hostname)"
+echo "zcu-doctor v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  host=$(hostname)"
 
 hr "0. services"
 for u in zcu-adapter zcu-mainnet-geth zcu-mainnet-yiimp-block-sync; do
@@ -106,6 +106,21 @@ grep -i -E 'zcu|zero chill' "$STRATUM_LOG" 2>/dev/null | tail -n 20 | sed 's/^/ 
 echo "-- aux submits per coin (last 200k log lines):"
 tail -n 200000 "$STRATUM_LOG" 2>/dev/null | grep -i 'aux submit' | grep -oiE '\b(doge|txc|isk|zcu)\b' | sort | uniq -c | sed 's/^/   /'
 systemctl status stratum-aws-scrypt --no-pager -n 3 2>&1 | sed 's/^/   /'
+
+hr "8. WHY the block-sync crash-loops (ZCU_ROW_NOT_EXACTLY_ONE_OR_NOT_ENABLED)"
+echo "-- every ZCU-ish row in coins (the sync expects exactly ONE enabled row):"
+MYT "SELECT id,symbol,name,enable,visible,auto_ready,installed,rpchost,rpcport FROM coins WHERE symbol LIKE '%ZCU%' OR name LIKE '%Chill%' OR name LIKE '%Zero%'" | sed 's/^/   /'
+echo "-- the sync script + the exact SQL it runs:"
+SY=$(systemctl cat zcu-mainnet-yiimp-block-sync --no-pager 2>/dev/null | grep -oE '/[^ ]+\.(sh|py|php)' | head -1)
+echo "   script=$SY"
+[ -n "$SY" ] && grep -nE "ZCU_ROW_NOT_EXACTLY_ONE|SELECT|enable|symbol" "$SY" 2>/dev/null | head -30 | sed 's/^/   /'
+
+hr "9. adapter: full source of the RPC surface (what it can and cannot answer)"
+[ -f "$ADAPTER" ] && { wc -l "$ADAPTER" | sed 's/^/   /'; sed -n '1,200p' "$ADAPTER" | sed 's/^/   /'; }
+
+hr "10. what stratum expects from an aux chain"
+grep -rn -iE 'getauxblock|aux_rpc_mode|auxpow_rpc_mode|getblocktemplate' /var/stratum/config/*.conf 2>/dev/null | sed 's/^/   /'
+grep -i -E 'zero chill|zcu' /var/log/stratum/debug.log 2>/dev/null | tail -20 | sed 's/^/   /'
 
 echo
 echo "zcu-doctor done -- nothing was modified."
