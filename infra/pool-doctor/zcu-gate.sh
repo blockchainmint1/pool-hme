@@ -94,10 +94,12 @@ fi
 ##############################################################################
 if [ "$MODE" = "INSTALL" ]; then
 hr "1. stand down any other adapter first"
+systemctl stop zcu-gate >/dev/null 2>&1 || true
 if pgrep -f 'adapter-capture.py' >/dev/null; then
   echo "  stopping shadow adapter (capture-only) to take its port"
   pkill -f 'adapter-capture.py'; sleep 2
 fi
+pkill -f 'adapter-gate.py' >/dev/null 2>&1 && sleep 2 || true
 if ss -ltn 2>/dev/null | grep -q ":$PORT"; then
   echo "  REFUSING: something is still listening on :$PORT."
   echo "  Stop it first:  sudo pkill -f '/opt/zcu-adapter/adapter'"
