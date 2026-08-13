@@ -34,6 +34,12 @@
 #   * Build output is left at that path for a later maintenance window.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v4  2026-08-13  Build died on `fatal: not a git repository` -- the Makefile
+#                   target `projectcode1` shells out to git for a version
+#                   string, and the scratch copy has no .git. Now seeds a
+#                   throwaway git repo in the scratch tree before compiling,
+#                   and on failure prints the actual error lines instead of a
+#                   blind tail (parallel make hides the cause).
 #   v3  2026-08-13  Fix two BUILD-mode faults found on the first real run:
 #                   (a) db.cpp allowlist regex assumed three closing parens and
 #                       silently skipped -- now a line-oriented rewrite that
@@ -46,7 +52,7 @@
 #                   allowlist. mode 1 broke DOGE (~20% accept); removing DOGE
 #                   gave 100%. Target allowlist = ISK || TXC || ZCU.
 #   v1  2026-08-13  First cut.
-FP_VERSION="v3"
+FP_VERSION="v4"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -219,6 +225,18 @@ if [ ! -f "$WORK/algos/ar2/core.c" ]; then
 fi
 ok "algos/ar2/core.c present"
 
+hr "4c. seed a throwaway git repo (Makefile target projectcode1 calls git)"
+if [ -d "$WORK/.git" ]; then
+  ok ".git already present"
+else
+  ( cd "$WORK" \
+    && git init -q . \
+    && git -c user.email=build@pool -c user.name=build add -A \
+    && git -c user.email=build@pool -c user.name=build commit -qm "zcu forward-port scratch" ) >/dev/null 2>&1 \
+    && ok "throwaway git repo seeded (never pushed, scratch only)" \
+    || bad "git init failed -- projectcode1 may still fail"
+fi
+
 hr "5. compile (dependency order -- parallel make races on these subdirs)"
 LOG=$WORK/build.log
 {
@@ -228,8 +246,11 @@ LOG=$WORK/build.log
 } >"$LOG" 2>&1
 RC=$?
 if [ $RC -ne 0 ]; then
-  bad "build failed (rc=$RC). last 40 lines:"
-  tail -40 "$LOG" | sed 's/^/      /'
+  bad "build failed (rc=$RC). real error lines:"
+  grep -nEi -m 40 'error:|fatal:|No rule to make|undefined reference|cannot find|make(\[[0-9]+\])?: \*\*\*' \
+    "$LOG" | sed 's/^/      /'
+  echo "   --- last 20 lines ---"
+  tail -20 "$LOG" | sed 's/^/      /'
   echo "   full log: $LOG"
   exit 1
 fi
