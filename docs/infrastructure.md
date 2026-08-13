@@ -531,3 +531,58 @@ curl -fsSL https://pool.honest.money/install/zcu-doctor.sh    | sudo bash
   `eth_getWork`, `eth_chainId`) versus what the stratum asks for
   (`getblocktemplate`, `getauxblock`, `validateaddress`), plus ZCU lines in
   `scrypt.log` and the aux-submit counts per coin for contrast.
+
+## 12. ZCU outage post-mortem — 13 Aug 2026 (READ BEFORE TOUCHING ZCU)
+
+**Incident:** 05:07–06:33 UTC. TXC and ISK stopped finding blocks for ~90
+minutes. `stratum-aws-scrypt` crash-looped 11 times (mix of
+`status=1/FAILURE` and `status=11/SEGV`). Two ISK blocks (87057, 87058)
+were found on-chain but never recorded in `blocks` and had to be
+backfilled by hand.
+
+**Root cause:** the ZCU `getblocktemplate` adapter shim
+(`/opt/zcu-adapter/adapter.py`, installed 05:13) made a previously-dead
+ZCU start answering RPC. Stratum immediately put ZCU back into the live
+aux rotation. When a share qualified as a ZCU aux block, the submit was
+rejected with `ERROR Zero Chill Units scrypt: invalid auxpow parent work`,
+the submit path spun, and stratum's own deadlock detector killed the
+**entire process** — `scrypt dead lock, exiting...` — taking LTC, DOGE,
+TXC and ISK down with it, roughly every 6 minutes.
+
+**Hard rules, learned the expensive way:**
+
+1. **"Which files does my script touch" is NOT a safety argument** for a
+   shared multi-coin process. Making a dead component *alive* changes
+   stratum's behaviour even when stratum's files are never modified. The
+   only valid safety argument is: *what happens to the other four coins
+   if this new thing fails?*
+2. **A failing aux child can kill the whole stratum.** Aux submit
+   failures are not isolated to their coin. One bad child = fleet-wide
+   outage.
+3. **ZCU must never enter the aux rotation** until `createAuxBlock` →
+   `submitAuxBlock` is proven end-to-end **out of band**, against a real
+   share, with stratum not involved. The unsolved problem is that our
+   synthesized parent work does not match what the EVM chain's
+   `submitAuxBlock` expects.
+4. **`coins.enable=0` does NOT remove a coin from stratum.** Stratum reads
+   its coin list from `/var/stratum/scrypt.conf`, not the DB. The DB flag
+   only stops yiimp's web/loop side. To disarm ZCU without editing the
+   live config, **stop the adapter** so its RPC stops answering.
+5. **When hashrate looks wrong, read `journalctl -u stratum-aws-scrypt`
+   FIRST.** In this incident three rounds were wasted on the yiimp
+   estimator, load average and the `coins` table while the crash loop sat
+   in the very first log that should have been pulled. Steady shares/min
+   plus dead block cadence plus a restarting service = crash loop, always.
+
+**Fast triage for "are the rigs actually gone?":**
+
+```bash
+sudo ss -tn state established '( sport = :3433 )' | wc -l   # ~1200+ = fleet present
+sudo journalctl -u stratum-aws-scrypt --since '-30 min' --no-pager \
+  | grep -cE 'SEGV|Failed with result'                      # >0 = crash loop
+sudo grep -c 'dead lock' /var/stratum/logs/stratum-current.log
+```
+
+A low TH/s reading with steady shares/min is the yiimp estimator sawtooth,
+not lost hashpower. Do not place an emergency NiceHash rental on that
+number alone — check the socket count first.
