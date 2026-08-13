@@ -419,7 +419,7 @@ async def main():
 asyncio.run(main())
 PYEOF
 chmod 755 "$PY"
-touch "$CAP"; chmod 600 "$CAP"
+: > "$CAP"; chmod 600 "$CAP"   # truncate: stale shadow-adapter entries must not contaminate gate counters
 echo "  wrote $PY"
 
 hr "3. install the systemd unit and start it"
