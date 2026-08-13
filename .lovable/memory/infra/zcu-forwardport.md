@@ -10,7 +10,7 @@ THREE are real LIVE-side improvements.
 
 **Merge base = the ZCU tree.** Apply into it:
 1. `client.cpp` — clamp suggested diff to `g_stratum_min_diff` / `g_stratum_max_diff` (NiceHash).
-2. `db.cpp` — `auxpow_rpc_mode = 1` allowlist must be the UNION: `ISK || TXC || DOGE || ZCU`. DOGE in that list is the working DOGE fix (DOGE blocks land with it); do not drop it.
+2. `db.cpp` — `auxpow_rpc_mode = 1` allowlist must be `ISK || TXC || ZCU`, with **DOGE REMOVED**. CORRECTION (13 Aug, v2): DOGE at mode 1 is the ~20%-acceptance bug; taking DOGE OUT of this list is the working DOGE fix. LIVE already has ISK/TXC/ZCU; the 3 Jun ZCU tree still has ISK/TXC/DOGE, so the port both adds ZCU and drops DOGE. Never "union" these lists.
 3. `coind.cpp` — LIVE's generic `is_evm_address()` is superseded; the ZCU tree's `coind_validate_zcu_address_string()` does the same job. No port needed.
 
 **Do NOT take LIVE's version of:**

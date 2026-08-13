@@ -12,7 +12,8 @@
 #
 #     LIVE is ahead (must port):
 #       client.cpp   diff clamp to g_stratum_min_diff / g_stratum_max_diff  (NiceHash)
-#       db.cpp       auxpow_rpc_mode allowlist includes DOGE  (the DOGE fix)
+#       db.cpp       auxpow_rpc_mode allowlist EXCLUDES DOGE (that omission IS
+#                    the DOGE fix) and includes ZCU -> ISK || TXC || ZCU
 #       coind.cpp    generic is_evm_address() -- superseded, ZCU tree already
 #                    has coind_validate_zcu_address_string(), same behaviour
 #
@@ -33,8 +34,11 @@
 #   * Build output is left at that path for a later maintenance window.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v2  2026-08-13  CORRECTION: DOGE must be OUT of the auxpow_rpc_mode=1
+#                   allowlist. mode 1 broke DOGE (~20% accept); removing DOGE
+#                   gave 100%. Target allowlist = ISK || TXC || ZCU.
 #   v1  2026-08-13  First cut.
-FP_VERSION="v1"
+FP_VERSION="v2"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -75,10 +79,11 @@ if grep -q 'g_stratum_min_diff' "$ZCU_SRC/client.cpp" 2>/dev/null; then
 else
   warn "client.cpp diff clamp MISSING -- will port"
 fi
-if grep -q '"ZCU"' "$ZCU_SRC/db.cpp" && grep -q '"DOGE"' "$ZCU_SRC/db.cpp"; then
-  ok "db.cpp allowlist already has both DOGE and ZCU"; NEED_DB=0
+if grep -q '"ZCU"' "$ZCU_SRC/db.cpp" && ! grep -q '"DOGE"' "$ZCU_SRC/db.cpp"; then
+  ok "db.cpp allowlist is already ISK/TXC/ZCU with DOGE excluded"; NEED_DB=0
 else
-  warn "db.cpp allowlist needs the DOGE+ZCU union -- will port"
+  warn "db.cpp allowlist must become ISK || TXC || ZCU (DOGE REMOVED) -- will port"
+  grep -q '"DOGE"' "$ZCU_SRC/db.cpp" && warn "  ZCU tree still has DOGE at mode 1 -- that is the ~20% DOGE accept bug"
 fi
 echo "   -- current allowlist line in each tree:"
 grep -n 'auxpow_rpc_mode = 1' -B1 "$ZCU_SRC/db.cpp"  | sed 's/^/      ZCU : /'
@@ -129,12 +134,12 @@ mkdir -p "$WORK"
 cp -a "$ZCU_SRC/." "$WORK/" || { bad "copy failed"; exit 1; }
 cd "$WORK" || exit 1
 
-# ---- patch 1: db.cpp allowlist = ISK, TXC, DOGE, ZCU -------------------------
+# ---- patch 1: db.cpp allowlist = ISK, TXC, ZCU (no DOGE) -------------------------
 if [ "$NEED_DB" = 1 ]; then
   python3 - "$WORK/db.cpp" <<'PY'
 import re,sys
 p=sys.argv[1]; s=open(p).read()
-new='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "DOGE") || !strcmp(coind->symbol, "ZCU"))'
+new='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "ZCU"))'
 s2,n=re.subn(r'if\(!strcmp\(coind->symbol, "ISK"\).*?\)\)\)', new, s, count=1, flags=re.S)
 open(p,'w').write(s2)
 print("   db.cpp allowlist patched" if n else "   db.cpp: PATTERN NOT FOUND -- patch skipped")
@@ -184,6 +189,8 @@ hr "6. verify the fresh binary BEFORE anyone installs it"
 NEW=$WORK/stratum
 if [ ! -f "$NEW" ]; then bad "no stratum binary produced"; exit 1; fi
 echo "   $(ls -l --time-style='+%Y-%m-%d %H:%M' "$NEW" | awk '{print $6,$7,$5" bytes"}')"
+grep -n 'auxpow_rpc_mode = 1' -B1 "$WORK/db.cpp" | sed 's/^/      NEW : /'
+grep -q '"DOGE"' "$WORK/db.cpp" && bad "DOGE still in allowlist -- DOGE would regress to ~20% accept" || ok "DOGE correctly excluded from auxpow_rpc_mode=1"
 for sym in ZCUAUXCOMMIT scrypt_submitAuxBlock scrypt_createAuxBlock auxpow_rpc_mode; do
   n=$(strings -a "$NEW" | grep -c "$sym")
   [ "$n" -gt 0 ] && ok "$sym x$n" || bad "$sym MISSING"
