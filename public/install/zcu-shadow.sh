@@ -168,6 +168,31 @@ async def m_createauxblock(rid, p):
     return ok(rid, res)
 
 
+async def m_getblocktemplate(rid, p):
+    """Match what TXC/ISK's adapters do -- and NOT what 13 Aug did.
+
+    Stratum's coind_create_job() calls getblocktemplate on every coind,
+    including pure-aux children. Answering -32601 ("method not found") makes
+    stratum treat the coin as broken and drop it from the aux rotation, which
+    is why we captured 111 refusals and zero submits.
+
+    TXC and ISK survive because their adapters return error -8 instead: the
+    method EXISTS, it just declines this particular call, so stratum keeps the
+    coin and goes on to fetch its aux hash via createauxblock.
+
+    We deliberately do NOT synthesize a fake template here. Handing the C
+    parser an unexpected template shape is the 13 Aug SEGV path. An error
+    reply is a shape stratum already handles on every job cycle today.
+    """
+    record("gbt_declined", {"params": str(p)[:200]})
+    return err(rid, -8, "getblocktemplate must be called with "
+                        "{\"rules\": [\"segwit\"]}")
+
+
+async def m_listsinceblock(rid, p):
+    return ok(rid, {"transactions": [], "lastblock": "00" * 32})
+
+
 async def m_submitauxblock(rid, p):
     """THE SAFETY INVERSION. Record, ack, never forward."""
     if len(p) < 2:
@@ -192,6 +217,8 @@ HANDLERS = {
     "getnewaddress": m_getrawchangeaddress,
     "createauxblock": m_createauxblock,
     "getauxblock": m_createauxblock,
+    "getblocktemplate": m_getblocktemplate,
+    "listsinceblock": m_listsinceblock,
     "submitauxblock": m_submitauxblock,
 }
 
