@@ -93,14 +93,20 @@ import sys, json, collections, os
 p = sys.argv[1]
 if not os.path.exists(p):
     print("  no capture file"); raise SystemExit(0)
-k = collections.Counter(); last = {}
+k = collections.Counter(); last = {}; unh = collections.Counter()
 for line in open(p):
     try: o = json.loads(line)
     except Exception: continue
     k[o.get("kind")] += 1
     last[o.get("kind")] = o
+    if o.get("kind") == "unhandled":
+        unh[(o.get("data") or o).get("method", "?")] += 1
 for n, v in k.most_common():
     print(f"  {n:<16} {v}")
+if unh:
+    print("\n  unhandled methods (these are NOT reaching geth):")
+    for m, v in unh.most_common():
+        print(f"    {m:<32} {v}")
 for n in ("forwarded", "forward_rejected", "forward_error"):
     o = last.get(n)
     if o:
