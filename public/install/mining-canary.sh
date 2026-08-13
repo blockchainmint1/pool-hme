@@ -116,16 +116,35 @@ if [ "$AUXTOT" -eq 0 ]; then
   warn "no coin names in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- log may have rotated; aux counts above are not evidence"
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
-if [ "$ZCU_LIVE" -gt 0 ]; then
-  bad "ZCU is in the live aux rotation ($ZCU_LIVE recent lines) -- this is the 13 Aug crash path"
+ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
+SHADOW=0; REAL=0
+pgrep -f '/opt/zcu-adapter/adapter-capture.py' >/dev/null 2>&1 && SHADOW=1
+pgrep -f '/opt/zcu-adapter/adapter.py' >/dev/null 2>&1 && REAL=1
+LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
+
+if [ "$REAL" -eq 1 ]; then
+  bad "REAL ZCU adapter (adapter.py) is running -- this is the 13 Aug crash path"
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
+elif [ "$SHADOW" -eq 1 ]; then
+  ok "ZCU adapter on :8749 is the SHADOW (capture-only, always-ACK) -- submits cannot be rejected, deadlock path disarmed"
+  if [ "$ZCU_LIVE" -gt 0 ]; then
+    ok "ZCU is in the aux rotation ($ZCU_LIVE recent lines) -- expected while shadow is capturing"
+  else
+    warn "shadow is up but no ZCU lines in the log yet -- stratum has not picked ZCU back up"
+  fi
+  CAP=$(grep -c 'CAPTURED' /var/log/zcu-shadow.log 2>/dev/null | tr -dc '0-9'); CAP=${CAP:-0}
+  echo "       captured submits so far: $CAP   (VERIFY once >= 3)"
+  ZERR=$(tail -n 2000 "$LOG" 2>/dev/null | grep -i 'Zero Chill\|ZCU' | grep -ic 'dead lock\|parent work\|auxpow payload' || true)
+  ZERR=$(echo "${ZERR:-0}" | head -1 | tr -dc '0-9'); ZERR=${ZERR:-0}
+  if [ "$ZERR" -gt 0 ]; then
+    bad "ZCU submit/validation errors present ($ZERR) even with shadow up -- STOP the shadow: curl -fsSL https://pool.honest.money/install/zcu-shadow.sh | sudo bash -s STOP"
+  else
+    ok "no ZCU submit-rejection or deadlock lines"
+  fi
+elif [ "$LISTEN" -eq 1 ]; then
+  bad "something is LISTENING on :8749 but it is neither the shadow nor a known adapter -- identify it before doing anything else"
 else
-  ok "ZCU is out of the aux rotation (adapter down) -- crash path disarmed"
-fi
-if ss -ltn 2>/dev/null | grep -q ':8749'; then
-  bad "ZCU adapter is LISTENING on :8749 -- stratum can pick ZCU up again at any moment"
-else
-  ok "nothing listening on :8749"
+  ok "ZCU fully out of the rotation (nothing on :8749)"
 fi
 
 ##############################################################################
