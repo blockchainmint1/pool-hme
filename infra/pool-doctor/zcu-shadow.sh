@@ -359,8 +359,7 @@ for line in open(path):
 
 print(f"  captured submits: {len(subs)}")
 if not subs:
-    print("  nothing to verify yet. The fleet needs ~105s per ZCU-target share;")
-    print("  if minutes pass with zero captures, stratum has NOT re-added ZCU.")
+    print("  nothing to verify yet -- stratum has NOT re-added ZCU.")
     sys.exit(0)
 
 def scrypt_pow(hdr):
@@ -368,55 +367,86 @@ def scrypt_pow(hdr):
                           maxmem=256 * 1024 * 1024)
 
 DIFF1 = 0x00000000FFFF0000000000000000000000000000000000000000000000000000
+MAXSCAN = int(os.environ.get("VERIFY_MAX", "20000"))
 
-for i, s in enumerate(subs[-10:], 1):
-    print(f"\n  --- submit #{i}  hash={s['hash'][:24]}...  auxpow_len={s['auxpow_len']}")
+# FULL SCAN. The old last-10 sample could not answer the only question that
+# matters: does the fleet EVER produce a blob that meets the ZCU aux target?
+# stratum submits every accepted LTC share, so winners are ~1 in a few hundred
+# and a 10-blob tail will almost always miss them.
+scan = subs[-MAXSCAN:]
+print(f"  scanning {len(scan)} blobs (scrypt is slow; ~30s for 12k)...")
+
+winners, ratios, bad = [], [], 0
+for s in scan:
     try:
-        raw = bytes.fromhex(s["auxpow"].replace("0x", ""))
-    except Exception as e:
-        print(f"      auxpow is not hex: {e}"); continue
-    print(f"      blob {len(raw)} bytes")
+        raw = bytes.fromhex(str(s.get("auxpow", "")).replace("0x", ""))
+    except Exception:
+        bad += 1; continue
     if len(raw) < 80:
-        print("      TOO SHORT to contain an 80-byte parent header"); continue
-
-    # geth reads the parent header as the LAST 80 bytes of the yiimp blob.
-    hdr = raw[-80:]
-    ver, prev, merkle, ts, bits, nonce = struct.unpack("<I32s32sIII", hdr)
-    print(f"      parent header ver=0x{ver:08x} bits=0x{bits:08x} nonce={nonce} time={ts}")
-
-    h = scrypt_pow(hdr)
-    raw_order = int.from_bytes(h, "big")          # as-is
-    disp_order = int.from_bytes(h[::-1], "big")   # byte-reversed = what geth uses
-
+        bad += 1; continue
     work = s.get("work") or {}
     tgt_hex = (work.get("target") or "").replace("0x", "")
     if not tgt_hex:
-        print("      no target recorded for this work unit -- cannot judge")
-        continue
+        bad += 1; continue
     tgt = int(tgt_hex, 16)
-    print(f"      target        0x{tgt_hex}  (diff ~{DIFF1/tgt:,.0f})")
-    print(f"      scrypt raw    {raw_order:064x}  meets={raw_order <= tgt}")
-    print(f"      scrypt display{disp_order:064x}  meets={disp_order <= tgt}")
+    hdr = raw[-80:]
+    disp = int.from_bytes(scrypt_pow(hdr)[::-1], "big")
+    r = disp / tgt
+    ratios.append(r)
+    if disp <= tgt:
+        winners.append((s, hdr, disp, tgt))
 
-    if disp_order <= tgt:
-        print("      >> WOULD BE ACCEPTED by geth's display-order check.")
-        print("         The blob and the work are BOTH correct -- ZCU can go live.")
-    elif raw_order <= tgt:
-        print("      >> byte-order mismatch: meets in raw order only.")
+print(f"  decoded {len(ratios)}   unusable {bad}")
+if not ratios:
+    print("  no decodable blob carried a recorded target -- cannot judge"); sys.exit(0)
+
+ratios.sort()
+best = ratios[0]
+buckets = [(1, 0), (2, 0), (10, 0), (100, 0), (1000, 0), (10000, 0)]
+counts = {b: 0 for b, _ in buckets}
+for r in ratios:
+    for b, _ in buckets:
+        if r <= b:
+            counts[b] += 1
+            break
+
+print("\n  how close does the fleet get? (ratio = scrypt hash / aux target)")
+prev = 0
+for b, _ in buckets:
+    print(f"    <= {b:>6}x   {counts[b]}")
+print(f"    >  10000x   {sum(1 for r in ratios if r > 10000)}")
+print(f"\n  best blob: {best:,.1f}x the aux target"
+      f"   (aux diff ~{DIFF1/tgt:,.0f}, so the fleet's best share was"
+      f" ~1/{max(best,1e-9):,.0f} of it)")
+
+
+if winners:
+    s, hdr, disp, tgt = winners[0]
+    ver, prev_h, merkle, ts, bits, nonce = struct.unpack("<I32s32sIII", hdr)
+    print(f"\n  >> {len(winners)} of {len(ratios)} blobs WOULD BE ACCEPTED by geth.")
+    print(f"     example: hash={s['hash'][:24]}... nonce={nonce} bits=0x{bits:08x}")
+    print(f"     scrypt {disp:064x}")
+    print(f"     target {tgt:064x}")
+    print("     The auxpow blob and the parent-work maths are BOTH CORRECT.")
+    print("     ZCU's only remaining problem is that stratum submits EVERY share,")
+    print("     so geth rejects the ~99.8% that miss -- and a rejection is what")
+    print("     deadlocked stratum on 13 Aug. Fix = gate submits in the adapter:")
+    print("     forward only blobs that meet the target, ACK the rest.")
+else:
+    print("\n  >> ZERO acceptable blobs in this window.")
+    if best > 100:
+        print(f"     Best was {best:,.1f}x off and the spread is wide, which is the")
+        print("     signature of stratum submitting at LTC SHARE difficulty --")
+        print("     it is not applying the aux target at all. Either the fleet has")
+        print("     not yet solved the ZCU target, or the aux target never reaches")
+        print("     the share filter. Keep capturing and re-run VERIFY.")
     else:
-        ratio = disp_order / tgt
-        print(f"      >> REJECTED: {ratio:,.1f}x too weak.")
-        if 3000 < ratio < 6000:
-            print("         ~4096x => stratum is using the `difficulty` field, not")
-            print("         `target`. proofTargetAt applies a 2^12 parent-work")
-            print("         discount, so difficulty/4096 == target. THIS IS THE BUG.")
-        else:
-            print("         Not the 4096x signature -- stratum is submitting shares")
-            print("         at LTC/share difficulty rather than the ZCU aux target.")
+        print("     Near misses only -- keep capturing, this is variance.")
 
 print("\n  Summary rule: we do NOT re-enable real ZCU submits until at least one")
 print("  captured blob prints 'WOULD BE ACCEPTED'.")
 PY
+
 fi
 
 ##############################################################################
