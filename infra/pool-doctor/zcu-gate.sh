@@ -271,6 +271,11 @@ async def m_listsinceblock(rid, p):
     return ok(rid, {"transactions": [], "lastblock": "00" * 32})
 
 
+async def m_getbalance(rid, p):
+    return ok(rid, 0.0)
+
+
+
 def scrypt_display(hdr80: bytes) -> int:
     h = hashlib.scrypt(hdr80, salt=hdr80, n=1024, r=1, p=1, dklen=32,
                        maxmem=256 * 1024 * 1024)
