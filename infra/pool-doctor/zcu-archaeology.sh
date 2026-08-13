@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # zcu-archaeology.sh -- READ ONLY. Find the stratum binary/source that actually
-# merge-mined ZCU before 20 Jul 2026, and show what changed since.
+# merge-mined ZCU before 13 Jul 2026, and show what changed since.
 #
 #   curl -fsSL "https://pool.honest.money/install/zcu-archaeology.sh?v=$(date +%s)" | sudo bash
 #
@@ -18,8 +18,10 @@
 # source trees, and dates everything. Nothing is modified, started or stopped.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v2  2026-08-13  Cutoff moved to 13 Jul (14-20 Jul was the emergency rework);
+#                   tags each binary pre-cutoff CANDIDATE vs suspect.
 #   v1  2026-08-13  First cut.
-ARCH_VERSION="v1"
+ARCH_VERSION="v2"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 hr() { printf '\n=== %s ===\n' "$*"; }
