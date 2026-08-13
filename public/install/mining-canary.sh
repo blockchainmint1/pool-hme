@@ -17,6 +17,9 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v5  2026-08-13  New section 5b: ZCU chain progress -- geth tip delta between
+#                   canary runs, yiimp DB lag vs geth (what the homepage reads),
+#                   block-sync failure detection, and ambiguous-auxpow counter.
 #   v4  2026-08-13  Two false FAILs killed the verdict while the pool was
 #                   objectively healthy (TXC/ISK blocks 2m old):
 #                   (a) 'dead lock' was counted over the WHOLE log, so lines
@@ -42,7 +45,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v4"
+CANARY_VERSION="v5"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -274,6 +277,56 @@ elif [ "$LISTEN" -eq 1 ]; then
 else
   ok "ZCU fully out of the rotation (nothing on :8749)"
 fi
+
+##############################################################################
+hr "5b. ZCU chain progress (is ZCU actually producing blocks?)"
+##############################################################################
+# v5: the gate can be perfectly healthy while the CHAIN goes nowhere. This
+# section compares the geth tip now vs the tip stored in the canary state file
+# on the previous run, and the lag between geth and the yiimp DB (which is what
+# the homepage reads).
+ZSTATE=/var/lib/mining-canary-zcu.tip
+GETH_TIP_HEX=$(curl -s --max-time 5 -X POST -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+  http://127.0.0.1:8747 2>/dev/null | grep -o '"result":"0x[0-9a-fA-F]*"' | grep -o '0x[0-9a-fA-F]*')
+if [ -z "$GETH_TIP_HEX" ]; then
+  warn "ZCU geth on :8747 did not answer eth_blockNumber -- check: systemctl status zcu-mainnet-geth"
+else
+  GETH_TIP=$((GETH_TIP_HEX))
+  echo "       geth tip: $GETH_TIP"
+  if [ -f "$ZSTATE" ]; then
+    PREV_TIP=$(cut -d' ' -f1 "$ZSTATE"); PREV_TS=$(cut -d' ' -f2 "$ZSTATE")
+    PREV_TIP=${PREV_TIP:-0}; PREV_TS=${PREV_TS:-0}
+    AGO=$(( $(date -u +%s) - PREV_TS )); AGOM=$(( AGO / 60 ))
+    DELTA=$(( GETH_TIP - PREV_TIP ))
+    echo "       since last canary run (${AGOM}m ago): +$DELTA blocks"
+    if [ "$AGOM" -ge 20 ] && [ "$DELTA" -le 0 ]; then
+      warn "ZCU tip has NOT advanced in ${AGOM}m -- either the gate is forwarding nothing or geth is rejecting winners; check: grep -i 'WINNER\|REJECTED' /var/log/zcu-gate.log | tail -20"
+    elif [ "$DELTA" -gt 0 ]; then
+      ok "ZCU chain is advancing (+$DELTA blocks)"
+    fi
+  else
+    echo "       (no previous tip recorded -- this run establishes the reference)"
+  fi
+  mkdir -p /var/lib 2>/dev/null
+  echo "$GETH_TIP $(date -u +%s)" > "$ZSTATE" 2>/dev/null || true
+
+  # DB lag -- this is what the homepage/API shows
+  DBH=$(MY "SELECT COALESCE(MAX(b.height),0) FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'")
+  DBH=$(echo "${DBH:-0}" | tr -dc '0-9'); DBH=${DBH:-0}
+  LAG=$(( GETH_TIP - DBH ))
+  echo "       yiimp DB ZCU height: $DBH   (lag $LAG behind geth)"
+  if [ "$LAG" -gt 25 ]; then
+    warn "homepage is $LAG blocks behind the chain -- run: sudo systemctl start zcu-mainnet-yiimp-block-sync"
+  else
+    ok "yiimp DB is in step with the ZCU chain"
+  fi
+  SYNCSTATE=$(systemctl is-failed zcu-mainnet-yiimp-block-sync 2>/dev/null)
+  [ "$SYNCSTATE" = "failed" ] && bad "zcu-mainnet-yiimp-block-sync is FAILED -- homepage will freeze: sudo systemctl reset-failed zcu-mainnet-yiimp-block-sync && sudo systemctl start zcu-mainnet-yiimp-block-sync"
+  AMB=$(grep -c 'ambiguous yiimp auxpow payload' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); AMB=${AMB:-0}
+  [ "$AMB" -gt 0 ] && warn "$AMB winner(s) rejected as 'ambiguous auxpow payload' -- geth saw 2 candidate blobs and refused to guess; harmless unless the count grows faster than accepted blocks"
+fi
+
 
 ##############################################################################
 hr "6. baseline compare"
