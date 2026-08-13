@@ -43,13 +43,20 @@ SINCE=$(systemctl show "$UNIT" -p ActiveEnterTimestamp --value 2>/dev/null)
 UPSEC=$(ps -o etimes= -p "$(systemctl show "$UNIT" -p MainPID --value)" 2>/dev/null | tr -d ' ')
 UPSEC=${UPSEC:-0}
 CRASHES=$(journalctl -u "$UNIT" --since '-30 min' --no-pager 2>/dev/null \
-          | grep -cE 'SEGV|Failed with result')
-DEADLOCK=$(grep -c 'dead lock' "$LOG" 2>/dev/null || echo 0)
+          | grep -cE 'SEGV|Failed with result' || true)
+CRASHES=$(echo "${CRASHES:-0}" | head -1 | tr -dc '0-9'); CRASHES=${CRASHES:-0}
+HARDCRASH=$(journalctl -u "$UNIT" --since '-30 min' --no-pager 2>/dev/null \
+          | grep -cE 'SEGV|core-dump' || true)
+HARDCRASH=$(echo "${HARDCRASH:-0}" | head -1 | tr -dc '0-9'); HARDCRASH=${HARDCRASH:-0}
+DEADLOCK=$(grep -c 'dead lock' "$LOG" 2>/dev/null || true)
+DEADLOCK=$(echo "${DEADLOCK:-0}" | head -1 | tr -dc '0-9'); DEADLOCK=${DEADLOCK:-0}
 
 echo "  active=$ACTIVE  NRestarts=$NRESTARTS  up=${UPSEC}s  since=$SINCE"
 [ "$ACTIVE" = "active" ] && ok "stratum is running" || bad "stratum is NOT active ($ACTIVE)"
-[ "$CRASHES" -eq 0 ] && ok "no crashes in the last 30 min" \
-                     || bad "$CRASHES crash/restart events in the last 30 min -- CRASH LOOP"
+if [ "$CRASHES" -eq 0 ]; then ok "no crashes or restarts in the last 30 min"
+elif [ "$HARDCRASH" -gt 0 ]; then bad "$HARDCRASH SEGV/core-dump in the last 30 min -- CRASH LOOP"
+elif [ "$CRASHES" -ge 3 ]; then bad "$CRASHES restart events in the last 30 min -- CRASH LOOP"
+else warn "$CRASHES restart event(s) in the last 30 min, none of them SEGV -- expected if YOU restarted it (up=${UPSEC}s)"; fi
 [ "$DEADLOCK" -eq 0 ] && ok "no 'dead lock' in current log" \
                       || bad "$DEADLOCK 'dead lock, exiting' lines -- an aux child is killing stratum"
 [ "$UPSEC" -gt 600 ] && ok "uptime > 10 min" || warn "stratum started ${UPSEC}s ago -- too young to judge"
@@ -100,6 +107,11 @@ for NAME in Litecoin Dogecoin Texitcoin Iskander "Zero Chill"; do
   E=$(tail -n 5000 "$LOG" 2>/dev/null | grep -i "$NAME" | grep -ic 'error' || true)
   printf '  %-12s lines=%-5s errors=%s\n' "$NAME" "$N" "$E"
 done
+AUXTOT=$(tail -n 5000 "$LOG" 2>/dev/null | grep -icE 'Litecoin|Dogecoin|Texitcoin|Iskander|Zero Chill' || true)
+AUXTOT=$(echo "${AUXTOT:-0}" | head -1 | tr -dc '0-9'); AUXTOT=${AUXTOT:-0}
+if [ "$AUXTOT" -eq 0 ]; then
+  warn "no coin names in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- log may have rotated; aux counts above are not evidence"
+fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 if [ "$ZCU_LIVE" -gt 0 ]; then
   bad "ZCU is in the live aux rotation ($ZCU_LIVE recent lines) -- this is the 13 Aug crash path"
@@ -133,7 +145,7 @@ elif [ -f "$BASE" ]; then
   echo "  baseline was ${MINS}m ago"
   echo "    then: $BASE_HEIGHTS"
   echo "    now:  $NOW_HEIGHTS"
-  DR=$(( NRestarts - BASE_RESTARTS ))
+  DR=$(( ${NRESTARTS:-0} - ${BASE_RESTARTS:-0} ))
   [ "$DR" -le 0 ] && ok "no new stratum restarts since baseline" \
                   || bad "$DR new stratum restarts since baseline -- YOUR LAST CHANGE BROKE IT"
   if [ "$MINS" -ge 10 ] && [ "$BASE_HEIGHTS" = "$NOW_HEIGHTS" ]; then
