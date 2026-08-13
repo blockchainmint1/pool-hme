@@ -59,7 +59,7 @@ MY "SELECT DATE(FROM_UNIXTIME(b.time)) d, c.symbol, COUNT(*) blocks_,
     FROM blocks b JOIN coins c ON c.id=b.coin_id
     WHERE b.time > UNIX_TIMESTAMP()-21*86400 AND c.symbol IN ('LTC','DOGE')
     GROUP BY d,c.symbol ORDER BY d DESC LIMIT 30;"
-MY "SELECT DATE(FROM_UNIXTIME(create_time)) d, COUNT(*) n FROM earnings
+MY "SELECT DATE(created) d, COUNT(*) n FROM earnings
     GROUP BY d ORDER BY d DESC LIMIT 15;"
 
 hr "9. stuck LTC payout rows (completed=0, empty errmsg = never attempted)"
