@@ -164,26 +164,30 @@ class NiceHashAPI {
     return this._request("POST", "/main/api/v2/pool", { body: pool });
   }
 
-  /** Find a pool by username or host; create if missing. Returns pool id. */
-  async ensurePool({ name, algorithm, host, username, password, coin, location = 0, type = "PROP", fee = 0.0 }) {
+  /** Find a pool by username or host; create if missing. Returns pool id.
+   *  NiceHash HashpowerPoolJSON accepts ONLY:
+   *    name, algorithm, stratumHostname, stratumPort, username, password
+   *  Any extra field (pool, coin, location, type, fee, enabled) => 400 code 2997.
+   */
+  async ensurePool({ name, algorithm, host, username, password }) {
+    const [hostname, portStr] = String(host).split(":");
+    const stratumPort = Number(portStr || 3433);
     const { list } = (await this.getPools(100)) || {};
     const existing = (list || []).find(
-      (p) => p.username === username || (p.pool || "").includes(host),
+      (p) =>
+        p.username === username &&
+        (p.stratumHostname === hostname || (p.pool || "").includes(hostname)),
     );
     if (existing) return existing.id;
     const created = await this.createPool({
       name,
       algorithm,
-      pool: host,
+      stratumHostname: hostname,
+      stratumPort,
       username,
       password,
-      coin,
-      location,
-      type,
-      fee,
-      enabled: true,
     });
-    return created.id;
+    return created && created.id;
   }
 
   // ---- orders -------------------------------------------------------------

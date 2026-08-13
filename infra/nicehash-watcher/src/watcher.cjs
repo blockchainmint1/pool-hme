@@ -273,10 +273,6 @@ async function main() {
         host: CFG.poolHost,
         username,
         password: "x",
-        coin: "LTC",
-        location: 0,
-        type: "PROP",
-        fee: 0.0,
       });
       state.pool_id = poolId;
       log("NiceHash pool ready", { poolId, username, host: CFG.poolHost });
