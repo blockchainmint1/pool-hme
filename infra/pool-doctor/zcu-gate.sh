@@ -63,6 +63,7 @@ fi
 ##############################################################################
 if [ "$MODE" = "STATUS" ]; then
 hr "gate status"
+systemctl --no-pager -l status zcu-gate 2>/dev/null | head -8 || echo "  no zcu-gate.service"
 pgrep -f adapter-gate.py >/dev/null && echo "  adapter-gate.py RUNNING" || echo "  adapter-gate.py NOT running"
 ss -ltn 2>/dev/null | grep ":$PORT" || echo "  nothing on :$PORT"
 python3 - "$CAP" <<'PY'
