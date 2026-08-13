@@ -39,7 +39,7 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v3  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v5  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 case "$MODE" in
   INSTALL|STOP|STATUS|ARM|DISARM) ;;
@@ -410,7 +410,7 @@ async def handle(request):
         except Exception as e:
             log.error("handler %s failed: %s", method, e)
             # submitauxblock must NEVER surface an error to stratum
-            out.append(ok(rid, True) if method == "submitauxblock"
+            out.append(ok(rid, True) if method.endswith("submitauxblock")
                        else err(rid, -32603, str(e)))
     return web.json_response(out[0] if single else out)
 

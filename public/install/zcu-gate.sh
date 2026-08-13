@@ -39,7 +39,7 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v3  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v5  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 case "$MODE" in
   INSTALL|STOP|STATUS|ARM|DISARM) ;;
@@ -271,6 +271,11 @@ async def m_listsinceblock(rid, p):
     return ok(rid, {"transactions": [], "lastblock": "00" * 32})
 
 
+async def m_getbalance(rid, p):
+    return ok(rid, 0.0)
+
+
+
 def scrypt_display(hdr80: bytes) -> int:
     h = hashlib.scrypt(hdr80, salt=hdr80, n=1024, r=1, p=1, dklen=32,
                        maxmem=256 * 1024 * 1024)
@@ -368,8 +373,18 @@ HANDLERS = {
     "getauxblock": m_createauxblock,
     "getblocktemplate": m_getblocktemplate,
     "listsinceblock": m_listsinceblock,
+    "getbalance": m_getbalance,
     "submitauxblock": m_submitauxblock,
+    # The forward-ported stratum calls the geth-style names directly, lowercased
+    # by our dispatcher. Without these aliases they fell through to the
+    # "method not supported" error and ZCU never entered the job cycle.
+    # scrypt_submitauxblock MUST map to the gated handler -- otherwise submits
+    # would bypass the target filter entirely (the 13 Aug deadlock path).
+    "scrypt_createauxblock": m_createauxblock,
+    "scrypt_getauxblock": m_createauxblock,
+    "scrypt_submitauxblock": m_submitauxblock,
 }
+
 
 
 async def handle(request):
@@ -395,7 +410,7 @@ async def handle(request):
         except Exception as e:
             log.error("handler %s failed: %s", method, e)
             # submitauxblock must NEVER surface an error to stratum
-            out.append(ok(rid, True) if method == "submitauxblock"
+            out.append(ok(rid, True) if method.endswith("submitauxblock")
                        else err(rid, -32603, str(e)))
     return web.json_response(out[0] if single else out)
 
