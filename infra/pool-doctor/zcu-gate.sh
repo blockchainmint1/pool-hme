@@ -39,7 +39,7 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v5  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v6  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 case "$MODE" in
   INSTALL|STOP|STATUS|ARM|DISARM) ;;
@@ -213,6 +213,15 @@ async def m_getblockcount(rid, p):
     return ok(rid, int(r["result"], 16))
 
 
+async def m_eth_blocknumber(rid, p):
+    """Preserve geth's hex-height response for native EVM sync callers."""
+    r = await geth("eth_blockNumber", p)
+    if r.get("error"):
+        return err(rid, r["error"].get("code", -32603),
+                   r["error"].get("message", "eth_blockNumber failed"))
+    return ok(rid, r.get("result"))
+
+
 async def m_getdifficulty(rid, p):
     return ok(rid, 1.0)
 
@@ -370,6 +379,7 @@ async def m_submitauxblock(rid, p):
 HANDLERS = {
     "getinfo": m_getinfo,
     "getblockcount": m_getblockcount,
+    "eth_blocknumber": m_eth_blocknumber,
     "getdifficulty": m_getdifficulty,
     "getmininginfo": m_getmininginfo,
     "validateaddress": m_validateaddress,

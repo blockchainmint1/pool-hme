@@ -693,8 +693,11 @@ Deploy the gate with `ZCU_DRY_RUN=1` first (forwards nothing, pure shadow
 mode). Verify canary is clean for 30–60 min. Then stop the gate and reinstall
 without `DRY_RUN` to start forwarding real winners.
 
-### Known gap
+### Service persistence and RPC compatibility
 
-The gate runs via `nohup`, not a systemd unit. If the box reboots, the gate
-dies and ZCU drops out of the rotation (safe — no deadlock, just no ZCU
-blocks until manually restarted). Follow-up: convert to a systemd service.
+The gate runs as the enabled `zcu-gate.service` systemd unit and survives a
+reboot. It translates both yiimp's lowercase `scrypt_*auxblock` calls and the
+native EVM `eth_blocknumber` height call. Bitcoin-style `gettransaction` is
+intentionally unsupported: ZCU is an EVM chain, and fabricating wallet
+transaction data would risk incorrect accounting. Those calls are harmless
+to mining and remain visible in the STATUS unhandled-method breakdown.
