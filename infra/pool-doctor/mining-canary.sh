@@ -38,7 +38,7 @@ echo "mining-canary v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 hr "1. stratum process health  (THE check that would have caught 13 Aug)"
 ##############################################################################
 ACTIVE=$(systemctl is-active "$UNIT" 2>/dev/null)
-NRESTARTS=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
+NRESTARTS=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null); NRESTARTS=${NRESTARTS:-?}
 SINCE=$(systemctl show "$UNIT" -p ActiveEnterTimestamp --value 2>/dev/null)
 UPSEC=$(ps -o etimes= -p "$(systemctl show "$UNIT" -p MainPID --value)" 2>/dev/null | tr -d ' ')
 UPSEC=${UPSEC:-0}
@@ -46,7 +46,7 @@ CRASHES=$(journalctl -u "$UNIT" --since '-30 min' --no-pager 2>/dev/null \
           | grep -cE 'SEGV|Failed with result')
 DEADLOCK=$(grep -c 'dead lock' "$LOG" 2>/dev/null || echo 0)
 
-echo "  active=$ACTIVE  NRestarts=$NRestarts  up=${UPSEC}s  since=$SINCE"
+echo "  active=$ACTIVE  NRestarts=$NRESTARTS  up=${UPSEC}s  since=$SINCE"
 [ "$ACTIVE" = "active" ] && ok "stratum is running" || bad "stratum is NOT active ($ACTIVE)"
 [ "$CRASHES" -eq 0 ] && ok "no crashes in the last 30 min" \
                      || bad "$CRASHES crash/restart events in the last 30 min -- CRASH LOOP"
