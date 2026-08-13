@@ -161,6 +161,11 @@ async def m_createauxblock(rid, p):
     res = r.get("result") or {}
     h = (res.get("hash") or "").lower().replace("0x", "")
     if h:
+        if h not in WORK:
+            # Record the exact work shape we hand stratum. If stratum never
+            # submits, the answer is usually in these fields (missing chainid,
+            # 0x-prefixed hash, target vs _target, byte order), not in luck.
+            record("auxwork", {"reply": res, "keys": sorted(res.keys())})
         WORK[h] = res
         if len(WORK) > 512:
             for k in list(WORK)[:256]:
