@@ -18,8 +18,12 @@ MODE="${1:-CHECK}"
 WATCH_MINS="${2:-10}"
 UNIT=stratum-aws-scrypt
 LOG=/var/stratum/logs/stratum-current.log
-# stratum opens a NEW log file on restart; always follow the freshest one.
-NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | head -1)
+# stratum opens a NEW log file on restart; follow the freshest MAIN log.
+# client-*.log only holds per-miner chatter -- coin names never appear there,
+# which made section 5 report lines=0 for everything.
+NEWEST=$(ls -t /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
+[ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | grep -v '/client-' | head -1)
+[ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | head -1)
 [ -n "${NEWEST:-}" ] && LOG="$NEWEST"
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
