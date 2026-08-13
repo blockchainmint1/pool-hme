@@ -36,4 +36,4 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 - [Coin daemon paths](mem://infra/coin-daemon-paths.md) — litecoin-cli/dogecoin-cli full paths, datadirs, wallet file layout, systemd units, passphrase file
 - [DOGE payout cadence](mem://infra/doge-payout-cadence.md) — Why the DOGE cycle runs every 10 min (Yiimp share purge), the 246 stranded blocks, float-sweep destination
 - [NiceHash/MRR shim](mem://infra/nicehash-proxy.md) — Rental verification fails on the subscribe-reply diff of 16 + 6-11s first job; nicehash-proxy on port 3533 fixes both without touching scrypt.conf
-
+- [Pool snapshot/rollback](mem://infra/pool-snapshot.md) — `pool-snapshot.sh` SAVE/VERIFY/RESTORE; run SAVE+VERIFY before any stratum binary swap
