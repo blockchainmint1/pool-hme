@@ -37,3 +37,4 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 - [DOGE payout cadence](mem://infra/doge-payout-cadence.md) — Why the DOGE cycle runs every 10 min (Yiimp share purge), the 246 stranded blocks, float-sweep destination
 - [NiceHash/MRR shim](mem://infra/nicehash-proxy.md) — Rental verification fails on the subscribe-reply diff of 16 + 6-11s first job; nicehash-proxy on port 3533 fixes both without touching scrypt.conf
 - [Pool snapshot/rollback](mem://infra/pool-snapshot.md) — `pool-snapshot.sh` SAVE/VERIFY/RESTORE; run SAVE+VERIFY before any stratum binary swap
+- [ZCU gate deadman](mem://infra/zcu-deadman.md) — auto-DISARM watchdog (systemd timer, 60s) for the ARMED ZCU gate: trips on 15m TXC/ISK block silence, stratum restarts, deadlock lines. Install BEFORE arming unattended.
