@@ -191,20 +191,24 @@ else
   grep -i 'error getblocktemplate' "$SAMPLE" | tail -5 | sed 's/^/       /'
   # which coins are affected? synchronized errors across ALL coins = shared
   # refresh loop is blocked (a shim/adapter), one coin = that coin's daemon.
-  HITS=$(grep -io 'litecoin\|dogecoin\|texitcoin\|iskander\|zero chill' "$SAMPLE" \
-         | sort -u | tr '\n' ' ')
+  HITS=$(grep -ioE "$COINPAT" "$SAMPLE" | sort -u | tr '\n' ' ')
   echo "       coins named in this sample: ${HITS:-none}"
 fi
 [ "$AUXERR" -eq 0 ] || bad "$AUXERR aux-block RPC errors in 30s -- an aux child is failing, this is the deadlock precursor"
 [ "$WALLET" -eq 0 ] || bad "$WALLET 'unable to find the wallet for coinid' in 30s -- a coin has no usable wallet, payouts and block credit will break"
 [ "$RPCTO" -eq 0 ] || warn "$RPCTO RPC connect/timeout lines in 30s -- a coin daemon is slow or down"
-# v3: section 5 counted coin names in a stale file and printed lines=0 for
-# everything while still saying PASS. If the LIVE file is being written but
-# never names a coin, the aux/job loop is not running -- that is a failure.
-COINNAMES=$(grep -icE 'litecoin|dogecoin|texitcoin|iskander|zero chill' "$SAMPLE" || true)
+# v4: this used to hard-FAIL on "no coin names", which fired on a pool that was
+# finding TXC/ISK blocks every 2 minutes -- yiimp simply does not print long
+# coin names on every job line. Block cadence is the ground truth for "is the
+# loop cycling"; log verbosity is not. So: FAIL only when cadence is ALSO bad.
+COINNAMES=$(grep -icE "$COINPAT" "$SAMPLE" || true)
 COINNAMES=$(echo "${COINNAMES:-0}" | head -1 | tr -dc '0-9'); COINNAMES=${COINNAMES:-0}
 if [ "$NEW" -gt 200 ] && [ "$COINNAMES" -eq 0 ]; then
-  bad "$NEW lines written in 30s but ZERO coin names -- the job/aux loop is not cycling, only miner chatter is being logged"
+  if [ "$CADENCE_OK" -eq 1 ]; then
+    warn "$NEW lines in 30s and no coin/job tokens matched -- log verbosity only; TXC/ISK block cadence proves the job loop IS cycling"
+  else
+    bad "$NEW lines written in 30s, ZERO coin/job tokens AND blocks are dry -- the job/aux loop is not cycling"
+  fi
 fi
 rm -f "$SAMPLE"
 
@@ -216,10 +220,10 @@ for NAME in Litecoin Dogecoin Texitcoin Iskander "Zero Chill"; do
   E=$(tail -n 5000 "$LOG" 2>/dev/null | grep -i "$NAME" | grep -ic 'error' || true)
   printf '  %-12s lines=%-5s errors=%s\n' "$NAME" "$N" "$E"
 done
-AUXTOT=$(tail -n 5000 "$LOG" 2>/dev/null | grep -icE 'Litecoin|Dogecoin|Texitcoin|Iskander|Zero Chill' || true)
+AUXTOT=$(tail -n 5000 "$LOG" 2>/dev/null | grep -icE "$COINPAT" || true)
 AUXTOT=$(echo "${AUXTOT:-0}" | head -1 | tr -dc '0-9'); AUXTOT=${AUXTOT:-0}
 if [ "$AUXTOT" -eq 0 ]; then
-  warn "no coin names in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- log may have rotated; aux counts above are not evidence"
+  warn "no coin/job tokens in the last 5000 lines of $LOG (last write: $(stat -c %y "$LOG" 2>/dev/null | cut -d. -f1)) -- yiimp may only be logging miner chatter here; judge the loop by section 4 block cadence, not by these counts"
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
