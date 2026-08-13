@@ -18,6 +18,9 @@ MODE="${1:-CHECK}"
 WATCH_MINS="${2:-10}"
 UNIT=stratum-aws-scrypt
 LOG=/var/stratum/logs/stratum-current.log
+# stratum opens a NEW log file on restart; always follow the freshest one.
+NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | head -1)
+[ -n "${NEWEST:-}" ] && LOG="$NEWEST"
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
 PORT=3433
