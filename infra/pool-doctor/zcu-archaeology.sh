@@ -98,18 +98,21 @@ for f in $(grep -rl 'submitauxblock' /home/ubuntu /root --include='db.cpp' 2>/de
   grep -n -B3 -A8 'submitauxblock' "$f" | sed 's/^/      /'
 done
 
-hr "5. TIMELINE -- what happened around 11-20 Jul"
-echo "   -- mtimes of every stratum binary, oldest first:"
+hr "5. TIMELINE -- what overwrote the good binary during 13-20 Jul"
+echo "   -- mtimes of every stratum binary, oldest first (cutoff = $CUTOFF_DATE):"
 find / -xdev -type f -name 'stratum' -perm -u+x 2>/dev/null \
   -printf '%TY-%Tm-%Td %TH:%TM  %p\n' | sort | sed 's/^/      /'
-echo "   -- dpkg/apt + shell history around the change window:"
-ls -la /var/log/apt/history.log* 2>/dev/null | sed 's/^/      /'
-zgrep -h -A3 '2026-07-1[0-9]\|2026-07-20' /var/log/apt/history.log* 2>/dev/null | head -40 | sed 's/^/      /'
+echo "   -- anything under /var/stratum modified in the 13-20 Jul window:"
+find /var/stratum -maxdepth 2 -newermt "$CUTOFF_DATE" ! -newermt 2026-07-21 \
+  -printf '%TY-%Tm-%Td %TH:%TM  %p\n' 2>/dev/null | sort | head -40 | sed 's/^/      /'
+echo "   -- dpkg/apt around the change window:"
+zgrep -h -A3 '2026-07-0[6-9]\|2026-07-1[0-9]\|2026-07-20' /var/log/apt/history.log* 2>/dev/null | head -40 | sed 's/^/      /'
 for h in /root/.bash_history /home/ubuntu/.bash_history; do
   [ -f "$h" ] || continue
   echo "      -- $h: install/make/systemctl lines"
   grep -nE 'install .*stratum|make |systemctl (restart|stop) stratum|cp .*stratum' "$h" 2>/dev/null | tail -40 | sed 's/^/         /'
 done
+
 
 hr "6. ZCU evidence in the pool DB (when did it last actually work?)"
 SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
