@@ -144,6 +144,7 @@ MYT "SELECT c.symbol, MAX(b.height) height,
      WHERE c.symbol IN ('LTC','DOGE','TXC','ISK')
      GROUP BY 1 ORDER BY min_ago" | sed 's/^/  /'
 
+CADENCE_OK=1   # v4: ground truth that the job/aux loop is cycling
 for S in TXC ISK; do
   AGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
             FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='$S'")
@@ -152,8 +153,8 @@ for S in TXC ISK; do
   # Tightened 14 Aug 2026: 20m dry used to print WARN and the run still said
   # "ALL GREEN". At 3m target, 10m dry is already a >3-sigma event.
   if   [ "$AGO" -le 8 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
-  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"
-  else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; fi
+  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
+  else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; CADENCE_OK=0; fi
 done
 
 ##############################################################################
