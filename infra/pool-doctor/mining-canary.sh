@@ -65,6 +65,9 @@ LOGAGE=$(( $(date -u +%s) - $(stat -c %Y "$LOG" 2>/dev/null || echo 0) ))
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
 PORT=3433
+# v4: yiimp logs jobs/aux by symbol and short tokens, not just long coin names.
+# Matching only long names made a healthy loop look dead.
+COINPAT='litecoin|dogecoin|texitcoin|iskander|zero *chill|\bLTC\b|\bDOGE\b|\bTXC\b|\bISK\b|\bZCU\b|getblocktemplate|createauxblock|getauxblock|new block|block found|coind|job'
 mkdir -p "$STATE"
 
 MY() { mysql yiimpfrontend -N -B -e "$1" 2>/dev/null; }
