@@ -21,10 +21,15 @@ LOG=/var/stratum/logs/stratum-current.log
 # stratum opens a NEW log file on restart; follow the freshest MAIN log.
 # client-*.log only holds per-miner chatter -- coin names never appear there,
 # which made section 5 report lines=0 for everything.
-NEWEST=$(ls -t /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
+# NOTE (14 Aug 2026): the *live* file stratum writes to is /var/stratum/scrypt.log.
+# logs/stratum-current.log is a rotated snapshot and can be hours stale -- grepping
+# it is how we missed 90 minutes of 'error getblocktemplate'. Always pick the
+# most-recently-written candidate, scrypt.log included.
+NEWEST=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | head -1)
 [ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | grep -v '/client-' | head -1)
 [ -z "${NEWEST:-}" ] && NEWEST=$(ls -t /var/stratum/logs/*.log 2>/dev/null | head -1)
 [ -n "${NEWEST:-}" ] && LOG="$NEWEST"
+LOGAGE=$(( $(date -u +%s) - $(stat -c %Y "$LOG" 2>/dev/null || echo 0) ))
 STATE=/var/lib/pool-canary
 BASE="$STATE/baseline.env"
 PORT=3433
@@ -39,7 +44,7 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$*"; FAIL=1; }
 warn() { printf '  \033[33mWARN\033[0m  %s\n' "$*"; }
 hr()   { printf '\n===== %s\n' "$*"; }
 
-echo "mining-canary v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "mining-canary v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 ##############################################################################
 hr "1. stratum process health  (THE check that would have caught 13 Aug)"
@@ -100,11 +105,56 @@ for S in TXC ISK; do
   AGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
             FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='$S'")
   AGO=${AGO:-9999}
-  # we are the ONLY pool on TXC/ISK: healthy is ~1 block / 3 min
-  if   [ "$AGO" -le 15 ]; then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
-  elif [ "$AGO" -le 30 ]; then warn "$S dry for ${AGO}m -- watch it"
+  # we are the ONLY pool on TXC/ISK: healthy is ~1 block / 3 min.
+  # Tightened 14 Aug 2026: 20m dry used to print WARN and the run still said
+  # "ALL GREEN". At 3m target, 10m dry is already a >3-sigma event.
+  if   [ "$AGO" -le 8 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
+  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"
   else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; fi
 done
+
+##############################################################################
+hr "4b. coin RPC health -- getblocktemplate (the 13/14 Aug miss)"
+##############################################################################
+# A stalled getblocktemplate means stratum cannot build a new job for that coin,
+# so blocks stop even though sockets, shares/min and NRestarts all look perfect.
+# This is EXACTLY the failure the canary reported ALL GREEN through, so it is a
+# hard FAIL here, measured on a live 30s sample of the file stratum is writing.
+echo "  live log: $LOG  (last write ${LOGAGE}s ago)"
+if [ "$LOGAGE" -gt 300 ]; then
+  bad "stratum has not written to $LOG in ${LOGAGE}s -- the log is stale, RPC sample below is meaningless"
+fi
+
+SAMPLE=$(mktemp)
+timeout 30 tail -n 0 -F "$LOG" > "$SAMPLE" 2>/dev/null
+NEW=$(wc -l < "$SAMPLE" | tr -dc '0-9'); NEW=${NEW:-0}
+GBT=$(grep -ci 'error getblocktemplate' "$SAMPLE" || true)
+GBT=$(echo "${GBT:-0}" | head -1 | tr -dc '0-9'); GBT=${GBT:-0}
+AUXERR=$(grep -ci 'error createauxblock\|error getauxblock' "$SAMPLE" || true)
+AUXERR=$(echo "${AUXERR:-0}" | head -1 | tr -dc '0-9'); AUXERR=${AUXERR:-0}
+WALLET=$(grep -ci 'unable to find the wallet' "$SAMPLE" || true)
+WALLET=$(echo "${WALLET:-0}" | head -1 | tr -dc '0-9'); WALLET=${WALLET:-0}
+RPCTO=$(grep -ci 'rpc timeout\|connect error\|couldn.t connect' "$SAMPLE" || true)
+RPCTO=$(echo "${RPCTO:-0}" | head -1 | tr -dc '0-9'); RPCTO=${RPCTO:-0}
+
+echo "  30s sample: ${NEW} new lines   gbt-errors=$GBT  aux-errors=$AUXERR  wallet-errors=$WALLET  rpc-conn-errors=$RPCTO"
+if [ "$NEW" -eq 0 ]; then
+  bad "stratum wrote ZERO lines in 30s -- it is not looping, treat as stalled"
+elif [ "$GBT" -eq 0 ]; then
+  ok "no getblocktemplate errors in the last 30s"
+else
+  bad "$GBT 'error getblocktemplate' in 30s -- stratum cannot build jobs, blocks WILL stop"
+  grep -i 'error getblocktemplate' "$SAMPLE" | tail -5 | sed 's/^/       /'
+  # which coins are affected? synchronized errors across ALL coins = shared
+  # refresh loop is blocked (a shim/adapter), one coin = that coin's daemon.
+  HITS=$(grep -io 'litecoin\|dogecoin\|texitcoin\|iskander\|zero chill' "$SAMPLE" \
+         | sort -u | tr '\n' ' ')
+  echo "       coins named in this sample: ${HITS:-none}"
+fi
+[ "$AUXERR" -eq 0 ] || bad "$AUXERR aux-block RPC errors in 30s -- an aux child is failing, this is the deadlock precursor"
+[ "$WALLET" -eq 0 ] || bad "$WALLET 'unable to find the wallet for coinid' in 30s -- a coin has no usable wallet, payouts and block credit will break"
+[ "$RPCTO" -eq 0 ] || warn "$RPCTO RPC connect/timeout lines in 30s -- a coin daemon is slow or down"
+rm -f "$SAMPLE"
 
 ##############################################################################
 hr "5. aux list sanity -- who is stratum actually merge-mining right now?"
