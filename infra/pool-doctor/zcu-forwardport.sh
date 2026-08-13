@@ -34,11 +34,19 @@
 #   * Build output is left at that path for a later maintenance window.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v3  2026-08-13  Fix two BUILD-mode faults found on the first real run:
+#                   (a) db.cpp allowlist regex assumed three closing parens and
+#                       silently skipped -- now a line-oriented rewrite that
+#                       ASSERTS the result (build aborts if DOGE survives).
+#                   (b) the archived ZCU tree is missing algos/ar2 sources
+#                       ("No rule to make target 'ar2/core.c'"). Missing algo
+#                       sources are now backfilled from the LIVE tree, add-only,
+#                       never overwriting a file the ZCU tree already has.
 #   v2  2026-08-13  CORRECTION: DOGE must be OUT of the auxpow_rpc_mode=1
 #                   allowlist. mode 1 broke DOGE (~20% accept); removing DOGE
 #                   gave 100%. Target allowlist = ISK || TXC || ZCU.
 #   v1  2026-08-13  First cut.
-FP_VERSION="v2"
+FP_VERSION="v3"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
