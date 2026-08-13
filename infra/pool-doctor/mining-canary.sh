@@ -94,6 +94,12 @@ HARDCRASH=$(journalctl -u "$UNIT" --since '-30 min' --no-pager 2>/dev/null \
 HARDCRASH=$(echo "${HARDCRASH:-0}" | head -1 | tr -dc '0-9'); HARDCRASH=${HARDCRASH:-0}
 DEADLOCK=$(grep -c 'dead lock' "$LOG" 2>/dev/null || true)
 DEADLOCK=$(echo "${DEADLOCK:-0}" | head -1 | tr -dc '0-9'); DEADLOCK=${DEADLOCK:-0}
+# v4: 'dead lock, exiting' KILLS stratum. So if the process has been up a long
+# time with no restarts, any such lines are historic (13 Aug) and must not FAIL
+# a currently-healthy pool. Only recent lines on a young/restarted service are
+# evidence of a live deadlock.
+DEADLOCK_RECENT=$(tail -n 20000 "$LOG" 2>/dev/null | grep -c 'dead lock' || true)
+DEADLOCK_RECENT=$(echo "${DEADLOCK_RECENT:-0}" | head -1 | tr -dc '0-9'); DEADLOCK_RECENT=${DEADLOCK_RECENT:-0}
 
 echo "  active=$ACTIVE  NRestarts=$NRESTARTS  up=${UPSEC}s  since=$SINCE"
 [ "$ACTIVE" = "active" ] && ok "stratum is running" || bad "stratum is NOT active ($ACTIVE)"
@@ -101,8 +107,13 @@ if [ "$CRASHES" -eq 0 ]; then ok "no crashes or restarts in the last 30 min"
 elif [ "$HARDCRASH" -gt 0 ]; then bad "$HARDCRASH SEGV/core-dump in the last 30 min -- CRASH LOOP"
 elif [ "$CRASHES" -ge 3 ]; then bad "$CRASHES restart events in the last 30 min -- CRASH LOOP"
 else warn "$CRASHES restart event(s) in the last 30 min, none of them SEGV -- expected if YOU restarted it (up=${UPSEC}s)"; fi
-[ "$DEADLOCK" -eq 0 ] && ok "no 'dead lock' in current log" \
-                      || bad "$DEADLOCK 'dead lock, exiting' lines -- an aux child is killing stratum"
+if [ "$DEADLOCK" -eq 0 ]; then
+  ok "no 'dead lock' in current log"
+elif [ "$DEADLOCK_RECENT" -gt 0 ] && { [ "$CRASHES" -gt 0 ] || [ "$UPSEC" -lt 1800 ]; }; then
+  bad "$DEADLOCK_RECENT recent 'dead lock, exiting' lines + service restarted/young -- an aux child is killing stratum NOW"
+else
+  warn "$DEADLOCK 'dead lock' lines in the log, but stratum has been up ${UPSEC}s with NRestarts=$NRESTARTS -- historic (pre-restart), not a live deadlock"
+fi
 [ "$UPSEC" -gt 600 ] && ok "uptime > 10 min" || warn "stratum started ${UPSEC}s ago -- too young to judge"
 
 ##############################################################################
