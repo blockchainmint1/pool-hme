@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mining-canary.sh -- READ ONLY. 20-second proof that LTC/DOGE/TXC/ISK mining
+# mining-canary.sh -- READ ONLY. ~35-second proof that LTC/DOGE/TXC/ISK mining
 # is still healthy. Run BEFORE and AFTER every change. Exit 0 = pass, 1 = fail.
 #
 #   baseline:  curl -fsSL https://pool.honest.money/install/mining-canary.sh | sudo bash -s BASELINE
@@ -11,6 +11,25 @@
 # WHOLE scrypt stratum crash-looped for 90 minutes -- taking LTC, DOGE, TXC and
 # ISK with it. Shares/min looked perfect the entire time. Nothing but the
 # service restart counter and the block cadence would have caught it.
+#
+# ---------------------------------------------------------------------------
+# VERSION LOG -- bump CANARY_VERSION on EVERY change, newest entry first.
+# If the banner does not show the version you expect, the site has not been
+# republished yet (public/install/ is served from the published build).
+#
+#   v3  2026-08-13  Version banner + version log. Section 4b now also flags a
+#                   log file that is being written but contains no coin names.
+#   v2  2026-08-13  Read the LIVE log (/var/stratum/scrypt.log), not the stale
+#                   rotated logs/stratum-current.log. New section 4b: 30s live
+#                   sample, hard FAIL on 'error getblocktemplate',
+#                   createauxblock/getauxblock errors, 'unable to find the
+#                   wallet for coinid', or zero log lines. TXC/ISK dry
+#                   thresholds tightened to WARN >8m / FAIL >15m (was 15/30) --
+#                   a 20m dry spell used to print ALL GREEN.
+#   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
+#                   share flow, block cadence, aux-list sanity, baseline diff.
+# ---------------------------------------------------------------------------
+CANARY_VERSION="v3"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
