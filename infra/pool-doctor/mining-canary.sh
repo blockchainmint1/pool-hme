@@ -173,6 +173,14 @@ fi
 [ "$AUXERR" -eq 0 ] || bad "$AUXERR aux-block RPC errors in 30s -- an aux child is failing, this is the deadlock precursor"
 [ "$WALLET" -eq 0 ] || bad "$WALLET 'unable to find the wallet for coinid' in 30s -- a coin has no usable wallet, payouts and block credit will break"
 [ "$RPCTO" -eq 0 ] || warn "$RPCTO RPC connect/timeout lines in 30s -- a coin daemon is slow or down"
+# v3: section 5 counted coin names in a stale file and printed lines=0 for
+# everything while still saying PASS. If the LIVE file is being written but
+# never names a coin, the aux/job loop is not running -- that is a failure.
+COINNAMES=$(grep -icE 'litecoin|dogecoin|texitcoin|iskander|zero chill' "$SAMPLE" || true)
+COINNAMES=$(echo "${COINNAMES:-0}" | head -1 | tr -dc '0-9'); COINNAMES=${COINNAMES:-0}
+if [ "$NEW" -gt 200 ] && [ "$COINNAMES" -eq 0 ]; then
+  bad "$NEW lines written in 30s but ZERO coin names -- the job/aux loop is not cycling, only miner chatter is being logged"
+fi
 rm -f "$SAMPLE"
 
 ##############################################################################
