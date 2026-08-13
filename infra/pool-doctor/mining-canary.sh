@@ -17,6 +17,9 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v5  2026-08-13  New section 5b: ZCU chain progress -- geth tip delta between
+#                   canary runs, yiimp DB lag vs geth (what the homepage reads),
+#                   block-sync failure detection, and ambiguous-auxpow counter.
 #   v4  2026-08-13  Two false FAILs killed the verdict while the pool was
 #                   objectively healthy (TXC/ISK blocks 2m old):
 #                   (a) 'dead lock' was counted over the WHOLE log, so lines
@@ -42,7 +45,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v4"
+CANARY_VERSION="v5"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
