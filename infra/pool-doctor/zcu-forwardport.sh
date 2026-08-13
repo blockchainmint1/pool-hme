@@ -34,11 +34,19 @@
 #   * Build output is left at that path for a later maintenance window.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v3  2026-08-13  Fix two BUILD-mode faults found on the first real run:
+#                   (a) db.cpp allowlist regex assumed three closing parens and
+#                       silently skipped -- now a line-oriented rewrite that
+#                       ASSERTS the result (build aborts if DOGE survives).
+#                   (b) the archived ZCU tree is missing algos/ar2 sources
+#                       ("No rule to make target 'ar2/core.c'"). Missing algo
+#                       sources are now backfilled from the LIVE tree, add-only,
+#                       never overwriting a file the ZCU tree already has.
 #   v2  2026-08-13  CORRECTION: DOGE must be OUT of the auxpow_rpc_mode=1
 #                   allowlist. mode 1 broke DOGE (~20% accept); removing DOGE
 #                   gave 100%. Target allowlist = ISK || TXC || ZCU.
 #   v1  2026-08-13  First cut.
-FP_VERSION="v2"
+FP_VERSION="v3"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -135,14 +143,27 @@ cp -a "$ZCU_SRC/." "$WORK/" || { bad "copy failed"; exit 1; }
 cd "$WORK" || exit 1
 
 # ---- patch 1: db.cpp allowlist = ISK, TXC, ZCU (no DOGE) -------------------------
+# v3: rewrite the whole line that guards auxpow_rpc_mode=1, preserving its
+# indentation, instead of matching a paren count that varies between trees.
 if [ "$NEED_DB" = 1 ]; then
-  python3 - "$WORK/db.cpp" <<'PY'
-import re,sys
-p=sys.argv[1]; s=open(p).read()
-new='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "ZCU"))'
-s2,n=re.subn(r'if\(!strcmp\(coind->symbol, "ISK"\).*?\)\)\)', new, s, count=1, flags=re.S)
-open(p,'w').write(s2)
-print("   db.cpp allowlist patched" if n else "   db.cpp: PATTERN NOT FOUND -- patch skipped")
+  python3 - "$WORK/db.cpp" <<'PY' || { echo "   db.cpp patch FAILED"; exit 1; }
+import sys
+p=sys.argv[1]; L=open(p).read().splitlines(True)
+tgt='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "ZCU"))\n'
+hits=[i for i,l in enumerate(L)
+      if 'auxpow_rpc_mode = 1' in l and i>0 and 'coind->symbol' in L[i-1] and L[i-1].lstrip().startswith('if(')]
+if not hits:
+    print("   db.cpp: allowlist guard line not found -- ABORT (do not ship a DOGE regression)")
+    sys.exit(1)
+for i in hits:
+    g=i-1
+    indent=L[g][:len(L[g])-len(L[g].lstrip())]
+    L[g]=indent+tgt
+open(p,'w').writelines(L)
+s=open(p).read()
+if '"DOGE"' in s and 'auxpow_rpc_mode' in s.split('"DOGE"')[0][-400:]:
+    print("   db.cpp: DOGE STILL in the allowlist after patch -- ABORT"); sys.exit(1)
+print("   db.cpp allowlist patched -> ISK || TXC || ZCU  (%d site(s))" % len(hits))
 PY
 fi
 
@@ -168,6 +189,35 @@ else:
     print("   client.cpp diff clamp applied")
 PY
 fi
+
+hr "4b. backfill algo sources the archived ZCU tree is missing"
+# The 3 Jun archive was taken after a `make clean` that also removed some algo
+# sources (algos/ar2/* first offender: "No rule to make target 'ar2/core.c'").
+# Those files are pure hashing code, identical in both trees, and are NOT part
+# of the ZCU feature -- so taking LIVE's copy is safe. ADD ONLY: any file the
+# ZCU tree already has is left exactly as it is.
+added=0
+if [ -d "$LIVE_SRC/algos" ]; then
+  while IFS= read -r rel; do
+    if [ ! -e "$WORK/algos/$rel" ]; then
+      mkdir -p "$WORK/algos/$(dirname "$rel")"
+      cp -a "$LIVE_SRC/algos/$rel" "$WORK/algos/$rel" && added=$((added+1))
+      [ "$added" -le 12 ] && echo "   + algos/$rel"
+    fi
+  done < <(cd "$LIVE_SRC/algos" && find . \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name 'Makefile' \) | sed 's|^\./||')
+fi
+[ "$added" -gt 12 ] && echo "   ... and $((added-12)) more"
+if [ "$added" -gt 0 ]; then
+  ok "backfilled $added missing algo source file(s) from the LIVE tree"
+else
+  ok "algos tree already complete -- nothing backfilled"
+fi
+if [ ! -f "$WORK/algos/ar2/core.c" ]; then
+  bad "algos/ar2/core.c is missing from BOTH trees -- cannot build"
+  echo "   find another copy:  sudo find /root /home/ubuntu -path '*algos/ar2/core.c' 2>/dev/null"
+  exit 1
+fi
+ok "algos/ar2/core.c present"
 
 hr "5. compile (dependency order -- parallel make races on these subdirs)"
 LOG=$WORK/build.log
