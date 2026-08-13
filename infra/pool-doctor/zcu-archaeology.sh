@@ -130,7 +130,8 @@ du -sh /var/stratum/*.log /var/stratum/logs 2>/dev/null | sort -rh | head -5 | s
 
 echo
 echo "READ THE RESULT LIKE THIS:"
-echo "  * any binary with aux>0 AND zcu>0 dated before 20 Jul  = the build that worked. Keep it."
-echo "  * source tree with ZCU code but a stale binary          = recompile THAT tree, no GitHub port."
-echo "  * nothing anywhere                                      = ZCU lived in config only; check section 6."
+echo "  * line marked <<< CANDIDATE  = pre-$CUTOFF_DATE and ZCU-aware. That's the build to restore."
+echo "  * source tree with ZCU code but a stale binary = recompile THAT tree, no GitHub port."
+echo "  * nothing anywhere = ZCU lived in config only; check section 6."
+
 echo "zcu-archaeology $ARCH_VERSION done -- nothing was modified."
