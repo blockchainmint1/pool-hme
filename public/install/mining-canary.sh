@@ -17,6 +17,10 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v6  2026-08-13  ZCU added to section 4 block cadence (and to the baseline
+#                   height set). Only judged when the gate is ARMED; a dry ZCU
+#                   with accepted gate blocks is reported as a yiimp-sync issue,
+#                   never as a mining failure. Limits WARN 30m / FAIL 60m.
 #   v5  2026-08-13  New section 5b: ZCU chain progress -- geth tip delta between
 #                   canary runs, yiimp DB lag vs geth (what the homepage reads),
 #                   block-sync failure detection, and ambiguous-auxpow counter.
@@ -45,7 +49,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v5"
+CANARY_VERSION="v6"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -147,7 +151,7 @@ MYT "SELECT c.symbol, MAX(b.height) height,
      FROM_UNIXTIME(MAX(b.time)) last_block,
      ROUND((UNIX_TIMESTAMP()-MAX(b.time))/60,1) min_ago
      FROM blocks b JOIN coins c ON c.id=b.coin_id
-     WHERE c.symbol IN ('LTC','DOGE','TXC','ISK')
+     WHERE c.symbol IN ('LTC','DOGE','TXC','ISK','ZCU')
      GROUP BY 1 ORDER BY min_ago" | sed 's/^/  /'
 
 CADENCE_OK=1   # v4: ground truth that the job/aux loop is cycling
@@ -162,6 +166,34 @@ for S in TXC ISK; do
   elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
   else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; CADENCE_OK=0; fi
 done
+
+# --- ZCU (v6). Judged differently from TXC/ISK on purpose:
+#   * ZCU only counts when the gate is ARMED (dry_run=0). Disarmed = by design,
+#     so a dry ZCU is expected and must never colour the verdict.
+#   * The yiimp `blocks` row only appears after zcu-mainnet-yiimp-block-sync
+#     runs, so a lagging DB is a SYNC problem, not a mining problem. We use the
+#     geth tip as ground truth and the DB only to judge homepage freshness.
+#   * Observed cadence on 13 Aug 2026 restoration: ~4 blocks / 10 min. Limits
+#     are deliberately loose (WARN 30m, FAIL 60m) to match the 60m deadman.
+ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-gate.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+if [ "${ZARMED:-1}" != "0" ]; then
+  echo "  ZCU  gate is DISARMED (dry_run=${ZARMED:-?}) -- no ZCU blocks expected, cadence not judged"
+else
+  ZAGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
+             FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'")
+  case "$ZAGO" in ''|*[!0-9]*) ZAGO=9999 ;; esac
+  ZACC=$(grep -c 'ZCU BLOCK ACCEPTED' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); ZACC=${ZACC:-0}
+  if   [ "$ZAGO" -le 30 ]; then ok "ZCU found a block ${ZAGO}m ago (gate ARMED, accepted-total=$ZACC)"
+  elif [ "$ZAGO" -le 60 ]; then warn "ZCU dry for ${ZAGO}m with the gate ARMED -- check forwards: grep -i 'WINNER\|REJECTED' /var/log/zcu-gate.log | tail -20"
+  else
+    if [ "$ZACC" -gt 0 ]; then
+      warn "no ZCU block row for ${ZAGO}m but the gate has $ZACC accepted block(s) -- almost certainly the yiimp sync, not mining: sudo systemctl start zcu-mainnet-yiimp-block-sync"
+    else
+      bad "ZCU dry for ${ZAGO}m with the gate ARMED and ZERO accepted blocks -- winners are not reaching geth"
+    fi
+  fi
+fi
+
 
 ##############################################################################
 hr "4b. coin RPC health -- getblocktemplate (the 13/14 Aug miss)"
@@ -333,7 +365,7 @@ hr "6. baseline compare"
 ##############################################################################
 NOW_HEIGHTS=$(MY "SELECT GROUP_CONCAT(CONCAT(s,'=',h) ORDER BY s) FROM (
    SELECT c.symbol s, MAX(b.height) h FROM blocks b JOIN coins c ON c.id=b.coin_id
-   WHERE c.symbol IN ('LTC','DOGE','TXC','ISK') GROUP BY 1) x")
+   WHERE c.symbol IN ('LTC','DOGE','TXC','ISK','ZCU') GROUP BY 1) x")
 if [ "$MODE" = "BASELINE" ]; then
   { echo "BASE_TS=$(date -u +%s)"
     echo "BASE_HEIGHTS='$NOW_HEIGHTS'"
