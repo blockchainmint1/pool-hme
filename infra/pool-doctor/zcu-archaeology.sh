@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # zcu-archaeology.sh -- READ ONLY. Find the stratum binary/source that actually
-# merge-mined ZCU before 20 Jul 2026, and show what changed since.
+# merge-mined ZCU before 13 Jul 2026, and show what changed since.
 #
 #   curl -fsSL "https://pool.honest.money/install/zcu-archaeology.sh?v=$(date +%s)" | sudo bash
 #
@@ -18,8 +18,10 @@
 # source trees, and dates everything. Nothing is modified, started or stopped.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v2  2026-08-13  Cutoff moved to 13 Jul (14-20 Jul was the emergency rework);
+#                   tags each binary pre-cutoff CANDIDATE vs suspect.
 #   v1  2026-08-13  First cut.
-ARCH_VERSION="v1"
+ARCH_VERSION="v2"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 hr() { printf '\n=== %s ===\n' "$*"; }
@@ -32,16 +34,30 @@ NEW_SYMS='scrypt_submitAuxBlock|ZCU full256 gate|ZCUAUXCOMMIT|zcu_submit_from_lt
 OLD_SYMS='submitauxblock|createauxblock|getauxblock'
 NAME_SYMS='Zero Chill|ZCU'
 
+# Anything built on or after this date is from the 14-20 Jul emergency period
+# and is NOT trustworthy as "the build that worked". ZCU was last known-good
+# before 13 Jul 2026.
+CUTOFF_DATE=${CUTOFF_DATE:-2026-07-13}
+CUTOFF=$(date -u -d "$CUTOFF_DATE" +%s 2>/dev/null || echo 1768262400)
+
 scan_bin() { # scan_bin <path>
-  local f="$1" s n o m
+  local f="$1" s n o m mt tag=""
   s=$(strings -a "$f" 2>/dev/null)
   n=$(printf '%s' "$s" | grep -cEi "$NEW_SYMS")
   o=$(printf '%s' "$s" | grep -cEi "$OLD_SYMS")
   m=$(printf '%s' "$s" | grep -cE "$NAME_SYMS")
-  printf '  %-16s new=%-4s aux=%-4s zcu=%-4s %s  %s\n' \
+  mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+  if [ "$mt" -lt "$CUTOFF" ] 2>/dev/null; then
+    tag="  [pre-$CUTOFF_DATE]"
+    { [ "$o" -gt 0 ] && [ "$m" -gt 0 ]; } && tag="  <<< CANDIDATE (pre-$CUTOFF_DATE, ZCU-aware)"
+  else
+    tag="  (built during 14-20 Jul rework -- suspect)"
+  fi
+  printf '  %-16s new=%-4s aux=%-4s zcu=%-4s %s  %s%s\n' \
     "$(date -r "$f" '+%Y-%m-%d %H:%M' 2>/dev/null || echo '?')" \
-    "$n" "$o" "$m" "$(sha256sum "$f" | cut -c1-12)" "$f"
+    "$n" "$o" "$m" "$(sha256sum "$f" | cut -c1-12)" "$f" "$tag"
 }
+
 
 hr "0. what is running right now"
 systemctl cat stratum-aws-scrypt --no-pager 2>/dev/null | grep -E 'ExecStart|WorkingDirectory' | sed 's/^/   /'
@@ -84,18 +100,21 @@ for f in $(grep -rl 'submitauxblock' /home/ubuntu /root --include='db.cpp' 2>/de
   grep -n -B3 -A8 'submitauxblock' "$f" | sed 's/^/      /'
 done
 
-hr "5. TIMELINE -- what happened around 11-20 Jul"
-echo "   -- mtimes of every stratum binary, oldest first:"
+hr "5. TIMELINE -- what overwrote the good binary during 13-20 Jul"
+echo "   -- mtimes of every stratum binary, oldest first (cutoff = $CUTOFF_DATE):"
 find / -xdev -type f -name 'stratum' -perm -u+x 2>/dev/null \
   -printf '%TY-%Tm-%Td %TH:%TM  %p\n' | sort | sed 's/^/      /'
-echo "   -- dpkg/apt + shell history around the change window:"
-ls -la /var/log/apt/history.log* 2>/dev/null | sed 's/^/      /'
-zgrep -h -A3 '2026-07-1[0-9]\|2026-07-20' /var/log/apt/history.log* 2>/dev/null | head -40 | sed 's/^/      /'
+echo "   -- anything under /var/stratum modified in the 13-20 Jul window:"
+find /var/stratum -maxdepth 2 -newermt "$CUTOFF_DATE" ! -newermt 2026-07-21 \
+  -printf '%TY-%Tm-%Td %TH:%TM  %p\n' 2>/dev/null | sort | head -40 | sed 's/^/      /'
+echo "   -- dpkg/apt around the change window:"
+zgrep -h -A3 '2026-07-0[6-9]\|2026-07-1[0-9]\|2026-07-20' /var/log/apt/history.log* 2>/dev/null | head -40 | sed 's/^/      /'
 for h in /root/.bash_history /home/ubuntu/.bash_history; do
   [ -f "$h" ] || continue
   echo "      -- $h: install/make/systemctl lines"
   grep -nE 'install .*stratum|make |systemctl (restart|stop) stratum|cp .*stratum' "$h" 2>/dev/null | tail -40 | sed 's/^/         /'
 done
+
 
 hr "6. ZCU evidence in the pool DB (when did it last actually work?)"
 SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
@@ -113,7 +132,8 @@ du -sh /var/stratum/*.log /var/stratum/logs 2>/dev/null | sort -rh | head -5 | s
 
 echo
 echo "READ THE RESULT LIKE THIS:"
-echo "  * any binary with aux>0 AND zcu>0 dated before 20 Jul  = the build that worked. Keep it."
-echo "  * source tree with ZCU code but a stale binary          = recompile THAT tree, no GitHub port."
-echo "  * nothing anywhere                                      = ZCU lived in config only; check section 6."
+echo "  * line marked <<< CANDIDATE  = pre-$CUTOFF_DATE and ZCU-aware. That's the build to restore."
+echo "  * source tree with ZCU code but a stale binary = recompile THAT tree, no GitHub port."
+echo "  * nothing anywhere = ZCU lived in config only; check section 6."
+
 echo "zcu-archaeology $ARCH_VERSION done -- nothing was modified."
