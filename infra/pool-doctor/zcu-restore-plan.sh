@@ -15,8 +15,12 @@
 # This script does NOT stop, start, install or modify anything. It only diffs.
 #
 # VERSION LOG -- bump on every change, newest first.
+#   v2  2026-08-13  FIX: GNU diff has no --include, so v1 sections 2-3 were
+#                   silently empty. Now enumerates .cpp/.h itself. Section 4
+#                   no longer matches .o files and reads coins.auxpow from the
+#                   DB. Section 5 compares real iniparser keys, not noise.
 #   v1  2026-08-13  First cut.
-PLAN_VERSION="v1"
+PLAN_VERSION="v2"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 hr() { printf '\n=== %s ===\n' "$*"; }
