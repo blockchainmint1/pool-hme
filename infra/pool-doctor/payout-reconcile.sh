@@ -179,8 +179,9 @@ if [ -n "$FOCUS" ]; then
        WHERE a.username LIKE '%$FOCUS%' OR a.doge_payout_address='$FOCUS'
        ORDER BY p.id DESC LIMIT 20"
   if [ -n "$LADDR" ]; then
+    TXSEL="''"; [ -n "$LTX" ] && TXSEL="LEFT(IFNULL($LTX,''),24)"
     MY "SELECT id, $LADDR addr, ROUND(amount,2) amount, status,
-            LEFT(IFNULL(${LTX:-'\'\''},''),24) tx, LEFT(IFNULL(error,''),40) error,
+            $TXSEL tx, LEFT(IFNULL(error,''),40) error,
             FROM_UNIXTIME(created_at) created, FROM_UNIXTIME(paid_at) paid
          FROM doge_payout_ledger WHERE $LADDR='$FOCUS'
          ORDER BY created_at DESC LIMIT 25"
