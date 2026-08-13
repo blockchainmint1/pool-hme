@@ -415,8 +415,10 @@ prev = 0
 for b, _ in buckets:
     print(f"    <= {b:>6}x   {counts[b]}")
 print(f"    >  10000x   {sum(1 for r in ratios if r > 10000)}")
-print(f"\n  best blob: {best:,.1f}x the target"
-      f"   (implied share diff ~{DIFF1/ (int((work.get('target') or '0').replace('0x',''),16) or 1) / max(best,1e-9):,.0f})")
+print(f"\n  best blob: {best:,.1f}x the aux target"
+      f"   (aux diff ~{DIFF1/tgt:,.0f}, so the fleet's best share was"
+      f" ~1/{max(best,1e-9):,.0f} of it)")
+
 
 if winners:
     s, hdr, disp, tgt = winners[0]
