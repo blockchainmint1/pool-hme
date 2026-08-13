@@ -121,30 +121,45 @@ if [ "$AUXTOT" -eq 0 ]; then
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
-SHADOW=0; REAL=0
+SHADOW=0; REAL=0; GATE=0
 pgrep -f '/opt/zcu-adapter/adapter-capture.py' >/dev/null 2>&1 && SHADOW=1
+pgrep -f '/opt/zcu-adapter/adapter-gate.py' >/dev/null 2>&1 && GATE=1
 pgrep -f '/opt/zcu-adapter/adapter.py' >/dev/null 2>&1 && REAL=1
 LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
 
 if [ "$REAL" -eq 1 ]; then
   bad "REAL ZCU adapter (adapter.py) is running -- this is the 13 Aug crash path"
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
-elif [ "$SHADOW" -eq 1 ]; then
-  ok "ZCU adapter on :8749 is the SHADOW (capture-only, always-ACK) -- submits cannot be rejected, deadlock path disarmed"
-  if [ "$ZCU_LIVE" -gt 0 ]; then
-    ok "ZCU is in the aux rotation ($ZCU_LIVE recent lines) -- expected while shadow is capturing"
+elif [ "$GATE" -eq 1 ] || [ "$SHADOW" -eq 1 ]; then
+  if [ "$GATE" -eq 1 ]; then
+    ok "ZCU adapter on :8749 is the GATE (target-checked, always-ACK) -- only winners reach geth, submitauxblock never returns an error"
   else
-    warn "shadow is up but no ZCU lines in the log yet -- stratum has not picked ZCU back up"
+    ok "ZCU adapter on :8749 is the SHADOW (capture-only, always-ACK) -- submits cannot be rejected, deadlock path disarmed"
   fi
-  CAP=$(grep -c 'CAPTURED' /var/log/zcu-shadow.log 2>/dev/null | tr -dc '0-9'); CAP=${CAP:-0}
-  echo "       captured submits so far: $CAP   (VERIFY once >= 3)"
+  if [ "$ZCU_LIVE" -gt 0 ]; then
+    ok "ZCU is in the aux rotation ($ZCU_LIVE recent lines) -- expected"
+  else
+    warn "adapter is up but no ZCU lines in the log yet -- stratum has not picked ZCU back up"
+  fi
+  if [ "$GATE" -eq 1 ]; then
+    MISS=$(grep -c '"kind": "gated_miss"' /var/log/zcu-capture.jsonl 2>/dev/null | tr -dc '0-9'); MISS=${MISS:-0}
+    FWD=$(grep -c 'FORWARDING to geth' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); FWD=${FWD:-0}
+    ACC=$(grep -c 'ZCU BLOCK ACCEPTED' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); ACC=${ACC:-0}
+    REJ=$(grep -c 'geth REJECTED a gated winner' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); REJ=${REJ:-0}
+    echo "       gated misses dropped: $MISS   forwarded: $FWD   accepted: $ACC   rejected: $REJ"
+    [ "$REJ" -gt 0 ] && warn "geth rejected $REJ gated winner(s) -- stratum was still ACKed, but investigate before trusting the gate"
+  else
+    CAP=$(grep -c 'CAPTURED' /var/log/zcu-shadow.log 2>/dev/null | tr -dc '0-9'); CAP=${CAP:-0}
+    echo "       captured submits so far: $CAP   (VERIFY once >= 3)"
+  fi
   ZERR=$(tail -n 2000 "$LOG" 2>/dev/null | grep -i 'Zero Chill\|ZCU' | grep -ic 'dead lock\|parent work\|auxpow payload' || true)
   ZERR=$(echo "${ZERR:-0}" | head -1 | tr -dc '0-9'); ZERR=${ZERR:-0}
   if [ "$ZERR" -gt 0 ]; then
-    bad "ZCU submit/validation errors present ($ZERR) even with shadow up -- STOP the shadow: curl -fsSL https://pool.honest.money/install/zcu-shadow.sh | sudo bash -s STOP"
+    bad "ZCU submit/validation errors present ($ZERR) -- STOP the adapter: curl -fsSL https://pool.honest.money/install/zcu-gate.sh | sudo bash -s STOP"
   else
     ok "no ZCU submit-rejection or deadlock lines"
   fi
+
 elif [ "$LISTEN" -eq 1 ]; then
   bad "something is LISTENING on :8749 but it is neither the shadow nor a known adapter -- identify it before doing anything else"
 else
