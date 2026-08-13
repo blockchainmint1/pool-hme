@@ -143,14 +143,27 @@ cp -a "$ZCU_SRC/." "$WORK/" || { bad "copy failed"; exit 1; }
 cd "$WORK" || exit 1
 
 # ---- patch 1: db.cpp allowlist = ISK, TXC, ZCU (no DOGE) -------------------------
+# v3: rewrite the whole line that guards auxpow_rpc_mode=1, preserving its
+# indentation, instead of matching a paren count that varies between trees.
 if [ "$NEED_DB" = 1 ]; then
-  python3 - "$WORK/db.cpp" <<'PY'
-import re,sys
-p=sys.argv[1]; s=open(p).read()
-new='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "ZCU"))'
-s2,n=re.subn(r'if\(!strcmp\(coind->symbol, "ISK"\).*?\)\)\)', new, s, count=1, flags=re.S)
-open(p,'w').write(s2)
-print("   db.cpp allowlist patched" if n else "   db.cpp: PATTERN NOT FOUND -- patch skipped")
+  python3 - "$WORK/db.cpp" <<'PY' || { echo "   db.cpp patch FAILED"; exit 1; }
+import sys
+p=sys.argv[1]; L=open(p).read().splitlines(True)
+tgt='if(!strcmp(coind->symbol, "ISK") || !strcmp(coind->symbol, "TXC") || !strcmp(coind->symbol, "ZCU"))\n'
+hits=[i for i,l in enumerate(L)
+      if 'auxpow_rpc_mode = 1' in l and i>0 and 'coind->symbol' in L[i-1] and L[i-1].lstrip().startswith('if(')]
+if not hits:
+    print("   db.cpp: allowlist guard line not found -- ABORT (do not ship a DOGE regression)")
+    sys.exit(1)
+for i in hits:
+    g=i-1
+    indent=L[g][:len(L[g])-len(L[g].lstrip())]
+    L[g]=indent+tgt
+open(p,'w').writelines(L)
+s=open(p).read()
+if '"DOGE"' in s and 'auxpow_rpc_mode' in s.split('"DOGE"')[0][-400:]:
+    print("   db.cpp: DOGE STILL in the allowlist after patch -- ABORT"); sys.exit(1)
+print("   db.cpp allowlist patched -> ISK || TXC || ZCU  (%d site(s))" % len(hits))
 PY
 fi
 
