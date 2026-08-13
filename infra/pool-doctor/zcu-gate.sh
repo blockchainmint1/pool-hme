@@ -368,8 +368,18 @@ HANDLERS = {
     "getauxblock": m_createauxblock,
     "getblocktemplate": m_getblocktemplate,
     "listsinceblock": m_listsinceblock,
+    "getbalance": m_getbalance,
     "submitauxblock": m_submitauxblock,
+    # The forward-ported stratum calls the geth-style names directly, lowercased
+    # by our dispatcher. Without these aliases they fell through to the
+    # "method not supported" error and ZCU never entered the job cycle.
+    # scrypt_submitauxblock MUST map to the gated handler -- otherwise submits
+    # would bypass the target filter entirely (the 13 Aug deadlock path).
+    "scrypt_createauxblock": m_createauxblock,
+    "scrypt_getauxblock": m_createauxblock,
+    "scrypt_submitauxblock": m_submitauxblock,
 }
+
 
 
 async def handle(request):
