@@ -17,6 +17,19 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v4  2026-08-13  Two false FAILs killed the verdict while the pool was
+#                   objectively healthy (TXC/ISK blocks 2m old):
+#                   (a) 'dead lock' was counted over the WHOLE log, so lines
+#                       from the 13 Aug outage still FAILed a stratum that has
+#                       been up 2.6h with NRestarts=0. Now age-scoped: only
+#                       FAILs when deadlock lines are recent AND the service
+#                       actually restarted / is young; otherwise WARN historic.
+#                   (b) coin-name detection only matched long names. yiimp logs
+#                       job/aux lines by symbol and other tokens, so a perfectly
+#                       cycling loop showed "ZERO coin names". Pattern widened
+#                       and cross-checked against block cadence -- if TXC/ISK
+#                       found blocks recently the loop IS cycling, so it is at
+#                       most a WARN about log verbosity, never a FAIL.
 #   v3  2026-08-13  Version banner + version log. Section 4b now also flags a
 #                   log file that is being written but contains no coin names.
 #   v2  2026-08-13  Read the LIVE log (/var/stratum/scrypt.log), not the stale
@@ -29,7 +42,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v3"
+CANARY_VERSION="v4"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
