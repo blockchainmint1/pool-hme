@@ -50,3 +50,20 @@ sudo strings /var/stratum/stratum | grep -c 'ZCU full256 gate'
 because the running binary lacks it. If the live binary already exports
 `scrypt_submitAuxBlock` + `ZCU full256 gate`, the shim is redundant and the correct
 move is to configure ZCU natively rather than run an adapter on :8749.
+
+## Newer repos checked 13 Aug 2026
+
+- `headsortales/hme-yiimp` (last commit 2026-06-19) — full pool stack (web/, sql/ schema,
+  systemd/, cron evidence) whose `stratum/` tree is **byte-identical** to
+  `blockchainmint1/pool-yiimp-zcu` (`diff -rq` clean). So there is no newer stratum source;
+  the ZCU design above is still the authoritative one. Use hme-yiimp for the yiimp web +
+  schema side, pool-yiimp-zcu (or hme-yiimp/stratum, same thing) for stratum.
+- `headsortales/zcu-geth` — the ZCU geth node source, commit
+  `0060dcca0fb2ece1f55950497d7156fe87028ca9` ("Fix ZCU batch header retarget validation"),
+  branch phase4-auxpow-merged-mining, deployed binary sha256
+  `50e5f657d0a081cb19c56e7488b31c5daa80b2b75d0ad0af6a127167698bff77`, required coinbase
+  `0xe3Aa1b921b0865E4092EB2CE2672Fcac3990Bdfe` from height 1.
+  `zcu-display-parentwork-note-20260523.md`: geth's `verifyAuxPoWParentWork` compares the
+  **display-order (byte-reversed) scrypt hash** against the ZCU target — raw order rejects
+  every valid share (`scrypt: invalid auxpow parent work`). This confirms the gate maths in
+  `zcu-gate.sh` (`int.from_bytes(h[::-1],'big')`) and stratum's `compare=display` full256 gate.
