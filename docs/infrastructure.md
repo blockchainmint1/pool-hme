@@ -590,3 +590,85 @@ sudo tail -n 0 -F /var/stratum/scrypt.log | grep -i 'error getblocktemplate'
 A low TH/s reading with steady shares/min is the yiimp estimator sawtooth,
 not lost hashpower. Do not place an emergency NiceHash rental on that
 number alone — check the socket count first.
+
+## 13. ZCU restoration — gate + forward-ported binary (staged 13 Aug 2026)
+
+**Status:** Binary built and verified. Gate adapter ready. Awaiting
+maintenance window deployment.
+
+### The fix (two parts)
+
+1. **Gate adapter** (`zcu-gate.sh`, source `infra/pool-doctor/zcu-gate.sh`):
+   Sits on port 8749 between stratum and geth (8747). Scrypt-checks every
+   `submitauxblock` offline against the target recorded at `createauxblock`
+   time. Misses are ACKed `true` and dropped — geth never sees them. Only
+   target-meeting blobs (~3 in 17,000) are forwarded. Even a forwarded
+   blob that geth rejects still returns `true` to stratum. The deadlock
+   path (submit error → stratum kills itself) is **structurally unreachable**.
+   Rate-limited to 6 forwards/min. `ZCU_DRY_RUN=1` makes it forward nothing
+   (pure shadow) while still ACKing every submit.
+
+2. **Forward-ported binary** (`zcu-forwardport.sh` v4): ZCU-capable binary
+   built from the 3 Jun `PROD4B` source tree with two LIVE-side fixes
+   forward-ported: (a) NiceHash difficulty clamp in `client.cpp`, (b)
+   `db.cpp` allowlist changed to `ISK || TXC || ZCU` so DOGE stays at
+   `auxpow_rpc_mode=0` (the ~20% DOGE accept bug). The ZCU tree's
+   thread-safety fixes (log-reopen mutex, aux snapshot under lock,
+   commitment output) are preserved.
+
+   Staged at: `/root/ZCU-FWDPORT-20260813T110125Z/stratum`
+   Build log:  `/root/ZCU-FWDPORT-20260813T110125Z/build.log`
+
+### VERIFY proof (13 Aug 2026)
+
+17,143 captured blobs were scrypt-checked offline. 3 met the ZCU aux
+target. The auxpow blob format and parent-work maths are **both correct**.
+The only defect was stratum submitting every share to geth with no filter —
+geth rejected ~99.98% and a rejection is what tripped the deadlock detector.
+The gate is that filter.
+
+### Deployment sequence (maintenance window)
+
+**Preconditions:** AMI snapshot taken. `pool-snapshot.sh SAVE + VERIFY`
+completed. Canary baseline clean.
+
+```bash
+# 1. Install the gate (no restart, zero downtime — current binary ignores ZCU)
+curl -fsSL "https://pool.honest.money/install/zcu-gate.sh?v=$(date +%s)" | sudo bash -s INSTALL
+#    Self-tests: junk submit must return {"result": true ...}
+
+# 2. Swap the binary (brief restart, ~5s downtime)
+sudo cp -a /var/stratum/stratum /var/stratum/stratum.rollback
+sudo install -m755 /root/ZCU-FWDPORT-20260813T110125Z/stratum /var/stratum/stratum
+sudo systemctl restart stratum-aws-scrypt
+
+# 3. Canary — NRestarts must stay 0, TXC/ISK blocks must continue
+curl -fsSL "https://pool.honest.money/install/mining-canary.sh?v=$(date +%s)" | sudo bash
+
+# 4. Monitor the gate — watch for WINNER / ACCEPTED lines
+sudo tail -f /var/log/zcu-gate.log
+curl -fsSL "https://pool.honest.money/install/zcu-gate.sh?v=$(date +%s)" | sudo bash -s STATUS
+```
+
+### Rollback (always available)
+
+```bash
+# Stop the gate — drops ZCU from the rotation immediately (safe, no deadlock)
+curl -fsSL "https://pool.honest.money/install/zcu-gate.sh?v=$(date +%s)" | sudo bash -s STOP
+
+# Restore the old binary
+sudo install -m755 /var/stratum/stratum.rollback /var/stratum/stratum
+sudo systemctl restart stratum-aws-scrypt
+```
+
+### Conservative option
+
+Deploy the gate with `ZCU_DRY_RUN=1` first (forwards nothing, pure shadow
+mode). Verify canary is clean for 30–60 min. Then stop the gate and reinstall
+without `DRY_RUN` to start forwarding real winners.
+
+### Known gap
+
+The gate runs via `nohup`, not a systemd unit. If the box reboots, the gate
+dies and ZCU drops out of the rotation (safe — no deadlock, just no ZCU
+blocks until manually restarted). Follow-up: convert to a systemd service.
