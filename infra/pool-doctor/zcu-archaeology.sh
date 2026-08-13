@@ -32,16 +32,30 @@ NEW_SYMS='scrypt_submitAuxBlock|ZCU full256 gate|ZCUAUXCOMMIT|zcu_submit_from_lt
 OLD_SYMS='submitauxblock|createauxblock|getauxblock'
 NAME_SYMS='Zero Chill|ZCU'
 
+# Anything built on or after this date is from the 14-20 Jul emergency period
+# and is NOT trustworthy as "the build that worked". ZCU was last known-good
+# before 13 Jul 2026.
+CUTOFF_DATE=${CUTOFF_DATE:-2026-07-13}
+CUTOFF=$(date -u -d "$CUTOFF_DATE" +%s 2>/dev/null || echo 1768262400)
+
 scan_bin() { # scan_bin <path>
-  local f="$1" s n o m
+  local f="$1" s n o m mt tag=""
   s=$(strings -a "$f" 2>/dev/null)
   n=$(printf '%s' "$s" | grep -cEi "$NEW_SYMS")
   o=$(printf '%s' "$s" | grep -cEi "$OLD_SYMS")
   m=$(printf '%s' "$s" | grep -cE "$NAME_SYMS")
-  printf '  %-16s new=%-4s aux=%-4s zcu=%-4s %s  %s\n' \
+  mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+  if [ "$mt" -lt "$CUTOFF" ] 2>/dev/null; then
+    tag="  [pre-$CUTOFF_DATE]"
+    { [ "$o" -gt 0 ] && [ "$m" -gt 0 ]; } && tag="  <<< CANDIDATE (pre-$CUTOFF_DATE, ZCU-aware)"
+  else
+    tag="  (built during 14-20 Jul rework -- suspect)"
+  fi
+  printf '  %-16s new=%-4s aux=%-4s zcu=%-4s %s  %s%s\n' \
     "$(date -r "$f" '+%Y-%m-%d %H:%M' 2>/dev/null || echo '?')" \
-    "$n" "$o" "$m" "$(sha256sum "$f" | cut -c1-12)" "$f"
+    "$n" "$o" "$m" "$(sha256sum "$f" | cut -c1-12)" "$f" "$tag"
 }
+
 
 hr "0. what is running right now"
 systemctl cat stratum-aws-scrypt --no-pager 2>/dev/null | grep -E 'ExecStart|WorkingDirectory' | sed 's/^/   /'
