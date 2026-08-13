@@ -190,6 +190,35 @@ else:
 PY
 fi
 
+hr "4b. backfill algo sources the archived ZCU tree is missing"
+# The 3 Jun archive was taken after a `make clean` that also removed some algo
+# sources (algos/ar2/* first offender: "No rule to make target 'ar2/core.c'").
+# Those files are pure hashing code, identical in both trees, and are NOT part
+# of the ZCU feature -- so taking LIVE's copy is safe. ADD ONLY: any file the
+# ZCU tree already has is left exactly as it is.
+added=0
+if [ -d "$LIVE_SRC/algos" ]; then
+  while IFS= read -r rel; do
+    if [ ! -e "$WORK/algos/$rel" ]; then
+      mkdir -p "$WORK/algos/$(dirname "$rel")"
+      cp -a "$LIVE_SRC/algos/$rel" "$WORK/algos/$rel" && added=$((added+1))
+      [ "$added" -le 12 ] && echo "   + algos/$rel"
+    fi
+  done < <(cd "$LIVE_SRC/algos" && find . \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name 'Makefile' \) | sed 's|^\./||')
+fi
+[ "$added" -gt 12 ] && echo "   ... and $((added-12)) more"
+if [ "$added" -gt 0 ]; then
+  ok "backfilled $added missing algo source file(s) from the LIVE tree"
+else
+  ok "algos tree already complete -- nothing backfilled"
+fi
+if [ ! -f "$WORK/algos/ar2/core.c" ]; then
+  bad "algos/ar2/core.c is missing from BOTH trees -- cannot build"
+  echo "   find another copy:  sudo find /root /home/ubuntu -path '*algos/ar2/core.c' 2>/dev/null"
+  exit 1
+fi
+ok "algos/ar2/core.c present"
+
 hr "5. compile (dependency order -- parallel make races on these subdirs)"
 LOG=$WORK/build.log
 {
