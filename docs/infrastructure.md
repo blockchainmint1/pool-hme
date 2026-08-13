@@ -593,8 +593,34 @@ number alone — check the socket count first.
 
 ## 13. ZCU restoration — gate + forward-ported binary (staged 13 Aug 2026)
 
-**Status:** Binary built and verified. Gate adapter ready. Awaiting
-maintenance window deployment.
+**Status (13 Aug 11:16 UTC):** Forward-ported binary is **LIVE** on
+`/var/stratum/stratum` (rollback at `/var/stratum/stratum.rollback`); canary
+ALL GREEN after the swap. Gate is **LIVE in dry-run** as systemd unit
+`zcu-gate` on :8749. ZCU is still **out of the aux rotation** — the last
+step is `zcu-rotate.sh ON`.
+
+### How ZCU enters/leaves the rotation
+
+Not via `scrypt.conf`. yiimp's scrypt stratum builds its aux-child list from
+the **`coins` table**. `infra/pool-doctor/zcu-rotate.sh` is the only supported
+way to flip it:
+
+```bash
+curl -fsSL "https://pool.honest.money/install/zcu-rotate.sh?v=$(date +%s)" | sudo bash -s STATUS
+curl -fsSL "https://pool.honest.money/install/zcu-rotate.sh?v=$(date +%s)" | sudo bash -s ON    # coins.enable=1, rpcport=8749, restart
+curl -fsSL "https://pool.honest.money/install/zcu-rotate.sh?v=$(date +%s)" | sudo bash -s OFF   # rollback, ~5s
+```
+
+`ON` refuses unless the gate is on :8749, geth on :8747, the live binary has
+ZCU symbols, and a junk submit ACKs `true`. It auto-reverts if `dead lock`
+appears in the 30s sample after restart.
+
+### Gate is a systemd unit (v2)
+
+`zcu-gate.service`, env in `/etc/zcu-gate.env`, `Restart=always`, logs to
+`/var/log/zcu-gate.log`. v1's `nohup` launch silently died and `START` was an
+unrecognised mode that did nothing — both fixed in v2.
+
 
 ### The fix (two parts)
 
