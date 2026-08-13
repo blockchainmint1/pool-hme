@@ -44,7 +44,7 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$*"; FAIL=1; }
 warn() { printf '  \033[33mWARN\033[0m  %s\n' "$*"; }
 hr()   { printf '\n===== %s\n' "$*"; }
 
-echo "mining-canary v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "mining-canary v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 ##############################################################################
 hr "1. stratum process health  (THE check that would have caught 13 Aug)"
