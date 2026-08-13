@@ -94,14 +94,24 @@ done
 
 
 hr "5. config compatibility -- would scrypt.conf still parse?"
-echo "   -- coin sections currently configured:"
+echo "   -- scrypt.conf sections (note: coins come from the DB coins table, not this file):"
 grep -nE '^\[|^[[:space:]]*(name|symbol|algo|auxpow|enable)' /var/stratum/scrypt.conf 2>/dev/null \
   | sed -E 's/(password|rpcpassword|rpcuser)([[:space:]]*=).*/\1\2 ***MASKED***/I' | head -60 | sed 's/^/      /'
-echo "   -- config keys the LIVE binary knows but the ZCU binary does not:"
-comm -23 \
-  <(strings -a "$LIVE_BIN" 2>/dev/null | grep -oE '^[a-z_]{4,24}$' | sort -u) \
-  <(strings -a "$ZCU_BIN"  2>/dev/null | grep -oE '^[a-z_]{4,24}$' | sort -u) \
-  | head -40 | sed 's/^/      /'
+echo "   -- iniparser keys each binary actually reads (v1 compared random string noise):"
+CFGKEYS='STRATUM:|SQL:|TCP:|API:|WEBSITE:|:host|:port|:algo|:difficulty|:password|:database|:username|:server'
+for b in "$ZCU_BIN" "$LIVE_BIN"; do
+  [ -f "$b" ] || continue
+  strings -a "$b" | grep -aoE '(STRATUM|SQL|TCP|API|WEBSITE):[a-z_]+' | sort -u > "/tmp/.k.$(basename "$b")"
+  printf '      %-46s keys=%s\n' "$(basename "$b")" "$(wc -l < "/tmp/.k.$(basename "$b")")"
+done
+echo "      -- keys the LIVE binary reads that the ZCU binary does NOT (config risk):"
+comm -13 "/tmp/.k.$(basename "$ZCU_BIN")" "/tmp/.k.$(basename "$LIVE_BIN")" 2>/dev/null | sed 's/^/         /' \
+  || echo "         (none)"
+echo "      -- keys the ZCU binary reads that LIVE does not (new config it will want):"
+comm -23 "/tmp/.k.$(basename "$ZCU_BIN")" "/tmp/.k.$(basename "$LIVE_BIN")" 2>/dev/null | sed 's/^/         /' \
+  || echo "         (none)"
+rm -f /tmp/.k.stratum*
+
 
 hr "6. current health -- the baseline we must not regress"
 systemctl is-active stratum-aws-scrypt 2>/dev/null | sed 's/^/      service: /'
