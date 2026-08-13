@@ -580,7 +580,11 @@ TXC and ISK down with it, roughly every 6 minutes.
 sudo ss -tn state established '( sport = :3433 )' | wc -l   # ~1200+ = fleet present
 sudo journalctl -u stratum-aws-scrypt --since '-30 min' --no-pager \
   | grep -cE 'SEGV|Failed with result'                      # >0 = crash loop
-sudo grep -c 'dead lock' /var/stratum/logs/stratum-current.log
+# LIVE log is /var/stratum/scrypt.log -- logs/stratum-current.log is a rotated
+# snapshot and can be hours stale. Grepping the stale file hid 90 min of
+# 'error getblocktemplate' on 14 Aug 2026.
+sudo grep -c 'dead lock' /var/stratum/scrypt.log
+sudo tail -n 0 -F /var/stratum/scrypt.log | grep -i 'error getblocktemplate'
 ```
 
 A low TH/s reading with steady shares/min is the yiimp estimator sawtooth,
