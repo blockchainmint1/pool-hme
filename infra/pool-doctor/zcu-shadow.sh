@@ -29,7 +29,7 @@ CAP=/var/log/zcu-capture.jsonl
 PY=/opt/zcu-adapter/adapter-capture.py
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-shadow v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-shadow v3  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"
@@ -173,25 +173,55 @@ async def m_createauxblock(rid, p):
     return ok(rid, res)
 
 
+GBT_MODE = os.environ.get("ZCU_GBT_MODE", "template").lower()
+
+
 async def m_getblocktemplate(rid, p):
-    """Match what TXC/ISK's adapters do -- and NOT what 13 Aug did.
+    """The capture log settled this: stratum ONLY ever calls us with [{}].
 
-    Stratum's coind_create_job() calls getblocktemplate on every coind,
-    including pure-aux children. Answering -32601 ("method not found") makes
-    stratum treat the coin as broken and drop it from the aux rotation, which
-    is why we captured 111 refusals and zero submits.
+    It never retries with {"rules":[...]}. So the -8 "call me with rules" hint
+    we were returning was a dead end -- stratum saw an error, marked the coin
+    unusable for that job cycle, and moved on. 47 declines, 0 aux jobs.
 
-    TXC and ISK survive because their adapters return error -8 instead: the
-    method EXISTS, it just declines this particular call, so stratum keeps the
-    coin and goes on to fetch its aux hash via createauxblock.
+    So we now answer with a minimal, well-formed bitcoind template. This is NOT
+    the 13 Aug SEGV path: that crash came from a REJECTED aux submit, and this
+    adapter still acks every submit unconditionally. The template only has to
+    be shaped well enough that coind_create_job() stops bailing and goes on to
+    call createauxblock, which is the call we actually want to see.
 
-    We deliberately do NOT synthesize a fake template here. Handing the C
-    parser an unexpected template shape is the 13 Aug SEGV path. An error
-    reply is a shape stratum already handles on every job cycle today.
+    ZCU_GBT_MODE=decline restores the old -8 behaviour for A/B testing.
     """
-    record("gbt_declined", {"params": str(p)[:200]})
-    return err(rid, -8, "getblocktemplate must be called with "
-                        "{\"rules\": [\"segwit\"]}")
+    if GBT_MODE == "decline":
+        record("gbt_declined", {"params": str(p)[:200]})
+        return err(rid, -8, "getblocktemplate must be called with "
+                            "{\"rules\": [\"segwit\"]}")
+
+    r = await geth("eth_blockNumber")
+    height = int(r["result"], 16) if r.get("result") else 0
+    prev = "%064x" % height  # placeholder: aux children never mine this template
+    tmpl = {
+        "version": 536870912,
+        "rules": [],
+        "vbavailable": {},
+        "vbrequired": 0,
+        "previousblockhash": prev,
+        "transactions": [],
+        "coinbaseaux": {"flags": ""},
+        "coinbasevalue": 0,
+        "longpollid": prev + str(int(time.time())),
+        "target": "0" * 8 + "f" * 56,
+        "mintime": int(time.time()) - 600,
+        "mutable": ["time", "transactions", "prevblock"],
+        "noncerange": "00000000ffffffff",
+        "sigoplimit": 80000,
+        "sizelimit": 4000000,
+        "weightlimit": 4000000,
+        "curtime": int(time.time()),
+        "bits": "1d00ffff",
+        "height": height + 1,
+    }
+    record("gbt_served", {"params": str(p)[:200], "height": height + 1})
+    return ok(rid, tmpl)
 
 
 async def m_listsinceblock(rid, p):
@@ -399,14 +429,28 @@ if [ -f "$CAP" ]; then
   python3 - "$CAP" <<'PY'
 import sys, json, collections
 kinds = collections.Counter()
+meth = collections.Counter()
+gbtp = collections.Counter()
 last = {}
 for line in open(sys.argv[1]):
     try: o = json.loads(line)
     except Exception: continue
     kinds[o.get("kind")] += 1
+    if o.get("kind") == "unhandled":
+        meth[o.get("method") or "?"] += 1
+    if o.get("kind") in ("gbt_declined", "gbt_served"):
+        gbtp[str(o.get("params"))[:120]] += 1
     last[o.get("kind")] = o
 for k, v in kinds.most_common():
     print(f"  {k:<14} {v}")
+if meth:
+    print("\n  unhandled methods stratum asked for (these are the real gap):")
+    for m, c in meth.most_common(20):
+        print(f"    {m:<28} {c}")
+if gbtp:
+    print("\n  distinct getblocktemplate params seen:")
+    for m, c in gbtp.most_common(10):
+        print(f"    {m[:100]:<100} {c}")
 aw = last.get("auxwork")
 if aw:
     print("\n  our createauxblock reply keys:", aw.get("keys"))
