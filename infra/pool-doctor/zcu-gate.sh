@@ -29,6 +29,9 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 MODE="${1:-INSTALL}"
+MODE="$(printf '%s' "$MODE" | tr '[:lower:]' '[:upper:]')"
+# START / RESTART / UP are all aliases for INSTALL -- installing IS starting
+case "$MODE" in START|RESTART|UP) MODE=INSTALL ;; esac
 GETH_PORT=${GETH_PORT:-8747}
 PORT=${ADAPTER_PORT:-8749}
 CAP=/var/log/zcu-capture.jsonl
@@ -36,13 +39,19 @@ PY=/opt/zcu-adapter/adapter-gate.py
 LOG=/var/log/zcu-gate.log
 UNIT=stratum-aws-scrypt
 hr() { printf '\n===== %s\n' "$*"; }
-echo "zcu-gate v1  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+echo "zcu-gate v2  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
+
+case "$MODE" in
+  INSTALL|STOP|STATUS) ;;
+  *) echo "  unknown mode '$MODE'. Use INSTALL (aka START), STOP, or STATUS."; exit 1 ;;
+esac
 
 R0=$(systemctl show "$UNIT" -p NRestarts --value 2>/dev/null)
 echo "  stratum NRestarts at start = ${R0:-?}"
 
 ##############################################################################
 if [ "$MODE" = "STOP" ]; then
+  systemctl disable --now zcu-gate >/dev/null 2>&1 && echo "  zcu-gate.service stopped and disabled" || true
   pkill -f 'adapter-gate.py'    && echo "  gate adapter stopped"    || echo "  gate was not running"
   pkill -f 'adapter-capture.py' && echo "  shadow adapter stopped"  || true
   sleep 1
