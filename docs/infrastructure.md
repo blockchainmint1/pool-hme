@@ -701,3 +701,47 @@ native EVM `eth_blocknumber` height call. Bitcoin-style `gettransaction` is
 intentionally unsupported: ZCU is an EVM chain, and fabricating wallet
 transaction data would risk incorrect accounting. Those calls are harmless
 to mining and remain visible in the STATUS unhandled-method breakdown.
+
+## 14. ZCU steady state — monitoring after restoration (13 Aug 2026)
+
+ZCU went live again at 12:28 UTC on 13 Aug 2026: gate ARMED, winners forwarding,
+geth tip advanced 19386 → 19390 in ~10 minutes with LTC/DOGE/TXC/ISK untouched.
+The following three pieces are the permanent steady-state monitoring.
+
+### mining-canary.sh v5 — section 5b "ZCU chain progress"
+Records the geth tip in `/var/lib/mining-canary-zcu.tip` on every run and reports:
+- tip delta since the previous canary run (WARN if 0 after ≥20m)
+- yiimp DB ZCU height vs geth tip (WARN if lag > 25 — this is what the homepage shows)
+- `zcu-mainnet-yiimp-block-sync` in a failed state (FAIL)
+- count of `ambiguous yiimp auxpow payload` rejects
+
+### zcu-deadman.sh v2 — retuned, NOT removed
+The deadman stays installed permanently. Do not uninstall it because "ZCU works now":
+the flood path that took the fleet down for 90 minutes on 13 Aug can re-open on a geth
+restart, a reorg, or an unhandled RPC shape. It costs nothing while idle.
+- dry-spell trigger raised **15m → 60m** (the 15m value was a plane-ride setting and
+  false-positives on ordinary TXC/ISK variance)
+- hard triggers unchanged and never relaxed: stratum restart count increased,
+  new `dead lock, exiting` lines, stratum unit not active
+- new in v2: Telegram **notify** on every geth-accepted ZCU block and every
+  rejected gated winner, not just on a trip. Creds inherited from
+  `/etc/nicehash-watcher.env`; state counters in `/var/lib/zcu-deadman/`.
+
+### zcu-sync-timer.sh v1 — homepage freshness
+`zcu-mainnet-yiimp-block-sync` is a `Type=oneshot` unit that shipped with **no timer**,
+so the yiimp DB only advanced when someone ran it by hand — that is why the site showed
+a 13 July height while the chain was at 19390. This installs `zcu-sync.timer` which runs
+the existing sync unit every 120s. It touches nothing else.
+
+```bash
+curl -fsSL "https://pool.honest.money/install/zcu-sync-timer.sh?v=$(date +%s)" | sudo bash -s INSTALL
+curl -fsSL "https://pool.honest.money/install/zcu-deadman.sh?v=$(date +%s)"    | sudo bash -s INSTALL
+curl -fsSL "https://pool.honest.money/install/mining-canary.sh?v=$(date +%s)"  | sudo bash -s CHECK
+```
+
+### Known-benign
+`ambiguous yiimp auxpow payload: 2 candidates` — geth found two plausible auxpow blobs
+in one submit and refused to guess. Observed 1 reject in 5 forwards on 13 Aug; the next
+submit of the same hash was accepted. Only investigate if the reject count grows faster
+than accepted blocks. Future hardening: have the gate pick the candidate whose coinbase
+commits to the ZCU aux merkle root before forwarding.
