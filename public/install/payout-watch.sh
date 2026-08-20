@@ -24,7 +24,7 @@
 set -uo pipefail
 
 MODE="${1:-CHECK}"
-VERSION="v1"
+VERSION="v2"
 BIN=/usr/local/bin/payout-watch-check
 ENVF=/etc/payout-watch.env
 STATE=/var/lib/payout-watch
@@ -97,7 +97,8 @@ tg() {
 }
 # edge-triggered fault reporting: fault <key> <ok|bad> <message>
 fault() {
-  local key="$1" st="$2" msg="$3" f="$STATE/fault.$key"
+  local key st msg f
+  key="${1:-unknown}"; st="${2:-ok}"; msg="${3:-}"; f="$STATE/fault.$key"
   if [ "$st" = bad ]; then
     say "FAULT[$key] $msg"
     [ -f "$f" ] || { echo "$msg" > "$f"; tg "<b>PAYOUT FAULT</b> [$key]%0A$msg"; }
