@@ -165,17 +165,32 @@ MATCH)
     exit 0
   fi
 
-  # back up before touching the wallet -- daemon writes as ubuntu, stage first
+  # back up before touching the wallet -- daemon writes as ubuntu, stage first.
+  # Dogecoin 1.14's backupwallet can return success while writing nothing we can
+  # see, so we VERIFY the file exists and fall back to copying wallet.dat.
   lc=$(printf '%s' "$COIN" | tr 'A-Z' 'a-z')
   stage=/home/ubuntu/.wallet-backup-stage; mkdir -p "$stage" "$BK"
   chown ubuntu:ubuntu "$stage" 2>/dev/null; chmod 700 "$stage" "$BK"
   tmp="$stage/$lc-wallet-before-match-$STAMP.dat"
-  if err=$(cli "$COIN" backupwallet "$tmp" 2>&1); then
-    mv -f "$tmp" "$BK/$lc-wallet-before-match-$STAMP.dat"; chmod 600 "$BK/$lc-wallet-before-match-$STAMP.dat"
-    echo "  wallet backed up -> $BK/$lc-wallet-before-match-$STAMP.dat"
+  dst="$BK/$lc-wallet-before-match-$STAMP.dat"
+  err=$(cli "$COIN" backupwallet "$tmp" 2>&1)
+  if [ -s "$tmp" ]; then
+    mv -f "$tmp" "$dst"
   else
-    echo "  !! backupwallet failed -- ABORT: ${err:-<no output>}"; exit 1
+    case "$COIN" in
+      LTC)  src=/home/ubuntu/.litecoin/pool/wallet.dat; [ -s "$src" ] || src=/home/ubuntu/.litecoin/wallet.dat ;;
+      DOGE) src=/home/ubuntu/.dogecoin/wallet.dat ;;
+    esac
+    if [ -s "$src" ]; then
+      cp -f "$src" "$dst"
+      echo "  (backupwallet wrote nothing: ${err:-<no output>}; copied $src instead)"
+    else
+      echo "  !! backupwallet failed AND no wallet.dat found -- ABORT: ${err:-<no output>}"; exit 1
+    fi
   fi
+  [ -s "$dst" ] || { echo "  !! backup is empty -- ABORT"; exit 1; }
+  chmod 600 "$dst"
+  echo "  wallet backed up -> $dst ($(stat -c%s "$dst") bytes)"
 
   # secret is never an argument; prompt on the real terminal (stdin is the curl pipe)
   f="/root/owner-key.$COIN"; S=
