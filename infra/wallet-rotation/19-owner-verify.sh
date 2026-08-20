@@ -35,7 +35,7 @@ BK=/var/backups/pool-wallets
 STAMP=$(date -u '+%Y%m%d-%H%M%S')
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-echo "19-owner-verify v1  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
+echo "19-owner-verify v2  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>  -- binaries are NOT on $PATH; LTC is multi-wallet
   local c=$1; shift
