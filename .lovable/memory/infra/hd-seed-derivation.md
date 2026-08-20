@@ -23,3 +23,9 @@ Never trust that an address is owner-recoverable without `getaddressinfo`
 cover payout change addresses — that's expected and accepted.
 
 Scripts: `infra/wallet-rotation/19-owner-verify.sh` → `/install/owner-verify.sh`.
+
+**Dogecoin Core 1.14 RPC gaps:** no `getaddressinfo` (returns -32601 Method not
+found) and no `getaddressesbylabel`. Use `validateaddress` (it carries
+ismine/iswatchonly/account) and `getaddressesbyaccount`. Its `backupwallet` can
+report success while writing no readable file — always verify the file exists and
+fall back to copying `~/.dogecoin/wallet.dat`.
