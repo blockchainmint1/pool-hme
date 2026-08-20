@@ -86,8 +86,15 @@ backup_wallet() { # backup_wallet <COIN>
   lc=$(printf '%s' "$c" | tr 'A-Z' 'a-z')
   out="$BK/$lc-wallet-before-ownerkey-$STAMP.dat"
   mkdir -p "$BK"; chmod 700 "$BK"
+  # The daemon writes the file itself, as its own user (ubuntu) -- not as root.
+  # /var/backups/pool-wallets is root-only, so stage in a dir ubuntu can write
+  # and move it into place afterwards.
+  local stage="/home/ubuntu/.wallet-backup-stage"
+  mkdir -p "$stage"; chown ubuntu:ubuntu "$stage" 2>/dev/null; chmod 700 "$stage"
+  local tmp="$stage/$lc-wallet-before-ownerkey-$STAMP.dat"
   local err
-  if err=$(cli "$c" backupwallet "$out" 2>&1); then
+  if err=$(cli "$c" backupwallet "$tmp" 2>&1); then
+    mv -f "$tmp" "$out" && chmod 600 "$out"
     echo "  wallet backed up -> $out"
   else
     echo "  !! backupwallet failed -- ABORT and investigate"
