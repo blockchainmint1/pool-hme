@@ -23,7 +23,7 @@
 | Public stratum URL                   | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                 |
 | Old public stratum URL (being retired) | `stratum+tcp://pool.texitcoin.org:3433`                                        |
 | Yiimp frontend DB                    | MySQL `yiimpfrontend` on the same host                                         |
-| Yiimp DB user                        | `stratum` (password in `~/.my.cnf` / Ansible vault — not here)                 |
+| Yiimp DB credentials                | `/var/web/serverconfig.php` (`YAAMP_DBUSER` / `YAAMP_DBPASSWORD`); parse as root, never use placeholders |
 | Vardiff report script (workstation)  | `./infra/stratum-stack/scripts/vardiff-report.sh` (NOT on the box)             |
 
 ## 2. `/var/stratum/` file map
@@ -159,12 +159,10 @@ sudo ss -tn state established sport = :3433 | awk 'NR>1{split($5,a,":");print a[
 
 # Vardiff snapshot from the DB (from the box):
 sudo bash -c '
-  CONF=/var/stratum/config/scrypt.conf
-  [ -f "$CONF" ] || CONF=/var/stratum/scrypt.conf
-  U=$(awk -F"= *" "/^username/{print \$2; exit}" "$CONF")
-  P=$(awk -F"= *" "/^password/{print \$2}" "$CONF" | tail -1)
-  D=$(awk -F"= *" "/^database/{print \$2; exit}" "$CONF")
-  mysql -u "$U" -p"$P" "$D" -e "
+  SERVERCONFIG=/var/web/serverconfig.php
+  eval "$(sed -n "s/.*define( *'\''YAAMP_DBUSER'\'' *, *'\''\([^'\'']*\)'\'').*/DBU='\''\1'\''/p;s/.*define( *'\''YAAMP_DBPASSWORD'\'' *, *'\''\([^'\'']*\)'\'').*/DBP='\''\1'\''/p" "$SERVERCONFIG")"
+  test -n "${DBU:-}" && test -n "${DBP:-}" || { echo "DB credentials not found in $SERVERCONFIG"; exit 1; }
+  mysql -u "$DBU" -p"$DBP" yiimpfrontend -e "
     SELECT
       COUNT(*) AS workers,
       ROUND(AVG(difficulty)) AS avg_d,
@@ -174,6 +172,15 @@ sudo bash -c '
     FROM workers WHERE algo=\"scrypt\";"
 '
 ```
+
+### Authoritative Yiimp DB shell pattern
+
+Do not write `<db_host>`, `<db_user>`, or `<db_password>` in commands intended
+for the host: Bash treats angle brackets as redirection. The canonical local DB
+credentials are PHP constants in `/var/web/serverconfig.php`. Existing pool
+doctor scripts parse that file. For a one-off query, run the whole parse and
+query under `sudo bash -c` so the password is neither displayed nor copied into
+shell history.
 
 ## 7. Change-management rules
 
