@@ -17,6 +17,7 @@ import { Route as PoolApiRouteImport } from './routes/pool-api'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
+import { Route as LtcRouteImport } from './routes/ltc'
 import { Route as GraphsRouteImport } from './routes/graphs'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
@@ -127,6 +128,11 @@ const MempoolRoute = MempoolRouteImport.update({
 const ManifestoRoute = ManifestoRouteImport.update({
   id: '/manifesto',
   path: '/manifesto',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LtcRoute = LtcRouteImport.update({
+  id: '/ltc',
+  path: '/ltc',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GraphsRoute = GraphsRouteImport.update({
@@ -497,6 +503,7 @@ export interface FileRoutesByFullPath {
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
@@ -578,6 +585,7 @@ export interface FileRoutesByTo {
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mining': typeof MiningRoute
   '/pool-api': typeof PoolApiRoute
@@ -659,6 +667,7 @@ export interface FileRoutesById {
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
@@ -742,6 +751,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/docs'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mempool'
     | '/mining'
@@ -823,6 +833,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/docs'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mining'
     | '/pool-api'
@@ -903,6 +914,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/docs'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mempool'
     | '/mining'
@@ -985,6 +997,7 @@ export interface RootRouteChildren {
   DiagnosticsRoute: typeof DiagnosticsRoute
   DocsRoute: typeof DocsRoute
   GraphsRoute: typeof GraphsRoute
+  LtcRoute: typeof LtcRoute
   ManifestoRoute: typeof ManifestoRoute
   MempoolRoute: typeof MempoolRouteWithChildren
   MiningRoute: typeof MiningRoute
@@ -1095,6 +1108,13 @@ declare module '@tanstack/react-router' {
       path: '/manifesto'
       fullPath: '/manifesto'
       preLoaderRoute: typeof ManifestoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ltc': {
+      id: '/ltc'
+      path: '/ltc'
+      fullPath: '/ltc'
+      preLoaderRoute: typeof LtcRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/graphs': {
@@ -1720,6 +1740,7 @@ const rootRouteChildren: RootRouteChildren = {
   DiagnosticsRoute: DiagnosticsRoute,
   DocsRoute: DocsRoute,
   GraphsRoute: GraphsRoute,
+  LtcRoute: LtcRoute,
   ManifestoRoute: ManifestoRoute,
   MempoolRoute: MempoolRouteWithChildren,
   MiningRoute: MiningRoute,
