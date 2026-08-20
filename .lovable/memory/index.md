@@ -21,6 +21,7 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 
 ## Memories
 - [LTC multi-wallet](mem://infra/ltc-multiwallet.md) — litecoin-cli MUST use `-rpcwallet=pool` or balances read 0; `rental` is empty; yiimp "orphan" LTC blocks are a bookkeeping artifact, not lost coins
+- [HD seed derivation](mem://infra/hd-seed-derivation.md) — Core `sethdseed` is NOT BIP39/BIP84, so cold-app addresses never match; use IMPORT + `owner-verify.sh MATCH` for owner-recoverable coinbase addresses
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
 - [yiimp-api deploy](mem://infra/yiimp-api-deploy.md) — How to publish updates to the yiimp-api service (bundle → publish → curl-pipe installer); DB is `yiimpfrontend`; hashstats schema notes
 - [Stratum port](mem://infra/stratum-port.md) — Scrypt stratum listens on TCP 3433 on stratum.pool.honest.money
