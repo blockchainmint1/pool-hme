@@ -181,7 +181,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.4" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.6.0" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -192,7 +192,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.5.4" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.6.0" };
 });
 
 // ============================================================================
@@ -1222,7 +1222,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.5.4",
+    version: "0.6.0",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
@@ -1232,6 +1232,7 @@ app.get("/api/v1/openapi.json", async () => ({
     "/api/v1/coins": { get: { summary: "list visible coins" } },
     "/api/v1/coins/{symbol}": { get: { summary: "one coin, incl. price/diff/hashrate" } },
     "/api/v1/coins/{symbol}/blocks": { get: { summary: "pool-found blocks for one coin" } },
+    "/api/v1/coins/{symbol}/report": { get: { summary: "coinbase address, block totals, 90d daily series, payout distribution" } },
     "/api/v1/pool/summary": { get: { summary: "one-shot dashboard payload" } },
     "/api/v1/pool/hashrate": { get: { summary: "hashrate time-series, ?window=1h|24h|7d|30d" } },
     "/api/v1/pool/effort": { get: { summary: "current-round effort per coin" } },
