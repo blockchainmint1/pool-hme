@@ -39,7 +39,7 @@ BK=/var/backups/pool-wallets
 STAMP=$(date -u '+%Y%m%d-%H%M%S')
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-echo "18-owner-key v1  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
+echo "18-owner-key v2  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>
   # Binaries are NOT on $PATH (see docs/infrastructure.md §2b). Use full paths + -conf.
@@ -70,13 +70,16 @@ read_secret() { # read_secret <COIN> -> echoes the secret
     echo "  read from $f (will be shredded)" >&2
     shred -u "$f" 2>/dev/null || rm -f "$f"
   else
-    if [ -t 0 ]; then
+    # Piped through `curl | sudo bash`, so stdin is NOT a terminal. The
+    # controlling terminal is still reachable at /dev/tty -- use that.
+    if [ -r /dev/tty ]; then
       read -r -s -p "  paste the $c secret (input hidden), then Enter: " s </dev/tty; echo >&2
     else
-      echo "  !! not a terminal. Put the secret in /root/owner-key.$c (chmod 600) and re-run." >&2
+      echo "  !! no terminal available. Put the secret in /root/owner-key.$c (chmod 600) and re-run." >&2
       return 1
     fi
   fi
+
   [ -n "$s" ] || { echo "  !! empty secret" >&2; return 1; }
   printf '%s' "$s"
 }
