@@ -86,15 +86,18 @@ export const getCoinPageData = createServerFn({ method: "GET" })
     const { symbol } = data;
     const limit = data.limit ?? 200;
 
-    const [blocksRes, report, history] = await Promise.all([
+    const [blocksRes, report] = await Promise.all([
       fetchJson<{ blocks: PoolBlock[] }>(
         `/api/v1/blocks?coin=${symbol}&limit=${limit}`,
       ).catch(() => ({ blocks: [] as PoolBlock[] })),
       fetchJson<CoinReport>(`/api/v1/coins/${symbol}/report`).catch(() => null),
-      fetchPriceHistory(symbol),
     ]);
 
     const blocks = blocksRes.blocks ?? [];
+    const earliest = blocks.length
+      ? Math.min(...blocks.map((b) => b.time)) - 86_400
+      : undefined;
+    const history = await fetchPriceHistory(symbol, earliest);
 
     return {
       symbol,
