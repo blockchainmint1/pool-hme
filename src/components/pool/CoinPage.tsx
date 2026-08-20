@@ -10,7 +10,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ArrowLeft, Coins, Wallet, Users, Layers } from "lucide-react";
+import { ArrowLeft, Coins, Wallet, Users, Layers, ExternalLink } from "lucide-react";
+import { COINBASE, explorerAddress } from "@/lib/pool/coinbase";
 import { getCoinPageData } from "@/lib/pool/coin.functions";
 import { CoinBlocksTable, CoinDot } from "./CoinBlocksTable";
 
@@ -52,6 +53,8 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
   const { data } = useSuspenseQuery(coinPageQuery(symbol));
   const copy = COPY[symbol];
   const report = data.report;
+  const known = COINBASE[symbol];
+  const coinbaseAddress = report?.coin.master_wallet ?? known.address;
 
   const daily = useMemo(() => {
     if (report?.daily?.length) {
@@ -140,36 +143,61 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
 
         <section className="space-y-3">
           <Header eyebrow="Where the coinbase goes" title="Reward destination." />
-          <div className="pool-kpi-panel rounded-lg p-5 space-y-3">
+          <div className="pool-kpi-panel rounded-lg p-5 space-y-4">
             <div className="flex items-start gap-3">
               <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1">
                 <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
-                  Coinbase address
+                  Current coinbase address
                 </div>
-                {report?.coin.master_wallet ? (
-                  <a
-                    href={copy.explorer(report.coin.master_wallet)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-sm text-pool-steel-hi break-all hover:underline"
-                  >
-                    {report.coin.master_wallet}
-                  </a>
-                ) : (
-                  <div className="font-mono text-sm text-pool-steel">
-                    Not reported by the pool API.
-                  </div>
-                )}
+                <a
+                  href={explorerAddress(symbol, coinbaseAddress)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block font-mono text-sm text-pool-steel-hi break-all hover:underline"
+                >
+                  {coinbaseAddress}
+                  <ExternalLink className="inline size-3 ml-1.5 -mt-0.5 opacity-70" />
+                </a>
+                <div className="text-[11px] font-mono text-pool-steel">
+                  live since {known.since} · view on{" "}
+                  {symbol === "LTC" ? "litecoinspace.org" : "blockchair.com"}
+                </div>
               </div>
             </div>
+
+            {known.previous && (
+              <div className="flex items-start gap-3 pt-3 border-t border-pool-hairline">
+                <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0 opacity-50" />
+                <div className="min-w-0 space-y-1">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
+                    Previous coinbase address
+                  </div>
+                  <a
+                    href={explorerAddress(symbol, known.previous)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block font-mono text-sm text-pool-steel break-all hover:underline"
+                  >
+                    {known.previous}
+                    <ExternalLink className="inline size-3 ml-1.5 -mt-0.5 opacity-70" />
+                  </a>
+                  <div className="text-[11px] font-mono text-pool-steel">
+                    blocks found before {known.since} paid here
+                  </div>
+                </div>
+              </div>
+            )}
+
             <p className="text-sm text-pool-steel leading-relaxed">
-              Block rewards are paid to the pool&apos;s {symbol} wallet, which then settles miner
-              balances on the payout schedule. The wallet keeps only a working float; everything
-              above outstanding miner liabilities is swept to cold storage the operator controls.
+              Block rewards are paid to the pool&apos;s {symbol} coinbase address, which then settles
+              miner balances on the payout schedule. The wallet keeps only a working float;
+              everything above outstanding miner liabilities is swept to cold storage the operator
+              controls.
             </p>
           </div>
         </section>
+
 
         <section className="space-y-3">
           <Header
