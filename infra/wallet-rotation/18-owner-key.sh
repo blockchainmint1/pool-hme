@@ -39,7 +39,7 @@ BK=/var/backups/pool-wallets
 STAMP=$(date -u '+%Y%m%d-%H%M%S')
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-echo "18-owner-key v2  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
+echo "18-owner-key v3  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>
   # Binaries are NOT on $PATH (see docs/infrastructure.md §2b). Use full paths + -conf.
@@ -181,8 +181,18 @@ SETCOINBASE)
   case "$COIN" in LTC|DOGE) ;; *) echo "usage: SETCOINBASE LTC|DOGE <address>"; exit 1;; esac
   ADDR=$ARG3
   [ -n "$ADDR" ] || { echo "give the address"; exit 1; }
+  # Dogecoin Core 1.14 has no getaddressinfo (-32601). Fall back to
+  # validateaddress, which carries ismine on that version.
   MINE=$(cli "$COIN" getaddressinfo "$ADDR" 2>/dev/null | grep -oE '"ismine": *(true|false)' | awk '{print $2}')
-  [ "$MINE" = true ] || { echo "  !! $COIN wallet does NOT own $ADDR -- refusing. Rewards would be unspendable."; exit 1; }
+  if [ -z "$MINE" ]; then
+    MINE=$(cli "$COIN" validateaddress "$ADDR" 2>/dev/null | grep -oE '"ismine": *(true|false)' | awk '{print $2}')
+  fi
+  if [ "$MINE" != true ]; then
+    echo "  !! $COIN wallet does NOT own $ADDR -- refusing. Rewards would be unspendable."
+    echo "     getaddressinfo/validateaddress both say ismine != true. Raw check:"
+    cli "$COIN" validateaddress "$ADDR" 2>&1 | sed 's/^/       /'
+    exit 1
+  fi
   OLD=$(mysql -N -B yiimpfrontend -e "SELECT master_wallet FROM coins WHERE symbol='$COIN';")
   echo "  old master_wallet: $OLD"
   echo "  new master_wallet: $ADDR"
