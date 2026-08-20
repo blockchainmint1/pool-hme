@@ -35,7 +35,7 @@ BK=/var/backups/pool-wallets
 STAMP=$(date -u '+%Y%m%d-%H%M%S')
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-echo "19-owner-verify v1  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
+echo "19-owner-verify v2  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>  -- binaries are NOT on $PATH; LTC is multi-wallet
   local c=$1; shift
@@ -55,15 +55,40 @@ unlock() {
 }
 jget() { grep -oE "\"$2\": *\"?[^\",}]+" <<<"$1" | head -1 | sed 's/.*: *"\?//'; }
 
+addr_info() { # addr_info <COIN> <ADDR> -- prints JSON, handling old daemons
+  local c=$1 a=$2 out
+  # Dogecoin Core 1.14 predates getaddressinfo (JSON-RPC -32601 Method not
+  # found). validateaddress there returns ismine/iswatchonly/account itself.
+  out=$(cli "$c" getaddressinfo "$a" 2>&1)
+  if grep -q '\-32601\|Method not found' <<<"$out"; then
+    out=$(cli "$c" validateaddress "$a" 2>&1)
+  fi
+  printf '%s' "$out"
+}
+owner_addresses() { # owner_addresses <COIN> -- addresses labelled owner-coinbase
+  local c=$1 out
+  out=$(cli "$c" getaddressesbylabel "owner-coinbase" 2>&1)
+  if grep -q '\-32601\|Method not found' <<<"$out"; then
+    # 1.14 uses accounts, not labels
+    out=$(cli "$c" getaddressesbyaccount "owner-coinbase" 2>&1)
+  fi
+  grep -oE '"[a-zA-Z0-9]{20,}"' <<<"$out" | tr -d '"'
+}
+
 describe_addr() { # describe_addr <COIN> <ADDR>
-  local c=$1 a=$2 info mine wat lab path
-  info=$(cli "$c" getaddressinfo "$a" 2>&1)
-  if grep -qi 'error\|Invalid' <<<"$info"; then
+  local c=$1 a=$2 info mine wat lab path valid
+  info=$(addr_info "$c" "$a")
+  if grep -qi '"code": *-\|^error\|Invalid address' <<<"$info"; then
     echo "   !! daemon rejected the address: $(head -c 160 <<<"$info")"
     return 1
   fi
+  valid=$(jget "$info" isvalid)
+  if [ "${valid:-true}" = false ]; then
+    echo "   !! $c daemon says this is not a valid $c address: $a"
+    return 1
+  fi
   mine=$(jget "$info" ismine); wat=$(jget "$info" iswatchonly)
-  path=$(jget "$info" hdkeypath); lab=$(grep -oE '"labels": *\[[^]]*\]' <<<"$info")
+  path=$(jget "$info" hdkeypath); lab=$(grep -oE '"labels": *\[[^]]*\]|"account": *"[^"]*"' <<<"$info")
   printf '   address   : %s\n' "$a"
   printf '   ismine    : %s%s\n' "${mine:-false}" "$([ "${mine:-false}" = true ] && echo '   <-- wallet holds the private key' || echo '   <-- wallet CANNOT spend this')"
   [ "${wat:-false}" = true ] && printf '   watchonly : true (visible, NOT spendable)\n'
@@ -98,7 +123,7 @@ STATE)
   echo
   echo "== 4. keys labelled owner-coinbase (imported by you, offline-recoverable)"
   for c in LTC DOGE; do
-    L=$(cli "$c" getaddressesbylabel "owner-coinbase" 2>/dev/null | grep -oE '"[a-zA-Z0-9]{20,}"' | tr -d '"')
+    L=$(owner_addresses "$c" 2>/dev/null | tr '\n' ' ')
     printf ' -- %-4s %s\n' "$c" "${L:-none}"
   done
   cat <<'EOF'
@@ -140,17 +165,32 @@ MATCH)
     exit 0
   fi
 
-  # back up before touching the wallet -- daemon writes as ubuntu, stage first
+  # back up before touching the wallet -- daemon writes as ubuntu, stage first.
+  # Dogecoin 1.14's backupwallet can return success while writing nothing we can
+  # see, so we VERIFY the file exists and fall back to copying wallet.dat.
   lc=$(printf '%s' "$COIN" | tr 'A-Z' 'a-z')
   stage=/home/ubuntu/.wallet-backup-stage; mkdir -p "$stage" "$BK"
   chown ubuntu:ubuntu "$stage" 2>/dev/null; chmod 700 "$stage" "$BK"
   tmp="$stage/$lc-wallet-before-match-$STAMP.dat"
-  if err=$(cli "$COIN" backupwallet "$tmp" 2>&1); then
-    mv -f "$tmp" "$BK/$lc-wallet-before-match-$STAMP.dat"; chmod 600 "$BK/$lc-wallet-before-match-$STAMP.dat"
-    echo "  wallet backed up -> $BK/$lc-wallet-before-match-$STAMP.dat"
+  dst="$BK/$lc-wallet-before-match-$STAMP.dat"
+  err=$(cli "$COIN" backupwallet "$tmp" 2>&1)
+  if [ -s "$tmp" ]; then
+    mv -f "$tmp" "$dst"
   else
-    echo "  !! backupwallet failed -- ABORT: ${err:-<no output>}"; exit 1
+    case "$COIN" in
+      LTC)  src=/home/ubuntu/.litecoin/pool/wallet.dat; [ -s "$src" ] || src=/home/ubuntu/.litecoin/wallet.dat ;;
+      DOGE) src=/home/ubuntu/.dogecoin/wallet.dat ;;
+    esac
+    if [ -s "$src" ]; then
+      cp -f "$src" "$dst"
+      echo "  (backupwallet wrote nothing: ${err:-<no output>}; copied $src instead)"
+    else
+      echo "  !! backupwallet failed AND no wallet.dat found -- ABORT: ${err:-<no output>}"; exit 1
+    fi
   fi
+  [ -s "$dst" ] || { echo "  !! backup is empty -- ABORT"; exit 1; }
+  chmod 600 "$dst"
+  echo "  wallet backed up -> $dst ($(stat -c%s "$dst") bytes)"
 
   # secret is never an argument; prompt on the real terminal (stdin is the curl pipe)
   f="/root/owner-key.$COIN"; S=
@@ -184,7 +224,7 @@ MATCH)
     echo
     echo "  !! MISMATCH. The key imported fine, but it does NOT derive $ADDR."
     echo "     Addresses this key DOES control:"
-    cli "$COIN" getaddressesbylabel "owner-coinbase" 2>/dev/null | grep -oE '"[a-zA-Z0-9]{20,}"' | tr -d '"' | sed 's/^/       /'
+    owner_addresses "$COIN" 2>/dev/null | sed 's/^/       /'
     echo "     Likely cause: the WIF came from a different derivation path than"
     echo "     the address you pasted. For LTC use m/84'/2'/0'/0/0 (bech32 ltc1q...),"
     echo "     for DOGE m/44'/3'/0'/0/0 (D...). Re-export the WIF for THAT exact row."
