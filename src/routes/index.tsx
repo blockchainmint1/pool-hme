@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowUpRight,
@@ -9,6 +9,7 @@ import {
   Copy,
   Check,
   ChevronRight,
+  Layers,
   ShieldCheck,
   Zap,
   CircuitBoard,
@@ -19,6 +20,30 @@ import {
 import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
 import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
 import { ResilienceBand } from "@/components/pool/ResilienceBand";
+import { CoinBlocksTable } from "@/components/pool/CoinBlocksTable";
+import { coinPageQuery, type CoinSymbol } from "@/components/pool/CoinPage";
+
+function CoinRecentBlocks({ symbol }: { symbol: CoinSymbol }) {
+  const { data, isLoading } = useQuery(coinPageQuery(symbol));
+  if (isLoading && !data) {
+    return (
+      <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
+        Loading {symbol} blocks…
+      </div>
+    );
+  }
+  return (
+    <CoinBlocksTable
+      blocks={data?.blocks ?? []}
+      symbol={symbol}
+      nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
+      pageSize={10}
+      detailsTo={symbol === "LTC" ? "/ltc" : "/doge"}
+      emptyLabel={`No ${symbol} blocks recorded yet.`}
+    />
+  );
+}
+
 
 const poolSummaryQuery = queryOptions({
   queryKey: ["pool", "summary"],
