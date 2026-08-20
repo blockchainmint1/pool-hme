@@ -10,7 +10,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ArrowLeft, Coins, Wallet, Users, Layers } from "lucide-react";
+import { ArrowLeft, Coins, Wallet, Users, Layers, ExternalLink } from "lucide-react";
+import { COINBASE, explorerAddress } from "@/lib/pool/coinbase";
 import { getCoinPageData } from "@/lib/pool/coin.functions";
 import { CoinBlocksTable, CoinDot } from "./CoinBlocksTable";
 
@@ -52,6 +53,8 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
   const { data } = useSuspenseQuery(coinPageQuery(symbol));
   const copy = COPY[symbol];
   const report = data.report;
+  const known = COINBASE[symbol];
+  const coinbaseAddress = report?.coin.master_wallet ?? known.address;
 
   const daily = useMemo(() => {
     if (report?.daily?.length) {
