@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ltc-rpc-probe v1
+# ltc-rpc-probe v2  (v2: FIX now enables+resets a DEAD loop2, not just restart; re-tests root RPC)
 #
 # The trace told us three hard facts:
 #   * litecoind's `pool` wallet HAS the coinbases ("category":"generate", 6.26 LTC each)
@@ -32,7 +32,7 @@ WEB=/var/web
 MYN() { mysql yiimpfrontend -N -B -e "$1" 2>&1; }
 MY()  { mysql yiimpfrontend -t  -e "$1" 2>&1; }
 
-echo "ltc-rpc-probe v1  mode=$MODE  $(date -u '+%F %T') UTC"
+echo "ltc-rpc-probe v2  mode=$MODE  $(date -u '+%F %T') UTC"
 echo
 
 # ---------------------------------------------------------------- 1. creds
