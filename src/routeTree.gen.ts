@@ -19,6 +19,7 @@ import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
 import { Route as LtcRouteImport } from './routes/ltc'
 import { Route as GraphsRouteImport } from './routes/graphs'
+import { Route as DogeRouteImport } from './routes/doge'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as BlocksRouteImport } from './routes/blocks'
@@ -138,6 +139,11 @@ const LtcRoute = LtcRouteImport.update({
 const GraphsRoute = GraphsRouteImport.update({
   id: '/graphs',
   path: '/graphs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DogeRoute = DogeRouteImport.update({
+  id: '/doge',
+  path: '/doge',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -502,6 +508,7 @@ export interface FileRoutesByFullPath {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
   '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
@@ -584,6 +591,7 @@ export interface FileRoutesByTo {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
   '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
@@ -666,6 +674,7 @@ export interface FileRoutesById {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
   '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
@@ -750,6 +759,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
     | '/ltc'
     | '/manifesto'
@@ -832,6 +842,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
     | '/ltc'
     | '/manifesto'
@@ -913,6 +924,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
     | '/ltc'
     | '/manifesto'
@@ -996,6 +1008,7 @@ export interface RootRouteChildren {
   BlocksRoute: typeof BlocksRoute
   DiagnosticsRoute: typeof DiagnosticsRoute
   DocsRoute: typeof DocsRoute
+  DogeRoute: typeof DogeRoute
   GraphsRoute: typeof GraphsRoute
   LtcRoute: typeof LtcRoute
   ManifestoRoute: typeof ManifestoRoute
@@ -1122,6 +1135,13 @@ declare module '@tanstack/react-router' {
       path: '/graphs'
       fullPath: '/graphs'
       preLoaderRoute: typeof GraphsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doge': {
+      id: '/doge'
+      path: '/doge'
+      fullPath: '/doge'
+      preLoaderRoute: typeof DogeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -1739,6 +1759,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlocksRoute: BlocksRoute,
   DiagnosticsRoute: DiagnosticsRoute,
   DocsRoute: DocsRoute,
+  DogeRoute: DogeRoute,
   GraphsRoute: GraphsRoute,
   LtcRoute: LtcRoute,
   ManifestoRoute: ManifestoRoute,
