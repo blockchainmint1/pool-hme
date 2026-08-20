@@ -78,7 +78,10 @@ read_secret() { # read_secret <COIN> -> echoes the secret
   printf '%s' "$s"
 }
 backup_wallet() { # backup_wallet <COIN>
-  local c=$1 out="$BK/${c,,}-wallet-before-ownerkey-$STAMP.dat"
+  local c=$1
+  local lc out
+  lc=$(printf '%s' "$c" | tr 'A-Z' 'a-z')
+  out="$BK/$lc-wallet-before-ownerkey-$STAMP.dat"
   mkdir -p "$BK"; chmod 700 "$BK"
   cli "$c" backupwallet "$out" >/dev/null 2>&1 \
     && echo "  wallet backed up -> $out" \
