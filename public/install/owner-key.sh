@@ -42,10 +42,11 @@ STAMP=$(date -u '+%Y%m%d-%H%M%S')
 echo "18-owner-key v1  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>
+  # Binaries are NOT on $PATH (see docs/infrastructure.md §2b). Use full paths + -conf.
   local c=$1; shift
   case "$c" in
-    LTC)  litecoin-cli -rpcwallet=pool "$@" ;;
-    DOGE) dogecoin-cli "$@" ;;
+    LTC)  /home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf -rpcwallet=pool "$@" ;;
+    DOGE) /home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf "$@" ;;
     *) echo "unknown coin $c" >&2; return 1 ;;
   esac
 }
