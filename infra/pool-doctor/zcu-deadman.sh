@@ -2,6 +2,7 @@
 # zcu-deadman.sh -- unattended safety net for the ARMED ZCU gate.
 #
 #   install:  curl -fsSL https://pool.honest.money/install/zcu-deadman.sh | sudo bash -s INSTALL
+#   arm:      ... | sudo bash -s ARM       (install/start the deadman; gate unchanged)
 #   status:   ... | sudo bash -s STATUS
 #   test:     ... | sudo bash -s TEST      (one evaluation, prints verdict, no action)
 #   remove:   ... | sudo bash -s UNINSTALL
@@ -31,7 +32,9 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 MODE="$(printf '%s' "${1:-INSTALL}" | tr '[:lower:]' '[:upper:]')"
-VER="v2"
+# ARM means arm the deadman timer, not the ZCU gate. DISARM removes the timer.
+case "$MODE" in ARM|START) MODE=INSTALL ;; DISARM) MODE=STOP ;; esac
+VER="v3"
 BIN=/usr/local/sbin/zcu-deadman-check
 ENVF=/etc/zcu-deadman.env
 STATE=/var/lib/zcu-deadman
@@ -39,8 +42,8 @@ LOG=/var/log/zcu-deadman.log
 GATE_ENV=/etc/zcu-gate.env
 echo "zcu-deadman $VER  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
-case "$MODE" in INSTALL|START|STATUS|TEST|UNINSTALL|STOP) ;; *)
-  echo "  unknown mode. Use INSTALL, STATUS, TEST or UNINSTALL"; exit 1 ;; esac
+case "$MODE" in INSTALL|STATUS|TEST|UNINSTALL|STOP) ;; *)
+  echo "  unknown mode. Use INSTALL (aka ARM), STATUS, TEST, DISARM or UNINSTALL"; exit 1 ;; esac
 
 if [ "$MODE" = "UNINSTALL" ] || [ "$MODE" = "STOP" ]; then
   systemctl disable --now zcu-deadman.timer >/dev/null 2>&1 || true
