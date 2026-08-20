@@ -30,20 +30,43 @@ export function CoinDot({ symbol }: { symbol: string }) {
 }
 
 /**
- * Merge-mined credits (LTC / DOGE) and pool-found blocks share one shape.
- * `orphan` here reflects what yiimp recorded, which can lag the chain — the
- * per-coin page explains that; the table just reports it honestly.
+ * Status reported by the pool database, not the chain.
+ *
+ * LTC/DOGE merge-mined rows can arrive with `amount: 0` and
+ * `confirmations: null` when yiimp's confirmation pass could not read the
+ * coinbase transaction back (multi-wallet RPC without -rpcwallet). Those rows
+ * are labelled `orphan` with no reward even though the block is valid
+ * on-chain, so we must not render that as a real "0 LTC" reward — we show
+ * "not recorded" and flag the row as unverified rather than inventing a value.
  */
 export function blockStatus(b: PoolBlock) {
-  const confirmations = b.confirmations ?? 0;
   const amount = b.amount ?? 0;
-  const isPending = b.confirmations == null || b.amount == null;
-  if (isPending) return { label: "pending", color: "text-pool-steel", amount };
-  if (b.category === "orphan") return { label: "orphan", color: "text-pool-steel", amount };
+  const confirmations = b.confirmations ?? 0;
+  const unrecorded = !b.amount && b.confirmations == null;
+
+  if (b.category === "orphan")
+    return {
+      label: unrecorded ? "unverified" : "orphan",
+      color: "text-pool-steel",
+      amount,
+      unrecorded,
+      title: unrecorded
+        ? "The pool database could not read this block's coinbase, so it has no reward recorded. The block itself may still be valid on-chain."
+        : "Recorded as orphan by the pool database.",
+    };
+  if (b.confirmations == null)
+    return { label: "pending", color: "text-pool-steel", amount, unrecorded, title: "Awaiting confirmation data." };
   if (b.category === "immature" || confirmations < 100)
-    return { label: `${confirmations} conf`, color: "text-pool-amber", amount };
-  return { label: "confirmed", color: "text-pool-mint", amount };
+    return {
+      label: `${confirmations} conf`,
+      color: "text-pool-amber",
+      amount,
+      unrecorded: false,
+      title: "Maturing — reward is not spendable yet.",
+    };
+  return { label: "confirmed", color: "text-pool-mint", amount, unrecorded: false, title: "Confirmed and mature." };
 }
+
 
 export function CoinBlocksTable({
   blocks,
@@ -105,17 +128,40 @@ export function CoinBlocksTable({
                   <td className="px-3 py-3 text-pool-steel">
                     {coinAgo(Math.max(0, nowSec - b.time))}
                   </td>
-                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                    {s.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
-                    <span className="text-pool-steel">{b.symbol}</span>
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {s.unrecorded ? (
+                      <span className="text-pool-steel" title={s.title}>
+                        not recorded
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-pool-steel-hi">
+                          {s.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </span>{" "}
+                        <span className="text-pool-steel">{b.symbol}</span>
+                      </>
+                    )}
                   </td>
-                  <td className={`px-5 py-3 text-right tabular-nums ${s.color}`}>{s.label}</td>
+                  <td className={`px-5 py-3 text-right tabular-nums ${s.color}`} title={s.title}>
+                    {s.label}
+                  </td>
+
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {rows.some((b) => blockStatus(b).unrecorded) && (
+        <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel leading-relaxed">
+          &ldquo;not recorded / unverified&rdquo; means the pool database has no reward figure
+          for that block — not that the block was lost. Rewards are held in the pool wallet
+          and reconciled against the chain.
+        </div>
+      )}
+
+
 
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-[11px] font-mono text-pool-steel">
