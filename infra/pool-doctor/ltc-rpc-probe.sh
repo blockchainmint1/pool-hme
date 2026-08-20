@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ltc-rpc-probe v2  (v2: FIX now enables+resets a DEAD loop2, not just restart; re-tests root RPC)
+# ltc-rpc-probe v3  (v3: payment runner is `yiimp-loop2` on this box, not `loop2` -- autodetect the unit name)
 #
 # The trace told us three hard facts:
 #   * litecoind's `pool` wallet HAS the coinbases ("category":"generate", 6.26 LTC each)
@@ -32,7 +32,7 @@ WEB=/var/web
 MYN() { mysql yiimpfrontend -N -B -e "$1" 2>&1; }
 MY()  { mysql yiimpfrontend -t  -e "$1" 2>&1; }
 
-echo "ltc-rpc-probe v2  mode=$MODE  $(date -u '+%F %T') UTC"
+echo "ltc-rpc-probe v3  mode=$MODE  $(date -u '+%F %T') UTC"
 echo
 
 # ---------------------------------------------------------------- 1. creds
@@ -114,22 +114,27 @@ fi
 # loop2 was DEAD (not merely stale) on 20 Aug -- restart alone is not enough if
 # the unit is disabled or has latched a failed state.
 echo
-echo "  -- loop2 (the payment runner) --"
-echo "    unit file : $(systemctl cat loop2 >/dev/null 2>&1 && echo present || echo MISSING)"
-if ! systemctl cat loop2 >/dev/null 2>&1; then
-  echo "    !! no loop2 unit on this box. yiimp payments are usually run by"
-  echo "       /var/web/yaamp/../loop2.php via cron or systemd -- find the runner:"
-  crontab -l 2>/dev/null | grep -i loop | sed 's/^/       /'
-  ls -1 /etc/systemd/system | grep -i loop | sed 's/^/       /'
+echo "  -- payment runner --"
+# The unit is called `loop2` on stock yiimp but `yiimp-loop2` on this box.
+L2=""
+for u in loop2 yiimp-loop2 yiimp-loop2.service loop2.service; do
+  if systemctl cat "$u" >/dev/null 2>&1; then L2="${u%.service}"; break; fi
+done
+if [ -z "$L2" ]; then
+  echo "    !! no payment-runner unit found. candidates on this box:"
+  systemctl list-unit-files 2>/dev/null | grep -iE 'loop|yiimp|payment' | sed 's/^/       /'
+  crontab -l 2>/dev/null | grep -i loop | sed 's/^/       cron: /'
 else
-  echo "    enabled   : $(systemctl is-enabled loop2 2>&1)"
-  systemctl reset-failed loop2 >/dev/null 2>&1 || true
-  systemctl enable loop2 >/dev/null 2>&1 || true
-  systemctl restart loop2 2>&1 | sed 's/^/    /'
+  echo "    unit      : $L2"
+  echo "    enabled   : $(systemctl is-enabled "$L2" 2>&1)"
+  echo "    was       : $(systemctl is-active "$L2" 2>&1)"
+  systemctl reset-failed "$L2" >/dev/null 2>&1 || true
+  systemctl enable "$L2" >/dev/null 2>&1 || true
+  systemctl restart "$L2" 2>&1 | sed 's/^/    /'
   sleep 8
-  echo "    active    : $(systemctl is-active loop2 2>&1)"
+  echo "    active    : $(systemctl is-active "$L2" 2>&1)"
   echo "    recent log:"
-  journalctl -u loop2 --since '3 minutes ago' --no-pager 2>/dev/null | tail -20 | sed 's/^/      /'
+  journalctl -u "$L2" --since '3 minutes ago' --no-pager 2>/dev/null | tail -25 | sed 's/^/      /'
 fi
 echo
 echo "done. Watch the confirm pass pick the orphans back up:"
