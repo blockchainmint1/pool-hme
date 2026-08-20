@@ -123,7 +123,7 @@ STATE)
   echo
   echo "== 4. keys labelled owner-coinbase (imported by you, offline-recoverable)"
   for c in LTC DOGE; do
-    L=$(cli "$c" getaddressesbylabel "owner-coinbase" 2>/dev/null | grep -oE '"[a-zA-Z0-9]{20,}"' | tr -d '"')
+    L=$(owner_addresses "$c" 2>/dev/null | tr '\n' ' ')
     printf ' -- %-4s %s\n' "$c" "${L:-none}"
   done
   cat <<'EOF'
