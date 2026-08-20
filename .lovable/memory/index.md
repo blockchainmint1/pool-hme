@@ -42,3 +42,4 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 - [NiceHash/MRR shim](mem://infra/nicehash-proxy.md) — Rental verification fails on the subscribe-reply diff of 16 + 6-11s first job; nicehash-proxy on port 3533 fixes both without touching scrypt.conf
 - [Pool snapshot/rollback](mem://infra/pool-snapshot.md) — `pool-snapshot.sh` SAVE/VERIFY/RESTORE; run SAVE+VERIFY before any stratum binary swap
 - [ZCU gate deadman](mem://infra/zcu-deadman.md) — auto-DISARM watchdog (systemd timer, 60s) for the ARMED ZCU gate: trips on 15m TXC/ISK block silence, stratum restarts, deadlock lines. Install BEFORE arming unattended.
+- [Auxpow serialization break](mem://infra/auxpow-serialization-break.md) — 20 Aug 2026: ZCU binary emits malformed auxpow for TXC/ISK (`CDataStream::read(): end of data`); solved blocks silently discarded. Grep `aux submit rpc=` for `error=`, roll back the binary.
