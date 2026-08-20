@@ -103,7 +103,10 @@ function PoolHome() {
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
           <RailLink href="#workers"   icon={Cpu}           label="Workers" />
           <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
+          <RailLink href="#ltc-blocks" icon={Layers}       label="LTC blocks" />
+          <RailLink href="#doge-blocks" icon={Layers}      label="DOGE blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
+
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
           <RailLink href="#resilience" icon={ShieldCheck}  label="Failover" />
           <Link
