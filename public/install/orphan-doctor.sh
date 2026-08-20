@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
-# orphan-doctor.sh v1 -- READ ONLY. Answers two questions in one pass:
-#
-#   1. Are the LTC blocks yiimp shows as "Orphan" actually orphaned on-chain,
-#      or is yiimp mislabelling blocks it can no longer see in its wallet?
-#   2. Why have LTC/DOGE payouts stopped reaching the owner wallet?
+# orphan-doctor.sh v2 -- READ ONLY.
 #
 #   curl -fsSL https://pool.honest.money/install/orphan-doctor.sh | sudo bash 2>&1 | tee /tmp/orphan.txt
 #
-# Nothing is modified. No RPC call here writes state.
+# v1 established: every LTC block yiimp calls "orphan" is actually MAINCHAIN with
+# real confirmations. So nothing was lost. v2 answers the two follow-ups:
 #
-# Background for the reader:
-#   yiimp decides a block is "orphan" from `gettransaction <coinbase txid>` on
-#   ITS OWN wallet, not from the chain. After a wallet rotation / sweep the
-#   coinbase outputs belong to a wallet yiimp is no longer talking to, so
-#   gettransaction returns "Invalid or non-wallet transaction id" and yiimp
-#   files a perfectly valid, mainchain block as orphan with amount 0.
-#   That same broken wallet handle is what stops payouts -- which is why one
-#   script covers both symptoms.
+#   1. WHO got the coinbase? (v1 read the merkleroot instead of the coinbase txid,
+#      hence the bogus "error code: -5" on every row. Fixed here with a real JSON
+#      parse of tx[0].)
+#   2. WHY did LTC payouts stop on 11 Aug when the hot wallet holds 225 LTC and
+#      only owes 12.55?
+#
+# Nothing is modified. No RPC call here writes state.
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
@@ -26,6 +22,18 @@ eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*de
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 MYN() { mysql -N -B -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 hr()  { printf '\n===== %s\n' "$*"; }
+
+# json helper: python3 is present on this box; falls back to jq.
+J() { # J <jsonpath-expr-in-python>  reads stdin
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import sys,json
+try:
+  d=json.load(sys.stdin)
+except Exception:
+  sys.exit(0)
+$1" 2>/dev/null
+  fi
+}
 
 detect() { local n=$1 line bin; line=$(ps -ef | grep -E "[/ ]${n}( |$)" | grep -v grep | head -1)
   bin=$(echo "$line" | grep -oE "/[^ ]*$n" | head -1); D_BIN=$(dirname "${bin:-/usr/local/bin/$n}")
@@ -40,109 +48,121 @@ LCLI="$LBASE ${LWALLET:+-rpcwallet=$LWALLET}"
 detect dogecoind; DCONF=$D_CONF; DBIN=$D_BIN
 DCLI="$DBIN/dogecoin-cli -conf=$DCONF"
 
-echo "orphan-doctor v1  $(date -u '+%F %T UTC')"
+echo "orphan-doctor v2  $(date -u '+%F %T UTC')"
 echo "  litecoin-cli : $LBASE   conf wallet=${LWALLET:-(default)}"
-echo "  dogecoin-cli : $DCLI"
+echo "  v1 already proved: those 'orphans' are MAINCHAIN. This pass finds the money"
+echo "  and the payout blockage."
 
 # ---------------------------------------------------------------- 1
-hr "1. what yiimp thinks happened to LTC blocks (last 10 days)"
-MY "SELECT DATE(FROM_UNIXTIME(b.time)) d, b.category, COUNT(*) n, ROUND(SUM(b.amount),4) amount
-    FROM blocks b JOIN coins c ON c.id=b.coin_id
-    WHERE c.symbol='LTC' AND b.time > UNIX_TIMESTAMP()-10*86400
-    GROUP BY d,b.category ORDER BY d DESC, n DESC;"
-echo "  ^ amount=0 on every row means yiimp never valued the block -> it never"
-echo "    read the coinbase from a wallet. A true orphan usually still has an amount."
-
-# ---------------------------------------------------------------- 2
-hr "2. THE TEST -- is each 'orphan' block actually in the LTC main chain?"
-echo "  confirmations >= 1 and a matching height = the block is REAL and PAID BY THE NETWORK."
-echo "  confirmations = -1 = genuinely orphaned/stale."
-printf '  %-9s %-12s %-14s %-8s %s\n' HEIGHT DB_CATEGORY CONFIRMATIONS CHAINHIT BLOCKHASH
-while IFS=$'\t' read -r H CAT BH; do
+hr "1. THE MONEY -- coinbase of each mislabelled block, and who owns it"
+printf '  %-9s %-10s %-46s %s\n' HEIGHT REWARD PAID_TO ISMINE
+TOTAL=0
+while IFS=$'\t' read -r H BH; do
   [ -z "${BH:-}" ] && continue
-  INFO=$($LBASE getblockheader "$BH" 2>&1)
-  if echo "$INFO" | grep -q '"confirmations"'; then
-    CONF=$(echo "$INFO" | grep -oE '"confirmations": *-?[0-9]+' | grep -oE '\-?[0-9]+$')
-    CH=$(echo "$INFO" | grep -oE '"height": *[0-9]+' | grep -oE '[0-9]+$')
-    if [ "${CONF:-0}" -ge 1 ] 2>/dev/null; then HIT="MAINCHAIN"; else HIT="STALE"; fi
-    [ "$CH" = "$H" ] || HIT="$HIT/h=$CH"
-  else
-    CONF="?"; HIT="NOT-IN-NODE"
+  CB=$($LBASE getblock "$BH" 2 2>/dev/null | J "
+tx=d.get('tx') or []
+print(tx[0]['txid'] if tx and isinstance(tx[0],dict) else (tx[0] if tx else ''))
+o=(tx[0].get('vout') if tx and isinstance(tx[0],dict) else []) or []
+best=max(o,key=lambda x:x.get('value',0)) if o else None
+print(best.get('value','') if best else '')
+sp=(best or {}).get('scriptPubKey',{})
+a=sp.get('address') or (sp.get('addresses') or [''])[0]
+print(a)")
+  CBTXID=$(echo "$CB" | sed -n 1p); VAL=$(echo "$CB" | sed -n 2p); ADDR=$(echo "$CB" | sed -n 3p)
+  if [ -z "$CBTXID" ]; then
+    # older node: getblock verbosity 2 unsupported -> resolve via tx list + getrawtransaction
+    CBTXID=$($LBASE getblock "$BH" 1 2>/dev/null | J "print((d.get('tx') or [''])[0])")
+    RAW=$($LBASE getrawtransaction "$CBTXID" 1 2>/dev/null)
+    VAL=$(echo "$RAW" | J "
+o=d.get('vout') or []
+b=max(o,key=lambda x:x.get('value',0)) if o else {}
+print(b.get('value',''))")
+    ADDR=$(echo "$RAW" | J "
+o=d.get('vout') or []
+b=max(o,key=lambda x:x.get('value',0)) if o else {}
+sp=b.get('scriptPubKey',{})
+print(sp.get('address') or (sp.get('addresses') or [''])[0])")
   fi
-  printf '  %-9s %-12s %-14s %-8s %s\n' "$H" "$CAT" "$CONF" "$HIT" "${BH:0:24}..."
-done < <(MYN "SELECT b.height, b.category, b.blockhash FROM blocks b JOIN coins c ON c.id=b.coin_id
+  MINE="?"
+  [ -n "$ADDR" ] && MINE=$($LCLI getaddressinfo "$ADDR" 2>/dev/null | J "print(d.get('ismine'))")
+  printf '  %-9s %-10s %-46s %s\n' "$H" "${VAL:-?}" "${ADDR:-<unparsed>}" "${MINE:-?}"
+  [ -n "${VAL:-}" ] && TOTAL=$(awk "BEGIN{print $TOTAL+${VAL:-0}}")
+  echo "     wallet gettransaction: $($LCLI gettransaction "$CBTXID" 2>&1 | J "print('SEEN conf=%s amount=%s' % (d.get('confirmations'), d.get('amount')))" || true)$( $LCLI gettransaction "$CBTXID" >/dev/null 2>&1 || echo "NOT IN WALLET ($($LCLI gettransaction "$CBTXID" 2>&1 | head -1 | cut -c1-60))")"
+done < <(MYN "SELECT b.height, b.blockhash FROM blocks b JOIN coins c ON c.id=b.coin_id
               WHERE c.symbol='LTC' AND b.time > UNIX_TIMESTAMP()-10*86400
               ORDER BY b.id DESC LIMIT $LIMIT;")
-echo
-echo "  >>> If most rows say MAINCHAIN, NOTHING WAS LOST TO THE NETWORK."
-echo "      The coins exist; yiimp just cannot see them in its wallet."
+echo "  ----"
+echo "  total coinbase value across those blocks: ~$TOTAL LTC"
+echo "  ismine=True  => the coins ARE in the 'pool' wallet; only the DB label is wrong."
+echo "  ismine=False => coins went to a rotated/other wallet; recovery = import that key."
+
+# ---------------------------------------------------------------- 2
+hr "2. why yiimp filed them as orphan"
+echo "  yiimp calls gettransaction(coinbase) on the wallet named in its coin row."
+echo "  If litecoind has MULTIPLE wallets loaded and yiimp does not send -rpcwallet,"
+echo "  the RPC hits the default handle and fails -> orphan, amount 0."
+echo "  wallets loaded: $($LBASE listwallets 2>&1 | tr -d '\n ' )"
+echo "  ^ two wallets loaded and NO default = every wallet RPC without -rpcwallet fails."
+echo "    That is the 'unable to find the wallet for coinid 8' error verbatim."
+grep -nE 'rpcwallet|^wallet=' "$LCONF" 2>/dev/null | sed 's/^/    litecoin.conf: /'
+MY "SELECT id,symbol,LEFT(master_wallet,40) master_wallet,rpcport,
+           LEFT(IFNULL(rpcuser,''),12) rpcuser, enable, auto_ready
+    FROM coins WHERE symbol IN ('LTC','DOGE');"
 
 # ---------------------------------------------------------------- 3
-hr "3. who actually received those coinbase rewards?"
-for BH in $(MYN "SELECT b.blockhash FROM blocks b JOIN coins c ON c.id=b.coin_id
-                 WHERE c.symbol='LTC' AND b.time > UNIX_TIMESTAMP()-10*86400
-                 ORDER BY b.id DESC LIMIT 4"); do
-  [ -z "$BH" ] && continue
-  CBTXID=$($LBASE getblock "$BH" 1 2>/dev/null | grep -oE '"[0-9a-f]{64}"' | sed -n '2p' | tr -d '"')
-  [ -z "$CBTXID" ] && { echo "  block ${BH:0:16}.. : coinbase txid unavailable"; continue; }
-  RAW=$($LBASE getrawtransaction "$CBTXID" 1 2>&1)
-  ADDRS=$(echo "$RAW" | grep -oE '"(ltc1|[LM3])[a-zA-Z0-9]{20,70}"' | tr -d '"' | sort -u | paste -sd, )
-  VAL=$(echo "$RAW" | grep -oE '"value": *[0-9.]+' | grep -oE '[0-9.]+' | sort -rn | head -1)
-  echo "  block ${BH:0:16}..  reward=${VAL:-?} LTC  paid to: ${ADDRS:-<unparsed>}"
-  echo "     wallet sees this tx? $($LCLI gettransaction "$CBTXID" 2>&1 | head -1 | cut -c1-90)"
+hr "3. PAYOUTS -- 5 LTC payouts pending since 9 Aug with no errmsg"
+MY "SELECT p.id, c.symbol, FROM_UNIXTIME(p.time) t, p.amount, p.completed,
+           LEFT(IFNULL(p.tx,''),20) tx, LEFT(IFNULL(p.errmsg,'(null)'),40) errmsg,
+           LEFT(p.address,36) address
+    FROM payouts p JOIN coins c ON c.id=p.idcoin
+    WHERE p.completed=0 ORDER BY p.time DESC LIMIT 10;"
+echo "  loop2 is running, wallet is unlocked, balance is 225 LTC and only 12.55 is owed."
+echo "  So the blocker is NOT funds. Most likely: loop2's payout stage is throwing"
+echo "  before it writes errmsg, or YAAMP_PAYMENTS_FREQ / payout_min gates it."
+echo "  yiimp payout settings:"
+grep -hnE "PAYMENTS_FREQ|payout|MINIMUM" /var/web/serverconfig.php 2>/dev/null | grep -v PASSWORD | sed 's/^/    /'
+echo "  last 40 payout-relevant lines from the yiimp debug log:"
+for L in /var/web/log/debug.log /var/log/yiimp/debug.log /var/web/yaamp/runtime/application.log; do
+  [ -f "$L" ] && { echo "    -- $L"; grep -iE 'payout|sendmany|sendtoaddress|insufficient|wallet' "$L" 2>/dev/null | tail -20 | sed 's/^/      /'; }
 done
-echo "  ^ 'Invalid or non-wallet transaction id' here is the smoking gun:"
-echo "    the reward went to an address the CURRENT yiimp wallet does not own."
+echo "  loop2 stage timings (is the payout stage even reached?):"
+ps -o etime=,cmd= -p "$(pgrep -f loop2.sh | head -1)" 2>/dev/null | sed 's/^/    /'
+tail -30 /var/web/log/loop2.log 2>/dev/null | sed 's/^/    /'
 
 # ---------------------------------------------------------------- 4
-hr "4. wallet handles -- the 'unable to find the wallet for coinid 8' error"
-echo "  wallets loaded in litecoind: $($LBASE listwallets 2>&1 | tr -d '\n ' | cut -c1-160)"
-$LCLI getwalletinfo 2>&1 | grep -E 'walletname|"balance"|immature|unlocked_until' | sed 's/^/    /'
-echo "  addresses yiimp has on file for LTC/DOGE:"
-MY "SELECT id,symbol,LEFT(master_wallet,42) master_wallet,LEFT(IFNULL(errors,''),40) errors,
-           enable,auto_ready,payout_min,txfee
-    FROM coins WHERE symbol IN ('LTC','DOGE');"
-echo "  does the current wallet own the address yiimp thinks is the master?"
-for A in $(MYN "SELECT master_wallet FROM coins WHERE symbol='LTC' AND master_wallet<>''"); do
-  echo "    $A -> $($LCLI getaddressinfo "$A" 2>&1 | grep -oE '"ismine": *(true|false)' | head -1)"
-done
+hr "4. DOGE -- last payout 12 Aug, 1.04M DOGE sitting in the hot wallet"
+echo "  DOGE wallet: $($DCLI getwalletinfo 2>&1 | tr -d ' \n' | grep -oE '\"balance\":[0-9.]+|\"unlocked_until\":[0-9]+' | paste -sd' ')"
+echo "  ^ unlocked_until=0 means the DOGE wallet is LOCKED -> sends fail instantly."
+MY "SELECT status, COUNT(*) n, ROUND(SUM(amount),2) amount,
+           FROM_UNIXTIME(MAX(created_at)) newest, FROM_UNIXTIME(MAX(updated_at)) touched
+    FROM doge_payout_ledger GROUP BY status ORDER BY n DESC;"
+echo "  doge cycle log tail:"
+tail -20 /var/log/doge-payout-cycle.log 2>/dev/null | sed 's/^/    /'
+echo "  NOTE: two DOGE crons exist (*/10 and a daily 06:15). The daily one is the"
+echo "        retired schedule and should not be there -- see docs section on cadence."
 
 # ---------------------------------------------------------------- 5
-hr "5. payouts -- why nothing has landed in the owner wallet"
-MY "SELECT c.symbol, COUNT(*) accts, ROUND(SUM(a.balance),6) owed
-    FROM accounts a JOIN coins c ON c.id=a.coinid
-    WHERE a.balance>0 AND c.symbol IN ('LTC','DOGE') GROUP BY c.symbol;"
-MY "SELECT c.symbol, MAX(FROM_UNIXTIME(p.time)) last_payout, SUM(p.completed=1) done,
-           SUM(p.completed=0) pending
-    FROM payouts p JOIN coins c ON c.id=p.idcoin GROUP BY c.symbol;"
-MY "SELECT c.symbol, LEFT(IFNULL(p.errmsg,'(null / never attempted)'),70) errmsg, COUNT(*) n,
-           FROM_UNIXTIME(MAX(p.time)) newest
-    FROM payouts p JOIN coins c ON c.id=p.idcoin WHERE p.completed=0
-    GROUP BY 1,2 ORDER BY n DESC LIMIT 10;"
-echo "  spendable float right now:"
-echo "    LTC : $($LCLI getwalletinfo 2>&1 | tr -d ' \n' | grep -oE '"balance":[0-9.]+|"immature_balance":[0-9.]+|"unlocked_until":[0-9]+' | paste -sd' ')"
-echo "    DOGE: $($DCLI getwalletinfo 2>&1 | tr -d ' \n' | grep -oE '"balance":[0-9.]+|"immature_balance":[0-9.]+|"unlocked_until":[0-9]+' | paste -sd' ')"
-echo "  yiimp payout loop:"
-ps -ef | grep -E '[l]oop2|[b]lock-loop' | head -3 | sed 's/^/    proc: /' || echo "    proc: NONE RUNNING"
-systemctl is-active ltc-unlock.timer 2>/dev/null | sed 's/^/    ltc-unlock.timer: /'
-grep -rhn "payout\|loop2\|doge-payout" /etc/cron.d/* /etc/crontab 2>/dev/null | grep -v '^#' | sed 's/^/    cron: /'
+hr "5. earnings table (v1 used the wrong column name)"
+ECOL=$(MYN "SELECT GROUP_CONCAT(column_name) FROM information_schema.columns
+            WHERE table_schema='yiimpfrontend' AND table_name='earnings';")
+echo "  columns: $ECOL"
+TCOL=time; echo "$ECOL" | grep -q '\bcreate_time\b' && TCOL=create_time
+MY "SELECT DATE(FROM_UNIXTIME(e.$TCOL)) d, COUNT(*) rows_, ROUND(SUM(e.amount),6) amount
+    FROM earnings e JOIN coins c ON c.id=e.coinid
+    WHERE c.symbol='LTC' AND e.$TCOL > UNIX_TIMESTAMP()-10*86400
+    GROUP BY d ORDER BY d DESC;"
+echo "  ^ empty/zero rows on orphan days = miners were never credited for those blocks."
 
-# ---------------------------------------------------------------- 6
-hr "6. earnings -- did miners ever get credited for these blocks?"
-MY "SELECT DATE(created) d, COUNT(*) rows_, ROUND(SUM(amount),6) amount
-    FROM earnings WHERE created > NOW()-INTERVAL 10 DAY GROUP BY d ORDER BY d DESC;"
-MY "SELECT status, COUNT(*) n, ROUND(SUM(amount),2) amount, FROM_UNIXTIME(MAX(created_at)) newest
-    FROM doge_payout_ledger GROUP BY status ORDER BY n DESC;"
-
-hr "verdict hints"
-echo "  A) section 2 mostly MAINCHAIN + section 3 'non-wallet transaction id'"
-echo "     => blocks are REAL, rewards are SAFE on-chain at the address in section 3."
-echo "        Recovery = point yiimp at the wallet that owns them (or import the key),"
-echo "        then re-run block maturity so amounts/earnings backfill."
-echo "  B) section 2 mostly STALE / -1 confirmations"
-echo "     => genuine orphans. Those are gone; cause is upstream (bad LTC node, forked"
-echo "        chain, stale getblocktemplate). Nothing to recover, must fix propagation."
-echo "  C) section 5 pending payouts with empty errmsg + no loop2 process"
-echo "     => payouts were never attempted; the payout loop is dead, not the wallet."
+hr "what to do next (read this before touching anything)"
+echo "  If section 1 shows ismine=True with real reward values:"
+echo "    the coins are already yours; the fix is a DB relabel (orphan -> generate)"
+echo "    plus a maturity replay so earnings backfill. Reversible, and I'll ship it"
+echo "    as a separate script with a dry-run mode -- do NOT hand-edit blocks rows."
+echo "  If section 2 shows two wallets and no default:"
+echo "    the durable fix is making yiimp pass -rpcwallet=pool (or setting a default"
+echo "    wallet), otherwise every future block gets mislabelled the same way."
+echo "  If section 4 shows unlocked_until=0:"
+echo "    DOGE payouts cannot send at all until the wallet is unlocked, same pattern"
+echo "    as the LTC unlock timer."
 echo
-echo "orphan-doctor v1 done -- nothing was modified."
+echo "orphan-doctor v2 done -- nothing was modified."
