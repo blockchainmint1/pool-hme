@@ -70,13 +70,16 @@ read_secret() { # read_secret <COIN> -> echoes the secret
     echo "  read from $f (will be shredded)" >&2
     shred -u "$f" 2>/dev/null || rm -f "$f"
   else
-    if [ -t 0 ]; then
+    # Piped through `curl | sudo bash`, so stdin is NOT a terminal. The
+    # controlling terminal is still reachable at /dev/tty -- use that.
+    if [ -r /dev/tty ]; then
       read -r -s -p "  paste the $c secret (input hidden), then Enter: " s </dev/tty; echo >&2
     else
-      echo "  !! not a terminal. Put the secret in /root/owner-key.$c (chmod 600) and re-run." >&2
+      echo "  !! no terminal available. Put the secret in /root/owner-key.$c (chmod 600) and re-run." >&2
       return 1
     fi
   fi
+
   [ -n "$s" ] || { echo "  !! empty secret" >&2; return 1; }
   printf '%s' "$s"
 }
