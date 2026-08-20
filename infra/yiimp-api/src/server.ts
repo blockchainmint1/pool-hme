@@ -253,6 +253,112 @@ app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>(
   },
 );
 
+/**
+ * Everything the per-coin page needs in one payload: the coinbase address the
+ * chain actually pays (coins.master_wallet), lifetime block totals broken out
+ * by category, a 90-day daily series for charting, and the payout distribution
+ * to miners for that coin.
+ *
+ * Read-only. master_wallet is a public on-chain address, not a secret.
+ */
+app.get<{ Params: { symbol: string } }>(
+  "/api/v1/coins/:symbol/report",
+  async (req, reply) => {
+    const symbol = req.params.symbol.toUpperCase();
+    if (!SYMBOL_RE.test(symbol)) return reply.code(400).send({ error: "bad symbol" });
+
+    const [coinRows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT id, name, symbol, algo, master_wallet, reward, difficulty, network_hash
+         FROM coins WHERE symbol = ? LIMIT 1`,
+      [symbol],
+    );
+    const coin = coinRows[0];
+    if (!coin) return reply.code(404).send({ error: "not found" });
+    const coinId = Number(coin.id);
+
+    const [totalRows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS blocks,
+              COALESCE(SUM(amount), 0) AS total_amount,
+              SUM(category = 'generate')  AS confirmed,
+              SUM(category = 'immature')  AS immature,
+              SUM(category = 'orphan')    AS orphan,
+              MIN(time) AS first_time,
+              MAX(time) AS last_time
+         FROM blocks WHERE coin_id = ?`,
+      [coinId],
+    );
+
+    const since = Math.floor(Date.now() / 1000) - 90 * 86400;
+    const [dailyRows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT FLOOR(time / 86400) * 86400 AS day,
+              COUNT(*) AS blocks,
+              COALESCE(SUM(amount), 0) AS amount
+         FROM blocks
+        WHERE coin_id = ? AND time >= ?
+        GROUP BY day ORDER BY day ASC LIMIT 200`,
+      [coinId, since],
+    );
+
+    const [payoutAgg] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT COALESCE(SUM(amount), 0) AS total_paid,
+              COUNT(*) AS payout_count,
+              MAX(time) AS last_payout
+         FROM payouts WHERE idcoin = ?`,
+      [coinId],
+    );
+
+    const [topRows] = await pool.query<mysql.RowDataPacket[]>(
+      `SELECT a.username AS address,
+              COALESCE(SUM(p.amount), 0) AS amount,
+              COUNT(*) AS payouts
+         FROM payouts p JOIN accounts a ON a.id = p.account_id
+        WHERE p.idcoin = ?
+        GROUP BY a.username
+        ORDER BY amount DESC
+        LIMIT 25`,
+      [coinId],
+    );
+
+    return {
+      coin: {
+        symbol: coin.symbol,
+        name: coin.name,
+        algo: coin.algo,
+        master_wallet: coin.master_wallet,
+        reward: Number(coin.reward ?? 0),
+        difficulty: Number(coin.difficulty ?? 0),
+        network_hash: Number(coin.network_hash ?? 0),
+      },
+      totals: {
+        blocks: Number(totalRows[0]?.blocks ?? 0),
+        total_amount: Number(totalRows[0]?.total_amount ?? 0),
+        confirmed: Number(totalRows[0]?.confirmed ?? 0),
+        immature: Number(totalRows[0]?.immature ?? 0),
+        orphan: Number(totalRows[0]?.orphan ?? 0),
+        first_time: Number(totalRows[0]?.first_time ?? 0),
+        last_time: Number(totalRows[0]?.last_time ?? 0),
+      },
+      daily: dailyRows.map((r) => ({
+        day: Number(r.day),
+        blocks: Number(r.blocks),
+        amount: Number(r.amount),
+      })),
+      payouts: {
+        total_paid: Number(payoutAgg[0]?.total_paid ?? 0),
+        count: Number(payoutAgg[0]?.payout_count ?? 0),
+        last_payout: Number(payoutAgg[0]?.last_payout ?? 0),
+        top: topRows.map((r) => ({
+          address: r.address as string,
+          amount: Number(r.amount),
+          payouts: Number(r.payouts),
+        })),
+      },
+    };
+  },
+);
+
+
+
 // ============================================================================
 // Pool-native
 // ============================================================================
