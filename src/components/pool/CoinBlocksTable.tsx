@@ -30,20 +30,43 @@ export function CoinDot({ symbol }: { symbol: string }) {
 }
 
 /**
- * Merge-mined credits (LTC / DOGE) and pool-found blocks share one shape.
- * `orphan` here reflects what yiimp recorded, which can lag the chain — the
- * per-coin page explains that; the table just reports it honestly.
+ * Status reported by the pool database, not the chain.
+ *
+ * LTC/DOGE merge-mined rows can arrive with `amount: 0` and
+ * `confirmations: null` when yiimp's confirmation pass could not read the
+ * coinbase transaction back (multi-wallet RPC without -rpcwallet). Those rows
+ * are labelled `orphan` with no reward even though the block is valid
+ * on-chain, so we must not render that as a real "0 LTC" reward — we show
+ * "not recorded" and flag the row as unverified rather than inventing a value.
  */
 export function blockStatus(b: PoolBlock) {
-  const confirmations = b.confirmations ?? 0;
   const amount = b.amount ?? 0;
-  const isPending = b.confirmations == null || b.amount == null;
-  if (isPending) return { label: "pending", color: "text-pool-steel", amount };
-  if (b.category === "orphan") return { label: "orphan", color: "text-pool-steel", amount };
+  const confirmations = b.confirmations ?? 0;
+  const unrecorded = !b.amount && b.confirmations == null;
+
+  if (b.category === "orphan")
+    return {
+      label: unrecorded ? "unverified" : "orphan",
+      color: "text-pool-steel",
+      amount,
+      unrecorded,
+      title: unrecorded
+        ? "The pool database could not read this block's coinbase, so it has no reward recorded. The block itself may still be valid on-chain."
+        : "Recorded as orphan by the pool database.",
+    };
+  if (b.confirmations == null)
+    return { label: "pending", color: "text-pool-steel", amount, unrecorded, title: "Awaiting confirmation data." };
   if (b.category === "immature" || confirmations < 100)
-    return { label: `${confirmations} conf`, color: "text-pool-amber", amount };
-  return { label: "confirmed", color: "text-pool-mint", amount };
+    return {
+      label: `${confirmations} conf`,
+      color: "text-pool-amber",
+      amount,
+      unrecorded: false,
+      title: "Maturing — reward is not spendable yet.",
+    };
+  return { label: "confirmed", color: "text-pool-mint", amount, unrecorded: false, title: "Confirmed and mature." };
 }
+
 
 export function CoinBlocksTable({
   blocks,
