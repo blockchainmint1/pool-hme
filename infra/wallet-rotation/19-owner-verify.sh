@@ -224,7 +224,7 @@ MATCH)
     echo
     echo "  !! MISMATCH. The key imported fine, but it does NOT derive $ADDR."
     echo "     Addresses this key DOES control:"
-    cli "$COIN" getaddressesbylabel "owner-coinbase" 2>/dev/null | grep -oE '"[a-zA-Z0-9]{20,}"' | tr -d '"' | sed 's/^/       /'
+    owner_addresses "$COIN" 2>/dev/null | sed 's/^/       /'
     echo "     Likely cause: the WIF came from a different derivation path than"
     echo "     the address you pasted. For LTC use m/84'/2'/0'/0/0 (bech32 ltc1q...),"
     echo "     for DOGE m/44'/3'/0'/0/0 (D...). Re-export the WIF for THAT exact row."
