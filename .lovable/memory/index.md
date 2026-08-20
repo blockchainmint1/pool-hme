@@ -35,6 +35,8 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 - [Fleet topology](mem://infra/fleet-topology.md) — 6× Foghashing BC40 containers @ 200 L9s each = 1200 total, Beelink NAT per container, shared WAN 209.34.50.105.
 - [Coin daemon paths](mem://infra/coin-daemon-paths.md) — litecoin-cli/dogecoin-cli full paths, datadirs, wallet file layout, systemd units, passphrase file
 - [DOGE payout cadence](mem://infra/doge-payout-cadence.md) — Why the DOGE cycle runs every 10 min (Yiimp share purge), the 246 stranded blocks, float-sweep destination
+- [Cold destinations](mem://infra/cold-destinations.md) — Owner's DOGE/LTC sweep addresses + why coinbase can't pay cold directly; `cold-sweep.sh` SETUP/STATUS/DRAIN/INSTALL
+- [Payout cadence rule](mem://infra/payout-cadence-rule.md) — The 3 reasons payouts die (cadence, wallet lock, loop2 daemon) + `payout-restore.sh`
 - [NiceHash/MRR shim](mem://infra/nicehash-proxy.md) — Rental verification fails on the subscribe-reply diff of 16 + 6-11s first job; nicehash-proxy on port 3533 fixes both without touching scrypt.conf
 - [Pool snapshot/rollback](mem://infra/pool-snapshot.md) — `pool-snapshot.sh` SAVE/VERIFY/RESTORE; run SAVE+VERIFY before any stratum binary swap
 - [ZCU gate deadman](mem://infra/zcu-deadman.md) — auto-DISARM watchdog (systemd timer, 60s) for the ARMED ZCU gate: trips on 15m TXC/ISK block silence, stratum restarts, deadlock lines. Install BEFORE arming unattended.
