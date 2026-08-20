@@ -26,7 +26,7 @@ set -uo pipefail
 
 MODE="${1:-STATUS}"
 CONFIRM="${2:-}"
-VERSION="v1"
+VERSION="v2"
 
 COLD_ENV=/etc/pool-wallets/cold.env
 PASS_ENV=/etc/pool-wallets/passphrase.env
@@ -34,7 +34,11 @@ PAYOUT_LOCK=/var/web/runtime/doge-payout/doge-payout-cycle.lock
 SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
 
 DCLI="/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf"
-LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf"
+# Litecoin Core 0.21 is MULTI-WALLET on this box: `pool` (mining, holds the
+# money) and `rental`. Without -rpcwallet the CLI talks to the default
+# wallet, which is empty -- that is why LTC read as 0 on 2026-08-20.
+LTC_WALLET="${LTC_WALLET:-pool}"
+LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf -rpcwallet=$LTC_WALLET"
 
 # working float left behind on the box, per coin
 RESERVE_DOGE="${RESERVE_DOGE:-25000}"
