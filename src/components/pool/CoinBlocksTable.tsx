@@ -128,11 +128,24 @@ export function CoinBlocksTable({
                   <td className="px-3 py-3 text-pool-steel">
                     {coinAgo(Math.max(0, nowSec - b.time))}
                   </td>
-                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                    {s.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
-                    <span className="text-pool-steel">{b.symbol}</span>
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {s.unrecorded ? (
+                      <span className="text-pool-steel" title={s.title}>
+                        not recorded
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-pool-steel-hi">
+                          {s.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </span>{" "}
+                        <span className="text-pool-steel">{b.symbol}</span>
+                      </>
+                    )}
                   </td>
-                  <td className={`px-5 py-3 text-right tabular-nums ${s.color}`}>{s.label}</td>
+                  <td className={`px-5 py-3 text-right tabular-nums ${s.color}`} title={s.title}>
+                    {s.label}
+                  </td>
+
                 </tr>
               );
             })}
