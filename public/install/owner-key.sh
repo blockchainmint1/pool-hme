@@ -210,7 +210,9 @@ VERIFY)
   for c in LTC DOGE; do
     A=$(mysql -N -B yiimpfrontend -e "SELECT master_wallet FROM coins WHERE symbol='$c';" 2>/dev/null)
     M=$(cli "$c" getaddressinfo "$A" 2>/dev/null | grep -oE '"ismine": *(true|false)' | awk '{print $2}')
+    [ -n "$M" ] || M=$(cli "$c" validateaddress "$A" 2>/dev/null | grep -oE '"ismine": *(true|false)' | awk '{print $2}')
     L=$(cli "$c" getaddressinfo "$A" 2>/dev/null | grep -oE '"labels": *\[[^]]*\]')
+    [ -n "$L" ] || L=$(cli "$c" validateaddress "$A" 2>/dev/null | grep -oE '"account": *"[^"]*"')
     printf '  %-5s %s\n        ismine=%s  %s\n' "$c" "$A" "${M:-?}" "${L:-}"
   done
   echo
