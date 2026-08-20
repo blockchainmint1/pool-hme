@@ -47,8 +47,7 @@ MY "SELECT c.symbol, s.coinid, s.algo, s.solo, COUNT(*) n,
     GROUP BY s.coinid, s.algo, s.solo ORDER BY n DESC LIMIT 12;"
 echo
 echo "  -- coin ids in play --"
-MY "SELECT id, symbol, algo, enable, auto_ready, payout_min(*0+1) AS _ FROM coins WHERE symbol IN ('LTC','DOGE','TXC','ISK','ZCU');" 2>/dev/null \
-  || MY "SELECT id, symbol, algo, enable, auto_ready FROM coins WHERE symbol IN ('LTC','DOGE','TXC','ISK','ZCU');"
+MY "SELECT id, symbol, algo, enable, auto_ready, payout_min, LEFT(master_wallet,34) master_wallet FROM coins WHERE symbol IN ('LTC','DOGE','TXC','ISK','ZCU');"
 echo
 
 # ---------------------------------------------------------------- section 3
