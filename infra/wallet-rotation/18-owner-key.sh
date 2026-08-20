@@ -39,7 +39,7 @@ BK=/var/backups/pool-wallets
 STAMP=$(date -u '+%Y%m%d-%H%M%S')
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
-echo "18-owner-key v1  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
+echo "18-owner-key v2  mode=$MODE coin=${COIN:-all}  $(date -u '+%F %T UTC')"
 
 cli() { # cli <COIN> <args...>
   # Binaries are NOT on $PATH (see docs/infrastructure.md §2b). Use full paths + -conf.
