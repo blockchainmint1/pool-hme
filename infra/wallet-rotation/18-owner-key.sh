@@ -61,7 +61,10 @@ unlock() { # unlock <COIN> <seconds>
   cli "$c" walletpassphrase "$v" "$secs" >/dev/null 2>&1 || true
 }
 read_secret() { # read_secret <COIN> -> echoes the secret
-  local c=$1 f="/root/owner-key.$c" s=
+  local c=$1
+  local f s
+  f="/root/owner-key.$c"
+  s=
   if [ -s "$f" ]; then
     s=$(tr -d '[:space:]' < "$f")
     echo "  read from $f (will be shredded)" >&2
@@ -83,9 +86,14 @@ backup_wallet() { # backup_wallet <COIN>
   lc=$(printf '%s' "$c" | tr 'A-Z' 'a-z')
   out="$BK/$lc-wallet-before-ownerkey-$STAMP.dat"
   mkdir -p "$BK"; chmod 700 "$BK"
-  cli "$c" backupwallet "$out" >/dev/null 2>&1 \
-    && echo "  wallet backed up -> $out" \
-    || echo "  !! backupwallet failed -- ABORT and investigate"
+  local err
+  if err=$(cli "$c" backupwallet "$out" 2>&1); then
+    echo "  wallet backed up -> $out"
+  else
+    echo "  !! backupwallet failed -- ABORT and investigate"
+    echo "     daemon said: ${err:-<no output>}"
+    return 1
+  fi
 }
 
 case "$MODE" in
@@ -124,7 +132,7 @@ EOF
 SEED)
   [ "$COIN" = LTC ] || { echo "SEED mode is LTC-only (Dogecoin Core has no sethdseed). Use IMPORT for DOGE."; exit 1; }
   cli LTC help sethdseed >/dev/null 2>&1 || { echo "this litecoind does not support sethdseed"; exit 1; }
-  backup_wallet LTC
+  backup_wallet LTC || exit 1
   echo "  NOTE: existing keys stay in the wallet and keep working."
   echo "        Only NEW addresses derive from your seed."
   S=$(read_secret LTC) || exit 1
@@ -144,7 +152,7 @@ SEED)
 
 IMPORT)
   case "$COIN" in LTC|DOGE) ;; *) echo "usage: IMPORT LTC|DOGE"; exit 1;; esac
-  backup_wallet "$COIN"
+  backup_wallet "$COIN" || exit 1
   S=$(read_secret "$COIN") || exit 1
   unlock "$COIN" 300
   echo "  importing (rescan disabled -- this key is new, nothing to find)"
