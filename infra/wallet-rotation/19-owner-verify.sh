@@ -55,15 +55,40 @@ unlock() {
 }
 jget() { grep -oE "\"$2\": *\"?[^\",}]+" <<<"$1" | head -1 | sed 's/.*: *"\?//'; }
 
+addr_info() { # addr_info <COIN> <ADDR> -- prints JSON, handling old daemons
+  local c=$1 a=$2 out
+  # Dogecoin Core 1.14 predates getaddressinfo (JSON-RPC -32601 Method not
+  # found). validateaddress there returns ismine/iswatchonly/account itself.
+  out=$(cli "$c" getaddressinfo "$a" 2>&1)
+  if grep -q '\-32601\|Method not found' <<<"$out"; then
+    out=$(cli "$c" validateaddress "$a" 2>&1)
+  fi
+  printf '%s' "$out"
+}
+owner_addresses() { # owner_addresses <COIN> -- addresses labelled owner-coinbase
+  local c=$1 out
+  out=$(cli "$c" getaddressesbylabel "owner-coinbase" 2>&1)
+  if grep -q '\-32601\|Method not found' <<<"$out"; then
+    # 1.14 uses accounts, not labels
+    out=$(cli "$c" getaddressesbyaccount "owner-coinbase" 2>&1)
+  fi
+  grep -oE '"[a-zA-Z0-9]{20,}"' <<<"$out" | tr -d '"'
+}
+
 describe_addr() { # describe_addr <COIN> <ADDR>
-  local c=$1 a=$2 info mine wat lab path
-  info=$(cli "$c" getaddressinfo "$a" 2>&1)
-  if grep -qi 'error\|Invalid' <<<"$info"; then
+  local c=$1 a=$2 info mine wat lab path valid
+  info=$(addr_info "$c" "$a")
+  if grep -qi '"code": *-\|^error\|Invalid address' <<<"$info"; then
     echo "   !! daemon rejected the address: $(head -c 160 <<<"$info")"
     return 1
   fi
+  valid=$(jget "$info" isvalid)
+  if [ "${valid:-true}" = false ]; then
+    echo "   !! $c daemon says this is not a valid $c address: $a"
+    return 1
+  fi
   mine=$(jget "$info" ismine); wat=$(jget "$info" iswatchonly)
-  path=$(jget "$info" hdkeypath); lab=$(grep -oE '"labels": *\[[^]]*\]' <<<"$info")
+  path=$(jget "$info" hdkeypath); lab=$(grep -oE '"labels": *\[[^]]*\]|"account": *"[^"]*"' <<<"$info")
   printf '   address   : %s\n' "$a"
   printf '   ismine    : %s%s\n' "${mine:-false}" "$([ "${mine:-false}" = true ] && echo '   <-- wallet holds the private key' || echo '   <-- wallet CANNOT spend this')"
   [ "${wat:-false}" = true ] && printf '   watchonly : true (visible, NOT spendable)\n'
