@@ -22,6 +22,7 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 
 
 ## Memories
+- [LTC root RPC + loop2 unit name](mem://infra/ltc-root-rpc-and-loop2.md) — 20 Aug: multi-wallet root `/` RPC returns -19 and breaks yiimp LTC confirm+payout (fixed by unloading `rental`); payment runner is `yiimp-loop2`, NOT `loop2`
 - [LTC multi-wallet](mem://infra/ltc-multiwallet.md) — litecoin-cli MUST use `-rpcwallet=pool` or balances read 0; `rental` is empty; yiimp "orphan" LTC blocks are a bookkeeping artifact, not lost coins
 - [HD seed derivation](mem://infra/hd-seed-derivation.md) — Core `sethdseed` is NOT BIP39/BIP84, so cold-app addresses never match; use IMPORT + `owner-verify.sh MATCH` for owner-recoverable coinbase addresses
 - [Infrastructure doc](docs/infrastructure.md) — Full stratum host / paths / config / diagnostic reference (in-repo, not a mem:// file)
