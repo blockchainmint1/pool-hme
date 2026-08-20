@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { PoolBlock } from "./pool.functions";
+import { fetchPriceHistory, valueBlocks } from "./prices.server";
 
 const POOL_API = "https://api.stratum.pool.honest.money";
 
@@ -33,9 +34,23 @@ export interface CoinReport {
   };
 }
 
+export interface CoinValuation {
+  currency: "USD";
+  /** Spot price now, null when the price feed is unavailable. */
+  priceNow: number | null;
+  /** Sum of block rewards valued at the price on the day each block was found. */
+  valueAtMining: number;
+  /** Same rewards valued at today's price. */
+  valueNow: number;
+  /** How many blocks had a historical price to value against. */
+  pricedBlocks: number;
+}
+
 export interface CoinPageData {
   symbol: string;
   blocks: PoolBlock[];
+  /** null when the price feed is unavailable. */
+  valuation: CoinValuation | null;
   /** null when the pool API predates /coins/:symbol/report (v0.6.0). */
   report: CoinReport | null;
   fetchedAt: number;
@@ -71,16 +86,20 @@ export const getCoinPageData = createServerFn({ method: "GET" })
     const { symbol } = data;
     const limit = data.limit ?? 200;
 
-    const [blocksRes, report] = await Promise.all([
+    const [blocksRes, report, history] = await Promise.all([
       fetchJson<{ blocks: PoolBlock[] }>(
         `/api/v1/blocks?coin=${symbol}&limit=${limit}`,
       ).catch(() => ({ blocks: [] as PoolBlock[] })),
       fetchJson<CoinReport>(`/api/v1/coins/${symbol}/report`).catch(() => null),
+      fetchPriceHistory(symbol),
     ]);
+
+    const blocks = blocksRes.blocks ?? [];
 
     return {
       symbol,
-      blocks: blocksRes.blocks ?? [],
+      blocks,
+      valuation: history ? valueBlocks(blocks, history) : null,
       report,
       fetchedAt: Math.floor(Date.now() / 1000),
     };

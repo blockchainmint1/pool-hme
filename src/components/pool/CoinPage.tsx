@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import {
@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ArrowLeft, Coins, Wallet, Users, Layers, ExternalLink } from "lucide-react";
+import { ArrowLeft, Coins, Wallet, Layers, ExternalLink, DollarSign } from "lucide-react";
 import { COINBASE, explorerAddress } from "@/lib/pool/coinbase";
 import { getCoinPageData } from "@/lib/pool/coin.functions";
 import { CoinBlocksTable, CoinDot } from "./CoinBlocksTable";
@@ -43,6 +43,22 @@ const COPY: Record<CoinSymbol, { name: string; blurb: string; explorer: (a: stri
 
 function fmt(n: number, digits = 4) {
   return n.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+const WINDOWS = [
+  { key: "24h", label: "24h", seconds: 86_400, bucket: 3_600 },
+  { key: "7d", label: "7d", seconds: 7 * 86_400, bucket: 86_400 },
+  { key: "30d", label: "30d", seconds: 30 * 86_400, bucket: 86_400 },
+] as const;
+
+type WindowKey = (typeof WINDOWS)[number]["key"];
+
+function usd(n: number) {
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: n >= 1000 ? 0 : 2,
+  });
 }
 
 function shortAddr(a: string) {
@@ -88,6 +104,49 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
       }));
   }, [report, data.blocks]);
 
+  const [win, setWin] = useState<WindowKey>("7d");
+
+  const windowStats = useMemo(() => {
+    const now = data.fetchedAt;
+    return WINDOWS.map((w) => {
+      const from = now - w.seconds;
+      const rows = data.blocks.filter((b) => b.time >= from);
+      return {
+        ...w,
+        blocks: rows.length,
+        amount: rows.reduce((s, b) => s + (b.amount ?? 0), 0),
+      };
+    });
+  }, [data.blocks, data.fetchedAt]);
+
+  const windowChart = useMemo(() => {
+    const spec = WINDOWS.find((w) => w.key === win)!;
+    const now = data.fetchedAt;
+    const start = Math.floor((now - spec.seconds) / spec.bucket) * spec.bucket;
+    const buckets = new Map<number, { blocks: number; amount: number }>();
+    for (let t = start; t <= now; t += spec.bucket) buckets.set(t, { blocks: 0, amount: 0 });
+    for (const b of data.blocks) {
+      if (b.time < start) continue;
+      const key = Math.floor(b.time / spec.bucket) * spec.bucket;
+      const cur = buckets.get(key);
+      if (!cur) continue;
+      cur.blocks += 1;
+      cur.amount += b.amount ?? 0;
+    }
+    return [...buckets.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([t, v]) => ({
+        label:
+          spec.bucket === 3_600
+            ? new Date(t * 1000).toLocaleTimeString(undefined, { hour: "2-digit" })
+            : new Date(t * 1000).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              }),
+        ...v,
+      }));
+  }, [win, data.blocks, data.fetchedAt]);
+
   const totals = report?.totals ?? {
     blocks: data.blocks.length,
     total_amount: data.blocks.reduce((s, b) => s + (b.amount ?? 0), 0),
@@ -130,14 +189,16 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
             value={`${totals.confirmed.toLocaleString()} / ${totals.immature.toLocaleString()}`}
           />
           <Stat
-            icon={Users}
-            label="Paid to miners"
-            value={
-              report
-                ? `${fmt(report.payouts.total_paid, symbol === "DOGE" ? 0 : 4)} ${symbol}`
-                : "—"
+            icon={DollarSign}
+            label="Value mined"
+            value={data.valuation ? usd(data.valuation.valueAtMining) : "—"}
+            hint={
+              data.valuation
+                ? `priced at time of mining · ${usd(data.valuation.valueNow)} at today's ${usd(
+                    data.valuation.priceNow ?? 0,
+                  )}/${symbol}`
+                : "price feed unavailable"
             }
-            hint={report ? `${report.payouts.count.toLocaleString()} payouts` : undefined}
           />
         </section>
 
@@ -198,6 +259,79 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
           </div>
         </section>
 
+
+        <section className="space-y-3">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <Header eyebrow="Recent output" title="Blocks found." />
+            <div className="flex items-center gap-1 font-mono text-[11px]">
+              {WINDOWS.map((w) => (
+                <button
+                  key={w.key}
+                  type="button"
+                  onClick={() => setWin(w.key)}
+                  className={`px-2.5 py-1 rounded border transition-colors ${
+                    win === w.key
+                      ? "border-pool-amber text-pool-amber"
+                      : "border-pool-hairline text-pool-steel hover:text-pool-steel-hi"
+                  }`}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-4">
+            {windowStats.map((w) => (
+              <Stat
+                key={w.key}
+                icon={Layers}
+                label={`Blocks · last ${w.label}`}
+                value={w.blocks.toLocaleString()}
+                hint={`${fmt(w.amount, symbol === "DOGE" ? 0 : 4)} ${symbol}`}
+              />
+            ))}
+          </div>
+
+          <div className="pool-kpi-panel rounded-lg p-4 h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={windowChart} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" opacity={0.12} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10 }}
+                  stroke="currentColor"
+                  opacity={0.6}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  stroke="currentColor"
+                  opacity={0.6}
+                  allowDecimals={false}
+                  width={32}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "hsl(var(--popover))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number, k) =>
+                    k === "blocks" ? [v, "blocks"] : [fmt(v, 4), symbol]
+                  }
+                />
+                <Bar
+                  dataKey="blocks"
+                  fill="currentColor"
+                  className="text-pool-mint"
+                  radius={[2, 2, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
         <section className="space-y-3">
           <Header
