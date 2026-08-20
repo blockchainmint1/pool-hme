@@ -54,8 +54,10 @@ unlock() { # unlock <COIN> <seconds>
   local c=$1 secs=$2 v
   # shellcheck disable=SC1090
   [ -f "$PASS_ENV" ] && . "$PASS_ENV"
-  case "$c" in LTC) v=${LTC_PASSPHRASE:-} ;; DOGE) v=${DOGE_PASSPHRASE:-} ;; esac
-  [ -n "$v" ] || { echo "  !! no passphrase for $c in $PASS_ENV"; return 1; }
+  # Coin-specific var wins; fall back to shared WALLET_PASSPHRASE (both wallets
+  # share one passphrase after rotation -- see docs/infrastructure.md §2b).
+  case "$c" in LTC) v=${LTC_PASSPHRASE:-${WALLET_PASSPHRASE:-}} ;; DOGE) v=${DOGE_PASSPHRASE:-${WALLET_PASSPHRASE:-}} ;; esac
+  [ -n "$v" ] || { echo "  !! no passphrase for $c in $PASS_ENV (need LTC_PASSPHRASE/DOGE_PASSPHRASE or WALLET_PASSPHRASE)"; return 1; }
   cli "$c" walletpassphrase "$v" "$secs" >/dev/null 2>&1 || true
 }
 read_secret() { # read_secret <COIN> -> echoes the secret
