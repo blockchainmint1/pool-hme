@@ -124,6 +124,17 @@
   --pool-mint: oklch(0.85 0.15 165);       /* hashrate signal — sparingly */
   --pool-amber: oklch(0.82 0.15 78);       /* payout signal */
 
+  /* Panel composites — overridden wholesale in .light so tiles flip too */
+  --pool-panel-a: oklch(0.20 0.008 250 / 0.9);
+  --pool-panel-b: oklch(0.14 0.005 250 / 0.9);
+  --pool-tick-a: oklch(0.24 0.008 250);
+  --pool-tick-b: oklch(0.16 0.006 250);
+  --pool-inset-hi: oklch(1 0 0 / 4%);
+  --pool-grid-line: oklch(1 0 0 / 3%);
+  --pool-scan-line: oklch(1 0 0 / 2%);
+  --pool-panel-shadow: 0 20px 40px -30px oklch(0 0 0 / 0.9);
+  --pool-glow: oklch(0.85 0.15 165 / 6%);
+
   --font-pool-display: "Space Grotesk", "Oswald", system-ui, sans-serif;
   --font-pool-body: "DM Sans", "Inter", system-ui, sans-serif;
 }
@@ -175,7 +186,19 @@
   --pool-graphite-2: oklch(0.88 0.006 250);
   --pool-steel: oklch(0.42 0.020 250);
   --pool-steel-hi: oklch(0.22 0.015 250);
-  --pool-hairline: oklch(0.18 0.02 250 / 10%);
+  --pool-hairline: oklch(0.18 0.02 250 / 12%);
+  --pool-mint: oklch(0.58 0.13 165);
+  --pool-amber: oklch(0.62 0.13 70);
+
+  --pool-panel-a: oklch(1 0 0 / 0.95);
+  --pool-panel-b: oklch(0.965 0.004 250 / 0.95);
+  --pool-tick-a: oklch(0.975 0.003 250);
+  --pool-tick-b: oklch(0.935 0.005 250);
+  --pool-inset-hi: oklch(1 0 0 / 60%);
+  --pool-grid-line: oklch(0.18 0.02 250 / 5%);
+  --pool-scan-line: oklch(0.18 0.02 250 / 2.5%);
+  --pool-panel-shadow: 0 16px 32px -28px oklch(0.18 0.02 250 / 0.55);
+  --pool-glow: oklch(0.58 0.13 165 / 7%);
 }
 
 @layer base {
@@ -259,9 +282,9 @@
   .pool-grid-bg {
     background-color: var(--pool-obsidian);
     background-image:
-      linear-gradient(to right, oklch(1 0 0 / 3%) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(1 0 0 / 3%) 1px, transparent 1px),
-      radial-gradient(ellipse 60% 40% at 50% 0%, oklch(0.85 0.15 165 / 6%), transparent 60%);
+      linear-gradient(to right, var(--pool-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--pool-grid-line) 1px, transparent 1px),
+      radial-gradient(ellipse 60% 40% at 50% 0%, var(--pool-glow), transparent 60%);
     background-size: 44px 44px, 44px 44px, 100% 100%;
   }
   .pool-scanline {
@@ -269,27 +292,27 @@
       to bottom,
       transparent 0px,
       transparent 2px,
-      oklch(1 0 0 / 2%) 2px,
-      oklch(1 0 0 / 2%) 3px
+      var(--pool-scan-line) 2px,
+      var(--pool-scan-line) 3px
     );
   }
   .pool-kpi-panel {
     background:
-      linear-gradient(180deg, oklch(0.20 0.008 250 / 0.9), oklch(0.14 0.005 250 / 0.9));
+      linear-gradient(180deg, var(--pool-panel-a), var(--pool-panel-b));
     border: 1px solid var(--pool-hairline);
     box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 4%),
-      0 20px 40px -30px oklch(0 0 0 / 0.9);
+      inset 0 1px 0 var(--pool-inset-hi),
+      var(--pool-panel-shadow);
   }
   .pool-tick {
     background:
-      linear-gradient(180deg, oklch(0.24 0.008 250), oklch(0.16 0.006 250));
+      linear-gradient(180deg, var(--pool-tick-a), var(--pool-tick-b));
     border: 1px solid var(--pool-hairline);
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
+    box-shadow: inset 0 1px 0 var(--pool-inset-hi);
   }
   @keyframes pool-hash-shimmer {
-    0%, 100% { opacity: 1; text-shadow: 0 0 12px oklch(0.85 0.15 165 / 0.35); }
-    50% { opacity: 0.92; text-shadow: 0 0 18px oklch(0.85 0.15 165 / 0.55); }
+    0%, 100% { opacity: 1; text-shadow: 0 0 12px color-mix(in oklab, var(--pool-mint), transparent 65%); }
+    50% { opacity: 0.92; text-shadow: 0 0 18px color-mix(in oklab, var(--pool-mint), transparent 45%); }
   }
   .pool-hash-live { animation: pool-hash-shimmer 3.6s ease-in-out infinite; }
 
