@@ -18,6 +18,8 @@ User has no SSH on their laptop — ship yiimp-api updates via `bash infra/yiimp
 Coin daemon CLIs are NOT on $PATH: LTC `/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf` (wallet `wallets/pool/wallet.dat`, `wallet=pool`); DOGE `/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf` (wallet.dat at datadir root).
 DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when the parent LTC round credits, so a daily run strands blocks as `no_shares`. Batching is `MIN_PAYOUT_DOGE`, not the interval.
 `auxpow_rpc_mode = 1` allowlist in stratum `db.cpp` is `ISK || TXC || ZCU` — DOGE must NEVER be in it (mode 1 = ~20% DOGE accept).
+**LTC `coins.master_wallet` MUST be legacy P2PKH (`L...`, iswitness=false).** A bech32 `ltc1q...` parent coinbase breaks auxpow for ALL UTXO children (TXC/ISK/DOGE) with `CDataStream::read(): end of data`.
+
 
 ## Memories
 - [LTC multi-wallet](mem://infra/ltc-multiwallet.md) — litecoin-cli MUST use `-rpcwallet=pool` or balances read 0; `rental` is empty; yiimp "orphan" LTC blocks are a bookkeeping artifact, not lost coins
@@ -42,4 +44,5 @@ DOGE payout cycle must stay on a ~10-minute cron — Yiimp deletes `shares` when
 - [NiceHash/MRR shim](mem://infra/nicehash-proxy.md) — Rental verification fails on the subscribe-reply diff of 16 + 6-11s first job; nicehash-proxy on port 3533 fixes both without touching scrypt.conf
 - [Pool snapshot/rollback](mem://infra/pool-snapshot.md) — `pool-snapshot.sh` SAVE/VERIFY/RESTORE; run SAVE+VERIFY before any stratum binary swap
 - [ZCU gate deadman](mem://infra/zcu-deadman.md) — auto-DISARM watchdog (systemd timer, 60s) for the ARMED ZCU gate: trips on 15m TXC/ISK block silence, stratum restarts, deadlock lines. Install BEFORE arming unattended.
-- [Auxpow serialization break](mem://infra/auxpow-serialization-break.md) — 20 Aug 2026: ZCU binary emits malformed auxpow for TXC/ISK (`CDataStream::read(): end of data`); solved blocks silently discarded. Grep `aux submit rpc=` for `error=`, roll back the binary.
+- [Auxpow serialization break](mem://infra/auxpow-serialization-break.md) — 20 Aug 2026 incident log: `CDataStream::read(): end of data` on TXC/ISK/DOGE submits. Binary rollback did NOT fix it; **root cause was the bech32 LTC coinbase** (see below). Keep for the triage grep pattern.
+- [Parent coinbase must be legacy](mem://infra/parent-coinbase-must-be-legacy.md) — Resolution of the 20 Aug outage: parent LTC coinbase must be legacy P2PKH; verify `iswitness:false` via `getaddressinfo` before ANY coinbase rotation.
