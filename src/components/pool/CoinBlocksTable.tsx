@@ -153,6 +153,16 @@ export function CoinBlocksTable({
         </table>
       </div>
 
+      {rows.some((b) => blockStatus(b).unrecorded) && (
+        <div className="border-t border-pool-hairline px-5 py-3 text-[11px] font-mono text-pool-steel leading-relaxed">
+          &ldquo;not recorded / unverified&rdquo; means the pool database has no reward figure
+          for that block — not that the block was lost. Rewards are held in the pool wallet
+          and reconciled against the chain.
+        </div>
+      )}
+
+
+
       <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-[11px] font-mono text-pool-steel">
           {blocks.length === 0
