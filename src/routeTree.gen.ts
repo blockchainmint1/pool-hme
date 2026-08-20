@@ -17,7 +17,9 @@ import { Route as PoolApiRouteImport } from './routes/pool-api'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as ManifestoRouteImport } from './routes/manifesto'
+import { Route as LtcRouteImport } from './routes/ltc'
 import { Route as GraphsRouteImport } from './routes/graphs'
+import { Route as DogeRouteImport } from './routes/doge'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as BlocksRouteImport } from './routes/blocks'
@@ -129,9 +131,19 @@ const ManifestoRoute = ManifestoRouteImport.update({
   path: '/manifesto',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LtcRoute = LtcRouteImport.update({
+  id: '/ltc',
+  path: '/ltc',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GraphsRoute = GraphsRouteImport.update({
   id: '/graphs',
   path: '/graphs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DogeRoute = DogeRouteImport.update({
+  id: '/doge',
+  path: '/doge',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -496,7 +508,9 @@ export interface FileRoutesByFullPath {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
@@ -577,7 +591,9 @@ export interface FileRoutesByTo {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mining': typeof MiningRoute
   '/pool-api': typeof PoolApiRoute
@@ -658,7 +674,9 @@ export interface FileRoutesById {
   '/blocks': typeof BlocksRoute
   '/diagnostics': typeof DiagnosticsRoute
   '/docs': typeof DocsRoute
+  '/doge': typeof DogeRoute
   '/graphs': typeof GraphsRoute
+  '/ltc': typeof LtcRoute
   '/manifesto': typeof ManifestoRoute
   '/mempool': typeof MempoolRouteWithChildren
   '/mining': typeof MiningRoute
@@ -741,7 +759,9 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mempool'
     | '/mining'
@@ -822,7 +842,9 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mining'
     | '/pool-api'
@@ -902,7 +924,9 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/diagnostics'
     | '/docs'
+    | '/doge'
     | '/graphs'
+    | '/ltc'
     | '/manifesto'
     | '/mempool'
     | '/mining'
@@ -984,7 +1008,9 @@ export interface RootRouteChildren {
   BlocksRoute: typeof BlocksRoute
   DiagnosticsRoute: typeof DiagnosticsRoute
   DocsRoute: typeof DocsRoute
+  DogeRoute: typeof DogeRoute
   GraphsRoute: typeof GraphsRoute
+  LtcRoute: typeof LtcRoute
   ManifestoRoute: typeof ManifestoRoute
   MempoolRoute: typeof MempoolRouteWithChildren
   MiningRoute: typeof MiningRoute
@@ -1097,11 +1123,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManifestoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ltc': {
+      id: '/ltc'
+      path: '/ltc'
+      fullPath: '/ltc'
+      preLoaderRoute: typeof LtcRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/graphs': {
       id: '/graphs'
       path: '/graphs'
       fullPath: '/graphs'
       preLoaderRoute: typeof GraphsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doge': {
+      id: '/doge'
+      path: '/doge'
+      fullPath: '/doge'
+      preLoaderRoute: typeof DogeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -1719,7 +1759,9 @@ const rootRouteChildren: RootRouteChildren = {
   BlocksRoute: BlocksRoute,
   DiagnosticsRoute: DiagnosticsRoute,
   DocsRoute: DocsRoute,
+  DogeRoute: DogeRoute,
   GraphsRoute: GraphsRoute,
+  LtcRoute: LtcRoute,
   ManifestoRoute: ManifestoRoute,
   MempoolRoute: MempoolRouteWithChildren,
   MiningRoute: MiningRoute,
