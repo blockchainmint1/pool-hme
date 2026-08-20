@@ -187,6 +187,26 @@ function PoolHome() {
             <FoundBlocks />
           </section>
 
+          <section id="ltc-blocks" className="space-y-3">
+            <SectionHeader
+              eyebrow="Parent chain"
+              title="Recent LTC blocks."
+              hint="10 per page · newest first"
+            />
+            <CoinRecentBlocks symbol="LTC" />
+          </section>
+
+          <section id="doge-blocks" className="space-y-3">
+            <SectionHeader
+              eyebrow="Merge-mined"
+              title="Recent DOGE blocks."
+              hint="10 per page · newest first"
+            />
+            <CoinRecentBlocks symbol="DOGE" />
+          </section>
+
+
+
           <section id="resilience" className="space-y-3">
             <SectionHeader
               eyebrow="Failover strategy"
