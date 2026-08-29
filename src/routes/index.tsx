@@ -369,8 +369,15 @@ function PoolHero() {
 
           <LiveMinersKpi />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
-          <LiveBlocks24hKpi />
+          <Kpi
+            label="Payouts"
+            value="daily"
+            hint="batched · LTC + DOGE"
+          />
         </div>
+
+        {/* Blocks found — the headline dataset, full width */}
+        <BlocksFoundPanel />
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <a
