@@ -27,7 +27,7 @@ SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
 eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*define( *'YAAMP_DBPASSWORD' *, *'\([^']*\)').*/DBP='\1'/p" "$SERVERCONFIG" 2>/dev/null)"
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 
-echo "doge-unlock-cycle v1  $(date -u '+%F %T UTC')  mode=$MODE"
+echo "doge-unlock-cycle v2  $(date -u '+%F %T UTC')  mode=$MODE"
 [ -f "$CYCLE" ] || { echo "FATAL: $CYCLE missing"; exit 1; }
 echo
 
