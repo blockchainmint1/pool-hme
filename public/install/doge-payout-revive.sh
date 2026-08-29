@@ -203,7 +203,7 @@ if [ "$MODE" = REVIVE ]; then
 # deletes the parent LTC round's \`shares\` rows. A daily cadence loses blocks.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-cycle.lock /bin/bash $CYCLE >> $LOCK_DIR/cycle.log 2>&1
+*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-wrapper.lock /bin/bash $CYCLE >> $LOCK_DIR/cycle.log 2>&1
 EOF
   chmod 644 "$CRON_FILE"
   echo "  installed $CRON_FILE (*/$EVERY_MIN)"
@@ -242,7 +242,7 @@ EOF
   echo "  cron reloaded"
   echo
   echo "  running one live cycle now:"
-  flock -n "$LOCK_DIR/doge-payout-cycle.lock" bash "$CYCLE" 2>&1 | tail -40
+  flock -n "$LOCK_DIR/doge-payout-wrapper.lock" bash "$CYCLE" 2>&1 | tail -40
   echo
   echo "  ledger after:"
   MY "SELECT status, COUNT(*) rows_, ROUND(SUM(amount),2) doge FROM doge_payout_ledger GROUP BY status"

@@ -27,7 +27,7 @@ SERVERCONFIG=${SERVERCONFIG:-/var/web/serverconfig.php}
 eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*define( *'YAAMP_DBPASSWORD' *, *'\([^']*\)').*/DBP='\1'/p" "$SERVERCONFIG" 2>/dev/null)"
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 
-echo "doge-unlock-cycle v1  $(date -u '+%F %T UTC')  mode=$MODE"
+echo "doge-unlock-cycle v2  $(date -u '+%F %T UTC')  mode=$MODE"
 [ -f "$CYCLE" ] || { echo "FATAL: $CYCLE missing"; exit 1; }
 echo
 
@@ -112,7 +112,12 @@ echo "  (originals preserved in $RUNDIR/stale-$STAMP)"
 
 echo
 echo "===== 4. one live cycle"
-flock -n "$RUNDIR/doge-payout-cycle.lock" bash "$CYCLE" 2>&1 | tail -60
+# NOTE: do NOT flock doge-payout-cycle.lock here -- the cycle locks that file
+# itself (exec 9>...; flock -n 9). An outer flock on the same path makes the
+# cycle see its own parent's lock and print "already running". Use a separate
+# wrapper lock so concurrent doctor/cron runs still can't overlap.
+flock -n "$RUNDIR/doge-payout-wrapper.lock" bash "$CYCLE" 2>&1 | tail -60
+
 
 echo
 echo "===== 5. ledger after"
