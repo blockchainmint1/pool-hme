@@ -51,7 +51,7 @@ const CFG = {
   orgId: env("NICEHASH_ORG_ID", "NICEHASH_ORGANIZATION", "NICEHASH_ORG"),
   rentalAddr: process.env.RENTAL_LTC_ADDR || "",
   poolApiBase: process.env.POOL_API_BASE || "https://api.stratum.pool.honest.money",
-  poolHost: process.env.POOL_HOST || "stratum.pool.honest.money:3533",
+  poolHost: process.env.POOL_HOST || "stratum.pool.honest.money:3433",
   minTargetThs: num("MIN_TARGET_THS", 19),
   triggerFraction: num("TRIGGER_FRACTION", 0.75),
   rentCapThs: num("RENT_CAP_THS", 19),

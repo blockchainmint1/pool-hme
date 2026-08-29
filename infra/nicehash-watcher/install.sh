@@ -52,7 +52,7 @@ RENTAL_LTC_ADDR=
 
 # Pool stats API (yiimp-api). Leave default unless overridden.
 POOL_API_BASE=https://api.stratum.pool.honest.money
-POOL_HOST=stratum.pool.honest.money:3533
+POOL_HOST=stratum.pool.honest.money:3433
 
 # Strategy
 MIN_TARGET_THS=19
@@ -82,6 +82,7 @@ BID_FILL_FRACTION=0.85
 # Cadence
 POLL_INTERVAL_SEC=30
 RECOVER_CONFIRMATIONS=3
+LOW_CONFIRMATIONS=3
 
 # Telegram alerts — fires when hashrate drops below TRIGGER_FRACTION of target,
 # on recovery, and on order placed/cancelled/failed. Leave blank to disable.

@@ -152,6 +152,8 @@ function floatOr(v: string | undefined, d: number) {
 // ---------------------------------------------------------------------------
 
 const offsets = new Map<string, number>();
+const drains = new Map<string, Promise<void>>();
+const MAX_DRAIN_BYTES = 1024 * 1024;
 
 /** Start watching every ${algo}.log. Safe to call once at boot. */
 export function startStratumWatch() {
@@ -164,14 +166,20 @@ export function startStratumWatch() {
       .catch(() => offsets.set(p, 0));
     try {
       watch(p, { persistent: false }, () => {
-        void drain(algo, p);
+        queueDrain(algo, p);
       });
     } catch {
       // File may not exist yet — that's fine.
     }
     // Also poll every 5s in case fs.watch misses events (common on ext4).
-    setInterval(() => void drain(algo, p), 5_000).unref();
+    setInterval(() => queueDrain(algo, p), 5_000).unref();
   }
+}
+
+function queueDrain(algo: string, p: string) {
+  if (drains.has(p)) return;
+  const pending = drain(algo, p).finally(() => drains.delete(p));
+  drains.set(p, pending);
 }
 
 async function drain(algo: string, p: string) {
@@ -186,9 +194,16 @@ async function drain(algo: string, p: string) {
     if (stat.size === prev) return;
     const fh = await fs.open(p, "r");
     try {
-      const len = stat.size - prev;
+      // A busy stratum can append hundreds of MB between callbacks. Never
+      // allocate/process the entire delta on Node's main thread: that made the
+      // API (including /health and request timeouts) appear to hang. Read only
+      // the newest bounded chunk; block/summary events are advisory and the DB
+      // remains authoritative for historical data.
+      const unread = stat.size - prev;
+      const len = Math.min(unread, MAX_DRAIN_BYTES);
+      const start = stat.size - len;
       const buf = Buffer.alloc(len);
-      await fh.read(buf, 0, len, prev);
+      await fh.read(buf, 0, len, start);
       offsets.set(p, stat.size);
       for (const line of buf.toString("utf8").split("\n")) {
         if (!line) continue;
@@ -221,11 +236,22 @@ function emitFromLine(algo: string, line: string) {
   if (/summary diag/i.test(line)) {
     const kv: Record<string, string> = {};
     for (const m of line.matchAll(/(\w+)=([-+]?[\d.]+)/g)) kv[m[1]] = m[2];
-    stratumEvents.emit("hashrate-tick", {
+    const value: StratumLive = {
       algo,
       clients: intOr(kv.clients, 0),
+      active: intOr(kv.active, 0),
       accepted_ghs: floatOr(kv.accepted_ghs, 0),
-      time: Math.floor(Date.now() / 1000),
+      valid: intOr(kv.valid, 0),
+      invalid: intOr(kv.invalid, 0),
+      stales: intOr(kv.stales, 0),
+      updated_at: Math.floor(Date.now() / 1000),
+    };
+    cache.set(algo, { value, fetchedAt: Date.now() });
+    stratumEvents.emit("hashrate-tick", {
+      algo: value.algo,
+      clients: value.clients,
+      accepted_ghs: value.accepted_ghs,
+      time: value.updated_at,
     });
   }
 }
