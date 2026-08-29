@@ -726,27 +726,68 @@ function nextDailyPayoutEpoch() {
 // ---------------------------------------------------------------------------
 // Found blocks
 // ---------------------------------------------------------------------------
+type BlocksWindow = "24h" | "7d" | "30d";
+const BLOCKS_WINDOWS: { id: BlocksWindow; label: string }[] = [
+  { id: "24h", label: "24H" },
+  { id: "7d", label: "7D" },
+  { id: "30d", label: "30D" },
+];
+
 function LiveBlocks24hKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
+  const [window_, setWindow] = useState<BlocksWindow>("24h");
   // 5 chains. LTC/DOGE come in as auxpow credit — not solo-found —
   // so their tiles will normally read 0. That's intentional (see manifesto).
   const chains = ["LTC", "DOGE", "TXC", "ISK", "ZCU"] as const;
+  const counts =
+    window_ === "7d"
+      ? data.blocks7dBySymbol
+      : window_ === "30d"
+        ? data.blocks30dBySymbol
+        : data.blocks24hBySymbol;
   return (
     <div className="pool-tick rounded-md p-5">
-      <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
-        Blocks / 24h
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+          Blocks / {window_}
+        </div>
+        <div
+          role="tablist"
+          aria-label="Block count window"
+          className="flex rounded border border-pool-hairline overflow-hidden font-mono"
+        >
+          {BLOCKS_WINDOWS.map((w) => (
+            <button
+              key={w.id}
+              role="tab"
+              aria-selected={window_ === w.id}
+              onClick={() => setWindow(w.id)}
+              className={`px-2 py-0.5 text-[10px] tracking-widest transition-colors ${
+                window_ === w.id
+                  ? "bg-pool-mint/15 text-pool-mint"
+                  : "text-pool-steel hover:text-pool-steel-hi"
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
         {chains.map((sym) => (
           <MiniBlockTile
             key={sym}
             label={sym}
-            value={data.blocks24hBySymbol[sym] ?? 0}
+            value={counts?.[sym] ?? 0}
+            pending={counts == null}
           />
         ))}
       </div>
       <div className="mt-3 text-[10px] font-mono text-pool-steel leading-relaxed">
         TXC · ISK · ZCU pool-found · LTC / DOGE via auxpow credit
+        {counts == null && (
+          <> · 7d/30d available after the pool API update is installed on the box</>
+        )}
       </div>
     </div>
   );
@@ -756,10 +797,12 @@ function MiniBlockTile({
   label,
   value,
   accent,
+  pending,
 }: {
   label: string;
   value: number;
   accent?: boolean;
+  pending?: boolean;
 }) {
   return (
     <div className="rounded border border-pool-hairline pool-graphite/40 px-2 py-1.5">
@@ -771,7 +814,7 @@ function MiniBlockTile({
           accent ? "text-pool-mint" : "text-pool-steel-hi"
         }`}
       >
-        {value.toLocaleString()}
+        {pending ? "—" : value.toLocaleString()}
       </div>
     </div>
   );
