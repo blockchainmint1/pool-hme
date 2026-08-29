@@ -16,6 +16,7 @@ class PoolAPI {
   async _get(path) {
     const res = await fetch(this.base + path, {
       headers: { "User-Agent": "honest-money-nicehash-watcher/1.0" },
+      signal: AbortSignal.timeout(10000),
     });
     const text = await res.text();
     if (!res.ok) {
@@ -26,20 +27,16 @@ class PoolAPI {
 
   /** Current scrypt hashrate in TH/s. */
   async currentHashrateThs(algo = "scrypt") {
-    const data = await this._get("/api/v1/pool/summary");
-    const algos = data.algos || data.algos_summary || [];
+    const data = await this._get("/api/v1/pool/hashrate/current");
+    const algos = data.algos || [];
     const a =
       algos.find((x) => String(x.algo).toLowerCase() === algo) ||
       algos.find((x) => String(x.algo).toLowerCase() === "scrypt");
-    // `hashrate_hs` can come from the yiimp `hashstats` cron, which goes stale
-    // and reports a phantom cliff. When the API says the stats row is stale (or
-    // exposes a shares-derived number that disagrees), take the HIGHER of the
-    // two: renting on a bookkeeping glitch costs real money.
-    const stats = a ? Number(a.hashrate_hs || a.hashrate || 0) : 0;
-    const live = a ? Number(a.hashrate_live_hs || 0) : 0;
-    const stale = a ? Boolean(a.hashrate_stats_stale) : false;
-    const hs = stale ? Math.max(live, stats) : stats || live;
-    if (!hs) throw new Error(`PoolAPI: scrypt hashrate not found in summary`);
+    if (!a || !a.reliable) {
+      throw new Error(`PoolAPI: current scrypt sample is missing or unreliable`);
+    }
+    const hs = Number(a.hashrate_hs || 0);
+    if (!hs) throw new Error(`PoolAPI: scrypt hashrate not found in current sample`);
     return hs / 1e12;
   }
 

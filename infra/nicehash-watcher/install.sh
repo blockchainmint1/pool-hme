@@ -38,7 +38,9 @@ chmod 0644 "$BUNDLE"
 
 # ---- env file ---------------------------------------------------------------
 echo "==> Writing env file $ENV_FILE"
-cat > "$ENV_FILE" <<'EOF'
+ENV_TEMPLATE="$(mktemp)"
+trap 'rm -f "$ENV_TEMPLATE"' EXIT
+cat > "$ENV_TEMPLATE" <<'EOF'
 # NiceHash auto-purchase watcher configuration.
 # Fill in the four REQUIRED values, then `systemctl restart nicehash-watcher`.
 
@@ -52,7 +54,7 @@ RENTAL_LTC_ADDR=
 
 # Pool stats API (yiimp-api). Leave default unless overridden.
 POOL_API_BASE=https://api.stratum.pool.honest.money
-POOL_HOST=stratum.pool.honest.money:3533
+POOL_HOST=stratum.pool.honest.money:3433
 
 # Strategy
 MIN_TARGET_THS=19
@@ -82,6 +84,7 @@ BID_FILL_FRACTION=0.85
 # Cadence
 POLL_INTERVAL_SEC=30
 RECOVER_CONFIRMATIONS=3
+LOW_CONFIRMATIONS=3
 
 # Telegram alerts — fires when hashrate drops below TRIGGER_FRACTION of target,
 # on recovery, and on order placed/cancelled/failed. Leave blank to disable.
@@ -100,6 +103,19 @@ MONITOR_EVERY_SEC=300
 # Set DRY_RUN=true to log actions without spending.
 DRY_RUN=false
 EOF
+if [ -f "$ENV_FILE" ]; then
+  echo "    preserving existing values; appending missing settings only"
+  while IFS= read -r line; do
+    case "$line" in
+      [A-Za-z_]*=*)
+        key="${line%%=*}"
+        grep -q "^${key}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
+        ;;
+    esac
+  done < "$ENV_TEMPLATE"
+else
+  mv "$ENV_TEMPLATE" "$ENV_FILE"
+fi
 chmod 0600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
@@ -159,7 +175,8 @@ if [ -n "$NODE_BIN" ] && [ "$NODE_BIN" != "/usr/bin/node" ]; then
 fi
 
 systemctl daemon-reload
-systemctl enable --now nicehash-watcher.service 2>/dev/null || true
+systemctl enable nicehash-watcher.service 2>/dev/null || true
+systemctl restart nicehash-watcher.service
 
 echo
 echo "==> Installed. Status:"

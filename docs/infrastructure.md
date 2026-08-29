@@ -244,6 +244,20 @@ Learning goals while we still have limited access:
 
 ## 9. Incident notes
 
+### 2026-08-29 — false half-hashrate readings and API event-loop stall
+
+- The `shares` table retention is shorter and variable (observed near five to
+  sixteen minutes). A query requesting ten minutes must divide accepted share
+  difficulty by the **actual `MAX(time)-MIN(time)` coverage**, not a fixed 600
+  seconds. Fixed-denominator math produced the false ~10.5 TH/s reading while
+  the 1,233-miner Hashcore view showed ~20.5 TH/s.
+- NiceHash decisions use `/api/v1/pool/hashrate/current`, which is deliberately
+  independent of the dashboard summary and rejects samples with under two
+  minutes of coverage or a newest share older than two minutes.
+- The yiimp API stratum watcher must serialize reads and cap each read at 1 MiB.
+  The old watcher could process an unbounded busy-log delta on the Node event
+  loop, freezing `/api/health`, summary timeouts, and all HTTP responses.
+
 ### 2026-08-29 — DOGE payout scheduler lock ownership
 
 - `/var/web/doge-payout-cycle.sh` exclusively owns its internal lock at

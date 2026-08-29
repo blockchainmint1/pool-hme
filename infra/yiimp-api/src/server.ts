@@ -181,7 +181,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.2" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.3" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -192,7 +192,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.2" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.3" };
 });
 
 // ============================================================================
@@ -403,8 +403,9 @@ async function computeSummary() {
       `SELECT s.algo,
               COUNT(DISTINCT w.userid)   AS db_miners,
               COUNT(DISTINCT s.workerid) AS db_workers,
-              SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END)
-                * 4294967296 / 600       AS live_hashrate
+               SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END) AS live_difficulty,
+               MIN(s.time) AS share_first_at,
+               MAX(s.time) AS share_last_at
          FROM shares s
          LEFT JOIN workers w ON w.id = s.workerid
         WHERE s.time > UNIX_TIMESTAMP() - 600
@@ -483,20 +484,24 @@ async function computeSummary() {
     const algo = String(r.algo);
     const s = stratum[algo];
     const h = hashByAlgo[algo];
-    const liveHs = Number(r.live_hashrate ?? 0);
+    const coverageSec = Math.max(0, Number(r.share_last_at ?? 0) - Number(r.share_first_at ?? 0));
+    const liveHs = coverageSec >= 60
+      ? Number(r.live_difficulty ?? 0) * 4294967296 / coverageSec
+      : 0;
     const statsFresh = !!h && h.time > 0 && nowSec - h.time <= HASHSTATS_MAX_AGE_SEC;
     // Prefer hashstats when fresh; otherwise the shares-derived value.
-    const useStats = statsFresh && h!.hashrate_hs > 0;
+    const useStats = statsFresh && Number(h?.hashrate_hs ?? 0) > 0;
     return {
       algo,
       db_miners: Number(r.db_miners ?? 0),
       db_workers: Number(r.db_workers ?? 0),
       live_clients: s ? s.clients : Number(r.db_workers ?? 0),
-      hashrate_hs: useStats ? h!.hashrate_hs : liveHs || (s ? s.accepted_ghs * 1e9 : 0),
-      hashrate_updated_at: useStats ? h!.time : nowSec,
+      hashrate_hs: useStats ? Number(h?.hashrate_hs ?? 0) : liveHs || (s ? s.accepted_ghs * 1e9 : 0),
+      hashrate_updated_at: useStats ? Number(h?.time ?? 0) : nowSec,
       // Always exposed so consumers (NiceHash watcher, watchdog) can tell a
       // real fleet drop from a stalled stats cron.
       hashrate_live_hs: liveHs,
+      hashrate_live_coverage_sec: coverageSec,
       hashrate_stats_hs: h ? h.hashrate_hs : 0,
       hashrate_stats_age_sec: h && h.time > 0 ? nowSec - h.time : null,
       hashrate_source: useStats ? "hashstats" : "shares",
@@ -563,6 +568,45 @@ app.get("/api/v1/pool/summary", async (_req, reply) => {
     app.log.error({ err: msg }, "summary request failed");
     return reply.code(503).send({ error: "summary_unavailable", detail: msg });
   }
+});
+
+
+/**
+ * Minimal, independent input for automatic rental decisions. Unlike the full
+ * dashboard summary this never reads stratum logs or computes per-coin effort.
+ * Yiimp may retain less than the requested 10 minutes of `shares`, so divide by
+ * the measured sample span—not a fixed 600 seconds—or a five-minute retention
+ * window falsely looks like a 50% fleet outage.
+ */
+app.get("/api/v1/pool/hashrate/current", async (_req, reply) => {
+  const [shareRows] = await pool.query<mysql.RowDataPacket[]>(
+    `SELECT s.algo,
+            SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END) AS difficulty_sum,
+            MIN(s.time) AS first_at,
+            MAX(s.time) AS last_at,
+            COUNT(DISTINCT s.workerid) AS workers
+       FROM shares s
+      WHERE s.time > UNIX_TIMESTAMP() - 600
+      GROUP BY s.algo`,
+  );
+  const rows = shareRows.map((r) => {
+    const firstAt = Number(r.first_at ?? 0);
+    const lastAt = Number(r.last_at ?? 0);
+    const coverageSec = Math.max(0, lastAt - firstAt);
+    const hashrateHs = coverageSec >= 60
+      ? Number(r.difficulty_sum ?? 0) * 4294967296 / coverageSec
+      : 0;
+    return {
+      algo: String(r.algo),
+      hashrate_hs: hashrateHs,
+      workers: Number(r.workers ?? 0),
+      coverage_sec: coverageSec,
+      sample_age_sec: lastAt > 0 ? Math.max(0, Math.floor(Date.now() / 1000) - lastAt) : null,
+      reliable: coverageSec >= 120 && lastAt > 0 && Math.floor(Date.now() / 1000) - lastAt <= 120,
+    };
+  });
+  if (rows.length === 0) return reply.code(503).send({ error: "no_recent_shares" });
+  return { algos: rows, fetched_at: Math.floor(Date.now() / 1000) };
 });
 
 
