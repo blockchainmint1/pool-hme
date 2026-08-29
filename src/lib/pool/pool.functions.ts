@@ -56,6 +56,9 @@ export interface PoolSummary {
   blocks24h: number;
   /** Per-symbol 24h count from the DB. LTC/DOGE will typically be 0 (auxpow credits only). */
   blocks24hBySymbol: Record<string, number>;
+  /** Per-symbol 7d/30d counts. Absent until yiimp-api ≥ v0.7.0 is deployed on the box. */
+  blocks7dBySymbol?: Record<string, number>;
+  blocks30dBySymbol?: Record<string, number>;
   lastFoundBySymbol: Record<string, number>; // symbol -> unix seconds
   fetchedAt: number;
   health: { ok: boolean; db: boolean };
@@ -112,12 +115,16 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
           stratum_live: Record<string, StratumLive>;
           blocks_24h_pool_found: number;
           blocks_24h_by_symbol?: Record<string, number>;
+          blocks_7d_by_symbol?: Record<string, number>;
+          blocks_30d_by_symbol?: Record<string, number>;
           active_miners_10m?: number;
           algos?: PoolAlgoStats[];
         }>("/api/v1/pool/summary").catch(() => ({
           stratum_live: {} as Record<string, StratumLive>,
           blocks_24h_pool_found: -1,
           blocks_24h_by_symbol: {} as Record<string, number>,
+          blocks_7d_by_symbol: undefined,
+          blocks_30d_by_symbol: undefined,
           active_miners_10m: 0,
           algos: [] as PoolAlgoStats[],
         })),
@@ -186,6 +193,8 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
         blocks: poolFound.slice(0, 20),
         blocks24h,
         blocks24hBySymbol,
+        blocks7dBySymbol: summaryRes.blocks_7d_by_symbol,
+        blocks30dBySymbol: summaryRes.blocks_30d_by_symbol,
         lastFoundBySymbol,
         fetchedAt: nowSec,
         health: { ok: !!health.ok, db: !!health.db },

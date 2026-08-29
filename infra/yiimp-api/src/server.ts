@@ -388,6 +388,8 @@ const SUMMARY_TTL_MS = 20_000;
 async function computeSummary() {
   const nowSec = Math.floor(Date.now() / 1000);
   const dayAgo = nowSec - 86_400;
+  const weekAgo = nowSec - 7 * 86_400;
+  const monthAgo = nowSec - 30 * 86_400;
 
   // Miner/worker counts, honest 10-min active window.
   //
@@ -421,11 +423,15 @@ async function computeSummary() {
     };
   }
 
+  // One scan over the last 30 days; 24h/7d fall out as conditional sums.
   const [dayBlocks] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT c.symbol, COUNT(*) AS n
+    `SELECT c.symbol,
+            SUM(b.time >= ?) AS n,
+            SUM(b.time >= ?) AS n7,
+            COUNT(*)         AS n30
        FROM blocks b JOIN coins c ON c.id = b.coin_id
       WHERE b.time >= ? GROUP BY c.symbol`,
-    [dayAgo],
+    [dayAgo, weekAgo, monthAgo],
   );
 
   const [lastBlocks] = await pool.query<mysql.RowDataPacket[]>(
@@ -491,6 +497,8 @@ async function computeSummary() {
     stratum_live: stratum,
     last_blocks: lastBlocks,
     blocks_24h_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n)])),
+    blocks_7d_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n7)])),
+    blocks_30d_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n30)])),
     blocks_24h_pool_found: totalPoolFound24h,
     active_miners_10m: activeMiners10m,
     effort,
