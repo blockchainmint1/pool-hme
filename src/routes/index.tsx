@@ -369,8 +369,15 @@ function PoolHero() {
 
           <LiveMinersKpi />
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
-          <LiveBlocks24hKpi />
+          <Kpi
+            label="Payouts"
+            value="daily"
+            hint="batched · LTC + DOGE"
+          />
         </div>
+
+        {/* Blocks found — the headline dataset, full width */}
+        <BlocksFoundPanel />
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <a
@@ -733,11 +740,11 @@ const BLOCKS_WINDOWS: { id: BlocksWindow; label: string }[] = [
   { id: "30d", label: "30D" },
 ];
 
-function LiveBlocks24hKpi() {
+function BlocksFoundPanel() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
   const [window_, setWindow] = useState<BlocksWindow>("24h");
   // 5 chains. LTC/DOGE come in as auxpow credit — not solo-found —
-  // so their tiles will normally read 0. That's intentional (see manifesto).
+  // so their tiles will normally read lower. That's intentional (see manifesto).
   const chains = ["LTC", "DOGE", "TXC", "ISK", "ZCU"] as const;
   const counts =
     window_ === "7d"
@@ -745,16 +752,25 @@ function LiveBlocks24hKpi() {
       : window_ === "30d"
         ? data.blocks30dBySymbol
         : data.blocks24hBySymbol;
+  const windowLabel = window_ === "24h" ? "24 hours" : window_ === "7d" ? "7 days" : "30 days";
   return (
-    <div className="pool-tick rounded-md p-5">
-      <div className="flex flex-col items-stretch gap-2">
-        <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
-          Blocks / {window_}
+    <div className="mt-4 pool-tick rounded-md p-5 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+            Blocks found · last {windowLabel}
+          </div>
+          <div className="mt-1 text-[11px] font-mono text-pool-steel">
+            TXC · ISK · ZCU pool-found · LTC / DOGE via auxpow credit
+            {counts == null && (
+              <> · 7d/30d available after the pool API update is installed on the box</>
+            )}
+          </div>
         </div>
         <div
           role="tablist"
           aria-label="Block count window"
-          className="grid w-full grid-cols-3 rounded border border-pool-hairline overflow-hidden font-mono"
+          className="grid grid-cols-3 rounded border border-pool-hairline overflow-hidden font-mono"
         >
           {BLOCKS_WINDOWS.map((w) => (
             <button
@@ -762,7 +778,7 @@ function LiveBlocks24hKpi() {
               role="tab"
               aria-selected={window_ === w.id}
               onClick={() => setWindow(w.id)}
-              className={`min-w-0 px-1 py-1 text-[10px] tracking-widest transition-colors ${
+              className={`px-4 py-1.5 text-[11px] tracking-widest transition-colors ${
                 window_ === w.id
                   ? "bg-pool-mint/15 text-pool-mint"
                   : "text-pool-steel hover:text-pool-steel-hi"
@@ -773,48 +789,20 @@ function LiveBlocks24hKpi() {
           ))}
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {chains.map((sym) => (
-          <MiniBlockTile
+          <div
             key={sym}
-            label={sym}
-            value={counts?.[sym] ?? 0}
-            pending={counts == null}
-          />
+            className="rounded-md border border-pool-hairline pool-graphite/40 px-4 py-4"
+          >
+            <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
+              {sym}
+            </div>
+            <div className="mt-1 font-pool-display font-semibold text-4xl md:text-5xl tabular-nums text-pool-steel-hi">
+              {counts == null ? "—" : (counts?.[sym] ?? 0).toLocaleString()}
+            </div>
+          </div>
         ))}
-      </div>
-      <div className="mt-3 text-[10px] font-mono text-pool-steel leading-relaxed">
-        TXC · ISK · ZCU pool-found · LTC / DOGE via auxpow credit
-        {counts == null && (
-          <> · 7d/30d available after the pool API update is installed on the box</>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniBlockTile({
-  label,
-  value,
-  accent,
-  pending,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-  pending?: boolean;
-}) {
-  return (
-    <div className="rounded border border-pool-hairline pool-graphite/40 px-2 py-1.5">
-      <div className="text-[9px] uppercase tracking-widest text-pool-steel font-mono">
-        {label}
-      </div>
-      <div
-        className={`mt-0.5 font-pool-display font-semibold text-base tabular-nums ${
-          accent ? "text-pool-mint" : "text-pool-steel-hi"
-        }`}
-      >
-        {pending ? "—" : value.toLocaleString()}
       </div>
     </div>
   );
