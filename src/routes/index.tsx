@@ -747,14 +747,14 @@ function LiveBlocks24hKpi() {
         : data.blocks24hBySymbol;
   return (
     <div className="pool-tick rounded-md p-5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col items-stretch gap-2">
         <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
           Blocks / {window_}
         </div>
         <div
           role="tablist"
           aria-label="Block count window"
-          className="flex rounded border border-pool-hairline overflow-hidden font-mono"
+          className="grid w-full grid-cols-3 rounded border border-pool-hairline overflow-hidden font-mono"
         >
           {BLOCKS_WINDOWS.map((w) => (
             <button
@@ -762,7 +762,7 @@ function LiveBlocks24hKpi() {
               role="tab"
               aria-selected={window_ === w.id}
               onClick={() => setWindow(w.id)}
-              className={`px-2 py-0.5 text-[10px] tracking-widest transition-colors ${
+              className={`min-w-0 px-1 py-1 text-[10px] tracking-widest transition-colors ${
                 window_ === w.id
                   ? "bg-pool-mint/15 text-pool-mint"
                   : "text-pool-steel hover:text-pool-steel-hi"
@@ -810,7 +810,7 @@ function MiniBlockTile({
         {label}
       </div>
       <div
-        className={`mt-0.5 font-pool-display font-semibold text-lg tabular-nums ${
+        className={`mt-0.5 font-pool-display font-semibold text-base tabular-nums ${
           accent ? "text-pool-mint" : "text-pool-steel-hi"
         }`}
       >
