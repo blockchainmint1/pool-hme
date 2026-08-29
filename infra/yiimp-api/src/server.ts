@@ -388,6 +388,8 @@ const SUMMARY_TTL_MS = 20_000;
 async function computeSummary() {
   const nowSec = Math.floor(Date.now() / 1000);
   const dayAgo = nowSec - 86_400;
+  const weekAgo = nowSec - 7 * 86_400;
+  const monthAgo = nowSec - 30 * 86_400;
 
   // Miner/worker counts, honest 10-min active window.
   //
@@ -421,11 +423,15 @@ async function computeSummary() {
     };
   }
 
+  // One scan over the last 30 days; 24h/7d fall out as conditional sums.
   const [dayBlocks] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT c.symbol, COUNT(*) AS n
+    `SELECT c.symbol,
+            SUM(b.time >= ?) AS n,
+            SUM(b.time >= ?) AS n7,
+            COUNT(*)         AS n30
        FROM blocks b JOIN coins c ON c.id = b.coin_id
       WHERE b.time >= ? GROUP BY c.symbol`,
-    [dayAgo],
+    [dayAgo, weekAgo, monthAgo],
   );
 
   const [lastBlocks] = await pool.query<mysql.RowDataPacket[]>(
