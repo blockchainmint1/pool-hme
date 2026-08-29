@@ -27,7 +27,7 @@ MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v 
 MYN() { mysql -N -B -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 hr()  { echo; echo "===== $1"; }
 
-echo "doge-shares-window v1  $(date -u '+%F %T UTC')  READ-ONLY"
+echo "doge-shares-window v2  $(date -u '+%F %T UTC')  READ-ONLY"
 
 # ------------------------------------------------------------------ 1. window
 hr "1. what window / filters does the cycle actually use?"
@@ -82,36 +82,52 @@ echo "  purged faster than the cycle can run (cadence/retention), not a join bug
 echo "  shares_any>0 but shares_ltc=0 => the capture's coinid filter is wrong."
 echo "  shares_ltc>0 but capture still says no_shares => join key / valid filter."
 
-# ------------------------------------------------------------------ 4. is there an archive?
-hr "4. is there any durable share history we could attribute from?"
-MYN "SHOW TABLES;" | grep -iE 'share|hashrate|hashstat|round|earning' | sed 's/^/    table /'
-MY "SELECT COUNT(*) earnings_rows, FROM_UNIXTIME(MIN(time)) oldest, FROM_UNIXTIME(MAX(time)) newest
-     FROM earnings;"
-echo "  ^ earnings survives share purges. If earnings rows exist for the parent"
-echo "    LTC rounds around each DOGE block, we can attribute DOGE proportionally"
-echo "    from earnings instead of shares -- that is the durable fix."
-MY "SELECT FROM_UNIXTIME(b.time) doge_block, b.height,
-        (SELECT COUNT(*) FROM earnings e
-           WHERE e.time BETWEEN b.time-3600 AND b.time+3600) earnings_1h,
-        (SELECT COUNT(DISTINCT e.userid) FROM earnings e
-           WHERE e.time BETWEEN b.time-3600 AND b.time+3600) miners_1h
-     FROM blocks b WHERE b.coin_id=${DOGEID:-0} ORDER BY b.time DESC LIMIT 8;"
+# ------------------------------------------------------------------ 4. timezone
+hr "4. TIMEZONE SKEW CHECK (suspected second bug)"
+echo "  real UTC now      : $(date -u '+%F %T')"
+echo "  box local now     : $(date '+%F %T %Z')"
+echo "  mysql now()       : $(MYN 'SELECT NOW();')"
+echo "  mysql UTC_TIMESTAMP: $(MYN 'SELECT UTC_TIMESTAMP();')"
+echo "  mysql time_zone   : $(MYN "SELECT @@session.time_zone, @@global.time_zone;")"
+echo "  python naive now  : $(python3 -c 'import datetime;print(datetime.datetime.now())' 2>/dev/null)"
+echo "  python utc now    : $(python3 -c 'import datetime;print(datetime.datetime.utcnow())' 2>/dev/null)"
+DOGEID=$(MYN "SELECT id FROM coins WHERE symbol='DOGE' LIMIT 1;")
+echo "  --- newest DOGE block, raw epoch vs every rendering:"
+MY "SELECT height, time AS raw_epoch,
+        FROM_UNIXTIME(time) mysql_render,
+        UNIX_TIMESTAMP()-time age_seconds
+     FROM blocks WHERE coin_id=${DOGEID:-0} ORDER BY time DESC LIMIT 3;"
+echo "  ^ COMPARE age_seconds to how old that block really is. If the cycle"
+echo "    printed a time ~2h LATER than mysql_render for the same height, the"
+echo "    cycle is adding a tz offset and its 60-min window lands in the future."
 
-# ------------------------------------------------------------------ 5. payout side
-hr "5. why do 251 pending ledger rows (~650 DOGE) never send?"
+# ------------------------------------------------------------------ 5. real schemas
+hr "5. actual column names (previous run guessed wrong)"
+for T in earnings doge_payout_ledger hashstats accounts; do
+  echo "  --- $T"
+  MYN "SHOW COLUMNS FROM $T;" | awk '{printf "      %s %s\n",$1,$2}'
+done
+
+# ------------------------------------------------------------------ 6. durable history
+hr "6. durable per-miner history that survives the shares purge"
+echo "  --- hashstats coverage (candidate attribution source):"
+MY "SELECT COUNT(*) rows_n, MIN(time) min_t, MAX(time) max_t FROM hashstats;" 2>&1 | head -8
+echo "  --- earnings coverage:"
+MY "SELECT COUNT(*) rows_n FROM earnings;" 2>&1 | head -8
+
+# ------------------------------------------------------------------ 7. payout side
+hr "7. pending ledger groups vs MIN_PAYOUT_DOGE=200"
 MY "SELECT status, COUNT(*) rows_n, ROUND(SUM(amount),4) doge
      FROM doge_payout_ledger GROUP BY status ORDER BY doge DESC;"
-echo "  --- pending grouped by destination address (the send groups):"
-MY "SELECT COALESCE(a.doge_payout_address,'(none)') addr, COUNT(*) rows_n,
-        ROUND(SUM(l.amount),4) doge
-     FROM doge_payout_ledger l
-     LEFT JOIN accounts a ON a.id = l.account_id
-     WHERE l.status='pending'
-     GROUP BY addr ORDER BY doge DESC LIMIT 15;"
-echo "  ^ compare each group's doge total to MIN_PAYOUT_DOGE printed in section 1."
-echo "    If every group is under the minimum, nothing will EVER send until the"
-echo "    minimum is lowered or capture starts crediting real block rewards."
-MY "SELECT ROUND(SUM(doge_balance),4) accounts_doge_balance, COUNT(*) accounts_with_balance
-     FROM accounts WHERE doge_balance > 0;"
+echo "  --- pending grouped by whatever address column exists:"
+ADDRCOL=$(MYN "SHOW COLUMNS FROM doge_payout_ledger;" | awk '{print $1}' | grep -iE 'address|addr' | head -1)
+echo "      using ledger column: ${ADDRCOL:-<none found>}"
+if [ -n "${ADDRCOL:-}" ]; then
+  MY "SELECT $ADDRCOL addr, COUNT(*) rows_n, ROUND(SUM(amount),4) doge
+       FROM doge_payout_ledger WHERE status='pending'
+       GROUP BY $ADDRCOL ORDER BY doge DESC LIMIT 15;"
+fi
+echo "  --- what a HEALTHY captured block looked like (the 1609 paid rows):"
+MY "SELECT * FROM doge_payout_ledger WHERE status='paid' ORDER BY id DESC LIMIT 3\G" 2>&1 | head -40
 
 hr "verdict inputs collected -- nothing was changed."
