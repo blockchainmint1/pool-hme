@@ -38,7 +38,7 @@ eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*de
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 MYN() { mysql -N -B -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 
-echo "doge-payout-revive v2  $(date -u '+%F %T UTC')  mode=$MODE"
+echo "doge-payout-revive v3  $(date -u '+%F %T UTC')  mode=$MODE"
 echo
 
 # ---------------------------------------------------------------- 1. the runner
@@ -241,13 +241,25 @@ EOF
   systemctl restart cron 2>/dev/null || service cron reload 2>/dev/null || true
   echo "  cron reloaded"
   echo
-  echo "  running one live cycle now:"
-  flock -n "$LOCK_DIR/doge-payout-wrapper.lock" bash "$CYCLE" 2>&1 | tail -40
+  echo "  running one live cycle now (output is live; a backlog may take several minutes):"
+  set +e
+  flock -n "$LOCK_DIR/doge-payout-wrapper.lock" bash "$CYCLE" 2>&1 | tee -a "$LOCK_DIR/manual-cycle.log"
+  CYCLE_RC=${PIPESTATUS[0]}
+  set -e
+  if [ "$CYCLE_RC" -eq 1 ]; then
+    echo "  BUSY: another wrapper owns $LOCK_DIR/doge-payout-wrapper.lock."
+    echo "        Let that cycle finish; do not clear either lock while a process is alive."
+  elif [ "$CYCLE_RC" -ne 0 ]; then
+    echo "  WARNING: live cycle exited with status $CYCLE_RC; inspect $LOCK_DIR/manual-cycle.log"
+  else
+    echo "  live cycle completed successfully"
+  fi
   echo
   echo "  ledger after:"
   MY "SELECT status, COUNT(*) rows_, ROUND(SUM(amount),2) doge FROM doge_payout_ledger GROUP BY status"
   echo
-  echo "  Watch it: sudo tail -f /var/log/doge-payout-cycle.log"
+  echo "  Automatic runs: sudo tail -f $LOCK_DIR/cycle.log"
+  echo "  This run:       sudo tail -f $LOCK_DIR/manual-cycle.log"
   exit 0
 fi
 
