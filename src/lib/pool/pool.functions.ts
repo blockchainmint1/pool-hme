@@ -123,6 +123,8 @@ export const getPoolSummary = createServerFn({ method: "GET" }).handler(
           stratum_live: {} as Record<string, StratumLive>,
           blocks_24h_pool_found: -1,
           blocks_24h_by_symbol: {} as Record<string, number>,
+          blocks_7d_by_symbol: undefined,
+          blocks_30d_by_symbol: undefined,
           active_miners_10m: 0,
           algos: [] as PoolAlgoStats[],
         })),
