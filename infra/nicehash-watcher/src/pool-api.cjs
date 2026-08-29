@@ -36,7 +36,7 @@ class PoolAPI {
       throw new Error(`PoolAPI: current scrypt sample is missing or unreliable`);
     }
     const hs = Number(a.hashrate_hs || 0);
-    if (!hs) throw new Error(`PoolAPI: scrypt hashrate not found in summary`);
+    if (!hs) throw new Error(`PoolAPI: scrypt hashrate not found in current sample`);
     return hs / 1e12;
   }
 
