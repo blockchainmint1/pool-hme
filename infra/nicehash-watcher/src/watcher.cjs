@@ -69,6 +69,7 @@ const CFG = {
 
   pollIntervalSec: num("POLL_INTERVAL_SEC", 30),
   recoverConfirmations: num("RECOVER_CONFIRMATIONS", 3),
+  lowConfirmations: num("LOW_CONFIRMATIONS", 3),
   alertCooldownMin: num("ALERT_COOLDOWN_MIN", 30),
   monitorUrl: process.env.MONITOR_URL || "https://pool.honest.money/api/public/monitor",
   monitorToken: env("MONITOR_TOKEN"),
