@@ -38,7 +38,7 @@ eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*de
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 MYN() { mysql -N -B -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 
-echo "doge-payout-revive v1  $(date -u '+%F %T UTC')  mode=$MODE"
+echo "doge-payout-revive v2  $(date -u '+%F %T UTC')  mode=$MODE"
 echo
 
 # ---------------------------------------------------------------- 1. the runner
@@ -61,6 +61,37 @@ for f in /var/log/doge-payout-cycle.log "$LOCK_DIR"/*.log; do
   [ -f "$f" ] && echo "    $f  last write $(date -u -r "$f" '+%F %T UTC')  ($(wc -l <"$f") lines)"
 done
 echo
+echo "  -- can the cron entry ACTUALLY run? (an installed cron line that cannot open"
+echo "     its redirect target dies in the shell before the script is ever invoked)"
+CRON_LINE=$(grep -rh 'doge-payout-cycle' /etc/cron.d/* /etc/crontab 2>/dev/null | grep -v '^#' | head -1)
+if [ -n "$CRON_LINE" ]; then
+  CRON_USER=$(echo "$CRON_LINE" | awk '{print $6}')
+  CRON_LOG=$(echo "$CRON_LINE" | sed -n 's/.*>> *\([^ ]*\).*/\1/p')
+  echo "    runs as user : ${CRON_USER:-?}"
+  echo "    redirects to : ${CRON_LOG:-(none)}"
+  if [ -n "$CRON_LOG" ]; then
+    if [ -e "$CRON_LOG" ]; then
+      echo "    log exists   : yes  ($(stat -c '%a %U:%G' "$CRON_LOG"))"
+      sudo -u "${CRON_USER:-root}" test -w "$CRON_LOG" 2>/dev/null \
+        && echo "    writable by ${CRON_USER}: YES" \
+        || echo "    !! writable by ${CRON_USER}: NO -- every cron run dies here, silently."
+    else
+      echo "    log exists   : NO"
+      DIRN=$(dirname "$CRON_LOG")
+      sudo -u "${CRON_USER:-root}" test -w "$DIRN" 2>/dev/null \
+        && echo "    ${DIRN} writable by ${CRON_USER}: YES" \
+        || echo "    !! ${DIRN} NOT writable by ${CRON_USER} -- the shell cannot create the log,"
+      echo "       so the redirect fails and $CYCLE NEVER EXECUTES. Silent, every 10 minutes."
+    fi
+  fi
+  echo "    no flock in the line? $(echo "$CRON_LINE" | grep -q flock && echo 'has flock' || echo 'NO FLOCK -- overlapping runs possible')"
+fi
+echo
+echo "  recent cron delivery attempts for this job:"
+journalctl -u cron --since '2 hours ago' --no-pager 2>/dev/null | grep -i doge | tail -5 | sed 's/^/    /' || echo "    (none)"
+echo
+
+
 
 # ---------------------------------------------------------------- 2. the ledger
 echo "===== 2. ledger state (what DOGE owes and when it last moved)"
@@ -95,7 +126,11 @@ echo "===== 4. hot wallet + unlock wiring"
 $DCLI getwalletinfo 2>&1 | grep -E 'balance|unlocked_until|txcount' | sed 's/^/    /'
 if [ -f "$PASS_ENV" ]; then
   echo "    $PASS_ENV present ($(stat -c '%a %U:%G' "$PASS_ENV")) -- cycle can unlock on demand"
-  grep -q 'DOGE' "$PASS_ENV" && echo "    DOGE passphrase key present" || echo "    !! no DOGE key in $PASS_ENV"
+  if grep -qE '^(DOGE_PASSPHRASE|WALLET_PASSPHRASE)=' "$PASS_ENV"; then
+    echo "    DOGE-capable passphrase key present (DOGE_PASSPHRASE or shared WALLET_PASSPHRASE)"
+  else
+    echo "    !! no DOGE_PASSPHRASE / WALLET_PASSPHRASE in $PASS_ENV"
+  fi
 else
   echo "    !! $PASS_ENV MISSING -- cycle cannot unlock; sends will fail with -13"
 fi
@@ -117,8 +152,20 @@ elif [ "$HAVE_CRON" = no ]; then
   echo "           every new block is aging out into unattributable float."
   echo "  FIX:     re-run this script as: ... | sudo bash -s REVIVE CONFIRM"
 else
-  echo "  cadence is installed. If payouts still are not landing, read section 2 (status="
-  echo "  failed rows) and section 4 (wallet lock). ${OWED} DOGE currently unpaid."
+  # cron line exists -- but does it work? zero captured rows while blocks keep
+  # arriving is proof the cycle is not executing, whatever cron claims.
+  CAP=$(MYN "SELECT COUNT(*) FROM doge_payout_ledger WHERE created_at > UNIX_TIMESTAMP()-3*86400")
+  BLK=$(MYN "SELECT COUNT(*) FROM blocks WHERE coin_id=(SELECT id FROM coins WHERE symbol='DOGE') AND time > UNIX_TIMESTAMP()-3*86400")
+  if [ "${CAP:-0}" -eq 0 ] 2>/dev/null && [ "${BLK:-0}" -gt 0 ] 2>/dev/null; then
+    echo "  BLOCKER: a cron line exists, but ${BLK} DOGE blocks in 3 days produced ZERO captured"
+    echo "           ledger rows. The cycle is not executing. See the redirect/user check in"
+    echo "           section 1 -- a cron line that runs as a non-root user and appends to"
+    echo "           /var/log/... cannot open its log, so the shell aborts before the script."
+    echo "  FIX:     ... | sudo bash -s REVIVE CONFIRM"
+  else
+    echo "  cadence is installed and capturing. If payouts still are not landing, read"
+    echo "  section 2 (failed rows) and section 4 (wallet lock). ${OWED} DOGE unpaid."
+  fi
 fi
 
 # ---------------------------------------------------------------- 6. RUNONCE
@@ -156,7 +203,7 @@ if [ "$MODE" = REVIVE ]; then
 # deletes the parent LTC round's \`shares\` rows. A daily cadence loses blocks.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-cycle.lock $CYCLE >> /var/log/doge-payout-cycle.log 2>&1
+*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-cycle.lock /bin/bash $CYCLE >> $LOCK_DIR/cycle.log 2>&1
 EOF
   chmod 644 "$CRON_FILE"
   echo "  installed $CRON_FILE (*/$EVERY_MIN)"
@@ -170,6 +217,26 @@ EOF
       echo "  removed competing daily entry from $f"
     fi
   done
+
+  # remove the broken non-root */10 line wherever it lives
+  for f in /etc/cron.d/*; do
+    [ -f "$f" ] || continue
+    [ "$f" = "$CRON_FILE" ] && continue
+    if grep -q 'doge-payout-cycle' "$f"; then
+      cp -a "$f" "$f.bak-$STAMP"; sed -i '/doge-payout-cycle/d' "$f"
+      grep -qE '^[^#[:space:]]' "$f" || rm -f "$f"
+      echo "  removed stale doge-payout-cycle entry from $f"
+    fi
+  done
+  touch "$LOCK_DIR/cycle.log"; chmod 664 "$LOCK_DIR/cycle.log"
+  echo "  log target $LOCK_DIR/cycle.log created and writable"
+
+  # requeue the 7 failed rows so the next run re-attempts them
+  NF=$(MYN "SELECT COUNT(*) FROM doge_payout_ledger WHERE status='failed'")
+  if [ "${NF:-0}" -gt 0 ] 2>/dev/null; then
+    MYN "UPDATE doge_payout_ledger SET status='pending', updated_at=UNIX_TIMESTAMP() WHERE status='failed'"
+    echo "  requeued $NF failed ledger rows -> pending"
+  fi
 
   systemctl restart cron 2>/dev/null || service cron reload 2>/dev/null || true
   echo "  cron reloaded"
