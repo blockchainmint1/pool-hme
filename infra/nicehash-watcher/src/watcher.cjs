@@ -408,8 +408,21 @@ async function main() {
     }
 
     // 5. need rental?
+    // Debounce: a single low sample is usually a stalled stats feed, not a
+    // real fleet loss. Require LOW_CONFIRMATIONS consecutive low cycles before
+    // spending money on NiceHash.
     const belowTrigger = actual < triggerThreshold;
-    const needRent = deficit > 0.1 && belowTrigger;
+    state.low_count = belowTrigger ? (state.low_count || 0) + 1 : 0;
+    const lowConfirmed = state.low_count >= CFG.lowConfirmations;
+    if (belowTrigger && !lowConfirmed) {
+      log("Below trigger but not yet confirmed — holding off on rental:", {
+        low_count: state.low_count,
+        need: CFG.lowConfirmations,
+        actual_ths: round8(actual),
+      });
+    }
+    const needRent = deficit > 0.1 && lowConfirmed;
+
 
     if (needRent) {
       if (dailyCapReached(state)) {
