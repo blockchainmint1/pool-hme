@@ -398,18 +398,26 @@ async function computeSummary() {
   // wrongly excluded by a `time > now-600` filter. Count DISTINCT workerids
   // that submitted a share in the last 10 minutes from the `shares` table
   // instead, and join back to `workers` to expose userid for miner count.
-  const [algoRows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT s.algo,
-            COUNT(DISTINCT w.userid)   AS db_miners,
-            COUNT(DISTINCT s.workerid) AS db_workers
-       FROM shares s
-       LEFT JOIN workers w ON w.id = s.workerid
-      WHERE s.time > UNIX_TIMESTAMP() - 600
-      GROUP BY s.algo`,
-  );
+  const algoRows = (
+    await pool.query<mysql.RowDataPacket[]>(
+      `SELECT s.algo,
+              COUNT(DISTINCT w.userid)   AS db_miners,
+              COUNT(DISTINCT s.workerid) AS db_workers,
+              SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END)
+                * 4294967296 / 600       AS live_hashrate
+         FROM shares s
+         LEFT JOIN workers w ON w.id = s.workerid
+        WHERE s.time > UNIX_TIMESTAMP() - 600
+        GROUP BY s.algo`,
+    )
+  )[0];
 
   // Current pool hashrate per algo — latest row per algo in hashstats.
-  // hashstats.hashrate is in H/s.
+  // hashstats.hashrate is in H/s. This series is written by a yiimp cron; when
+  // that cron stalls the row goes stale and reports a phantom hashrate cliff.
+  // Never trust a row older than HASHSTATS_MAX_AGE_SEC — fall back to the
+  // shares-derived number, which is ground truth.
+  const HASHSTATS_MAX_AGE_SEC = 900;
   const [hashRows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT h.algo, h.hashrate, h.time
        FROM hashstats h
@@ -422,6 +430,7 @@ async function computeSummary() {
       time: Number(r.time ?? 0),
     };
   }
+
 
   // One scan over the last 30 days; 24h/7d fall out as conditional sums.
   const [dayBlocks] = await pool.query<mysql.RowDataPacket[]>(
