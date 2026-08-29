@@ -45,21 +45,21 @@ render from Ansible and reload the unit.
 | `logs/`                           | Per-coin/rotated artifacts. **Not** the main log.                       |
 | `scrypt.log`                      | Live log; grep here for `set_difficulty`, `aux submit`, `SCRYPT summary diag` |
 
-## 2b. Coin daemons — binaries, datadirs, wallets (NOT on $PATH)
+## 2b. Coin daemons — exact binaries, configs, datadirs, wallets (NOT on $PATH)
 
 There is **no `litecoin-cli` / `dogecoin-cli` on `$PATH`**. Always use the full
 path plus `-conf=`. Copy-paste these:
 
 ```bash
-LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf"
-DCLI="/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf"
+LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -conf=/home/ubuntu/.litecoin/litecoin.conf -datadir=/home/ubuntu/.litecoin"
+DCLI="/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -conf=/home/ubuntu/.dogecoin/dogecoin.conf -datadir=/home/ubuntu/.dogecoin"
 $LCLI getblockcount; $DCLI getblockcount
 ```
 
-| Coin | CLI / daemon binaries              | Datadir               | Wallet file                                    | systemd unit |
-| ---- | ---------------------------------- | --------------------- | ---------------------------------------------- | ------------ |
-| LTC  | `/home/ubuntu/litecoin-0.21.4/bin/` | `/home/ubuntu/.litecoin` | `wallets/pool/wallet.dat` (`wallet=pool` in conf — Core 0.17+ layout, **not** datadir root) | `litecoind` |
-| DOGE | `/home/ubuntu/dogecoin-1.14.9/bin/` | `/home/ubuntu/.dogecoin` | `wallet.dat` at datadir root (1.14 legacy layout) | `dogecoind` |
+| Coin | Daemon executable | CLI executable | Config / datadir | Wallet file | systemd unit |
+| ---- | ----------------- | -------------- | ---------------- | ----------- | ------------ |
+| LTC | `/home/ubuntu/litecoin-0.21.4/bin/litecoind` | `/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli` | `/home/ubuntu/.litecoin/litecoin.conf` / `/home/ubuntu/.litecoin` | `wallets/pool/wallet.dat` (`wallet=pool` in conf — Core 0.17+ layout, **not** datadir root) | `litecoind.service` |
+| DOGE | `/home/ubuntu/dogecoin-1.14.9/bin/dogecoind` | `/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli` | `/home/ubuntu/.dogecoin/dogecoin.conf` / `/home/ubuntu/.dogecoin` | `wallet.dat` at datadir root (1.14 legacy layout) | `dogecoind.service` |
 
 Notes:
 - Wallet passphrase for both lives in `/etc/pool-wallets/passphrase.env` (`WALLET_PASSPHRASE`), mode 600.
@@ -72,6 +72,13 @@ Notes:
 - `systemctl start litecoind` can exit **non-zero** with `Can't open PID file …
   Operation not permitted` while the daemon actually started fine. Never treat
   that exit code as failure — poll `$LCLI getwalletinfo` instead.
+- Confirmed from live processes on 2026-08-29: both daemons use the exact paths,
+  configs, and datadirs above. Do not rediscover them with `find`; consult this
+  section and use the full command paths.
+- A journal line saying `Unknown key name 'StartLimitIntervalSec' in section
+  'Service'` means systemd re-read the unit and ignored a misplaced directive.
+  It does **not** mean the daemon restarted. Confirm with the unit's `Active:
+  active (running) since ...` timestamp and main PID.
 
 ### Hot-wallet rotation log
 
