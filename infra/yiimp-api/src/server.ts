@@ -548,7 +548,7 @@ app.get("/api/v1/pool/summary", async (_req, reply) => {
   if (summaryCache) return summaryCache.body;
   // Never hang a client forever on a slow/stuck query: bound the first fill.
   try {
-    let timer: NodeJS.Timeout | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const body = await Promise.race([
       summaryInflight,
       new Promise((_r, rej) => {
