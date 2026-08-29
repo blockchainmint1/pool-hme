@@ -31,7 +31,14 @@ class PoolAPI {
     const a =
       algos.find((x) => String(x.algo).toLowerCase() === algo) ||
       algos.find((x) => String(x.algo).toLowerCase() === "scrypt");
-    const hs = a ? Number(a.hashrate_hs || a.hashrate || 0) : 0;
+    // `hashrate_hs` can come from the yiimp `hashstats` cron, which goes stale
+    // and reports a phantom cliff. When the API says the stats row is stale (or
+    // exposes a shares-derived number that disagrees), take the HIGHER of the
+    // two: renting on a bookkeeping glitch costs real money.
+    const stats = a ? Number(a.hashrate_hs || a.hashrate || 0) : 0;
+    const live = a ? Number(a.hashrate_live_hs || 0) : 0;
+    const stale = a ? Boolean(a.hashrate_stats_stale) : false;
+    const hs = stale ? Math.max(live, stats) : stats || live;
     if (!hs) throw new Error(`PoolAPI: scrypt hashrate not found in summary`);
     return hs / 1e12;
   }

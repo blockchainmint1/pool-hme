@@ -181,7 +181,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.1" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -192,7 +192,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.0" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.1" };
 });
 
 // ============================================================================
@@ -398,18 +398,26 @@ async function computeSummary() {
   // wrongly excluded by a `time > now-600` filter. Count DISTINCT workerids
   // that submitted a share in the last 10 minutes from the `shares` table
   // instead, and join back to `workers` to expose userid for miner count.
-  const [algoRows] = await pool.query<mysql.RowDataPacket[]>(
-    `SELECT s.algo,
-            COUNT(DISTINCT w.userid)   AS db_miners,
-            COUNT(DISTINCT s.workerid) AS db_workers
-       FROM shares s
-       LEFT JOIN workers w ON w.id = s.workerid
-      WHERE s.time > UNIX_TIMESTAMP() - 600
-      GROUP BY s.algo`,
-  );
+  const algoRows = (
+    await pool.query<mysql.RowDataPacket[]>(
+      `SELECT s.algo,
+              COUNT(DISTINCT w.userid)   AS db_miners,
+              COUNT(DISTINCT s.workerid) AS db_workers,
+              SUM(CASE WHEN s.valid = 1 THEN s.difficulty ELSE 0 END)
+                * 4294967296 / 600       AS live_hashrate
+         FROM shares s
+         LEFT JOIN workers w ON w.id = s.workerid
+        WHERE s.time > UNIX_TIMESTAMP() - 600
+        GROUP BY s.algo`,
+    )
+  )[0];
 
   // Current pool hashrate per algo — latest row per algo in hashstats.
-  // hashstats.hashrate is in H/s.
+  // hashstats.hashrate is in H/s. This series is written by a yiimp cron; when
+  // that cron stalls the row goes stale and reports a phantom hashrate cliff.
+  // Never trust a row older than HASHSTATS_MAX_AGE_SEC — fall back to the
+  // shares-derived number, which is ground truth.
+  const HASHSTATS_MAX_AGE_SEC = 900;
   const [hashRows] = await pool.query<mysql.RowDataPacket[]>(
     `SELECT h.algo, h.hashrate, h.time
        FROM hashstats h
@@ -422,6 +430,7 @@ async function computeSummary() {
       time: Number(r.time ?? 0),
     };
   }
+
 
   // One scan over the last 30 days; 24h/7d fall out as conditional sums.
   const [dayBlocks] = await pool.query<mysql.RowDataPacket[]>(
@@ -474,15 +483,27 @@ async function computeSummary() {
     const algo = String(r.algo);
     const s = stratum[algo];
     const h = hashByAlgo[algo];
+    const liveHs = Number(r.live_hashrate ?? 0);
+    const statsFresh = !!h && h.time > 0 && nowSec - h.time <= HASHSTATS_MAX_AGE_SEC;
+    // Prefer hashstats when fresh; otherwise the shares-derived value.
+    const useStats = statsFresh && h!.hashrate_hs > 0;
     return {
       algo,
       db_miners: Number(r.db_miners ?? 0),
       db_workers: Number(r.db_workers ?? 0),
       live_clients: s ? s.clients : Number(r.db_workers ?? 0),
-      hashrate_hs: h ? h.hashrate_hs : s ? s.accepted_ghs * 1e9 : 0,
-      hashrate_updated_at: h ? h.time : nowSec,
+      hashrate_hs: useStats ? h!.hashrate_hs : liveHs || (s ? s.accepted_ghs * 1e9 : 0),
+      hashrate_updated_at: useStats ? h!.time : nowSec,
+      // Always exposed so consumers (NiceHash watcher, watchdog) can tell a
+      // real fleet drop from a stalled stats cron.
+      hashrate_live_hs: liveHs,
+      hashrate_stats_hs: h ? h.hashrate_hs : 0,
+      hashrate_stats_age_sec: h && h.time > 0 ? nowSec - h.time : null,
+      hashrate_source: useStats ? "hashstats" : "shares",
+      hashrate_stats_stale: !statsFresh,
     };
   });
+
 
   // 10-minute active-miner count — updated by yiimp on every share submit,
   // so it's the honest number. Stratum diag `clients` is a TCP snapshot and
@@ -1230,7 +1251,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.7.0",
+    version: "0.7.1",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
