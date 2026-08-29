@@ -152,8 +152,20 @@ elif [ "$HAVE_CRON" = no ]; then
   echo "           every new block is aging out into unattributable float."
   echo "  FIX:     re-run this script as: ... | sudo bash -s REVIVE CONFIRM"
 else
-  echo "  cadence is installed. If payouts still are not landing, read section 2 (status="
-  echo "  failed rows) and section 4 (wallet lock). ${OWED} DOGE currently unpaid."
+  # cron line exists -- but does it work? zero captured rows while blocks keep
+  # arriving is proof the cycle is not executing, whatever cron claims.
+  CAP=$(MYN "SELECT COUNT(*) FROM doge_payout_ledger WHERE created_at > UNIX_TIMESTAMP()-3*86400")
+  BLK=$(MYN "SELECT COUNT(*) FROM blocks WHERE coin_id=(SELECT id FROM coins WHERE symbol='DOGE') AND time > UNIX_TIMESTAMP()-3*86400")
+  if [ "${CAP:-0}" -eq 0 ] 2>/dev/null && [ "${BLK:-0}" -gt 0 ] 2>/dev/null; then
+    echo "  BLOCKER: a cron line exists, but ${BLK} DOGE blocks in 3 days produced ZERO captured"
+    echo "           ledger rows. The cycle is not executing. See the redirect/user check in"
+    echo "           section 1 -- a cron line that runs as a non-root user and appends to"
+    echo "           /var/log/... cannot open its log, so the shell aborts before the script."
+    echo "  FIX:     ... | sudo bash -s REVIVE CONFIRM"
+  else
+    echo "  cadence is installed and capturing. If payouts still are not landing, read"
+    echo "  section 2 (failed rows) and section 4 (wallet lock). ${OWED} DOGE unpaid."
+  fi
 fi
 
 # ---------------------------------------------------------------- 6. RUNONCE
@@ -191,7 +203,7 @@ if [ "$MODE" = REVIVE ]; then
 # deletes the parent LTC round's \`shares\` rows. A daily cadence loses blocks.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-cycle.lock $CYCLE >> /var/log/doge-payout-cycle.log 2>&1
+*/$EVERY_MIN * * * * root flock -n $LOCK_DIR/doge-payout-cycle.lock /bin/bash $CYCLE >> $LOCK_DIR/cycle.log 2>&1
 EOF
   chmod 644 "$CRON_FILE"
   echo "  installed $CRON_FILE (*/$EVERY_MIN)"
@@ -205,6 +217,26 @@ EOF
       echo "  removed competing daily entry from $f"
     fi
   done
+
+  # remove the broken non-root */10 line wherever it lives
+  for f in /etc/cron.d/*; do
+    [ -f "$f" ] || continue
+    [ "$f" = "$CRON_FILE" ] && continue
+    if grep -q 'doge-payout-cycle' "$f"; then
+      cp -a "$f" "$f.bak-$STAMP"; sed -i '/doge-payout-cycle/d' "$f"
+      grep -qE '^[^#[:space:]]' "$f" || rm -f "$f"
+      echo "  removed stale doge-payout-cycle entry from $f"
+    fi
+  done
+  touch "$LOCK_DIR/cycle.log"; chmod 664 "$LOCK_DIR/cycle.log"
+  echo "  log target $LOCK_DIR/cycle.log created and writable"
+
+  # requeue the 7 failed rows so the next run re-attempts them
+  NF=$(MYN "SELECT COUNT(*) FROM doge_payout_ledger WHERE status='failed'")
+  if [ "${NF:-0}" -gt 0 ] 2>/dev/null; then
+    MYN "UPDATE doge_payout_ledger SET status='pending', updated_at=UNIX_TIMESTAMP() WHERE status='failed'"
+    echo "  requeued $NF failed ledger rows -> pending"
+  fi
 
   systemctl restart cron 2>/dev/null || service cron reload 2>/dev/null || true
   echo "  cron reloaded"
