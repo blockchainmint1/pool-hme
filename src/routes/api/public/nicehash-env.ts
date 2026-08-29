@@ -52,6 +52,7 @@ export const Route = createFileRoute("/api/public/nicehash-env")({
           else lines.push(`${outName}=${v}`);
         }
         lines.push(`RENTAL_LTC_ADDR=${RENTAL_LTC_ADDR}`);
+        lines.push(`MONITOR_URL=${MONITOR_URL}`);
         if (missing.length > 0) {
           return new Response(
             JSON.stringify({ error: "secrets_not_configured", missing }),
