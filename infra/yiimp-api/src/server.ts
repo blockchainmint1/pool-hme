@@ -497,6 +497,8 @@ async function computeSummary() {
     stratum_live: stratum,
     last_blocks: lastBlocks,
     blocks_24h_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n)])),
+    blocks_7d_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n7)])),
+    blocks_30d_by_symbol: Object.fromEntries(dayBlocks.map((r) => [r.symbol, Number(r.n30)])),
     blocks_24h_pool_found: totalPoolFound24h,
     active_miners_10m: activeMiners10m,
     effort,
