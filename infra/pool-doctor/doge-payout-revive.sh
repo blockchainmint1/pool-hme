@@ -61,6 +61,37 @@ for f in /var/log/doge-payout-cycle.log "$LOCK_DIR"/*.log; do
   [ -f "$f" ] && echo "    $f  last write $(date -u -r "$f" '+%F %T UTC')  ($(wc -l <"$f") lines)"
 done
 echo
+echo "  -- can the cron entry ACTUALLY run? (an installed cron line that cannot open"
+echo "     its redirect target dies in the shell before the script is ever invoked)"
+CRON_LINE=$(grep -rh 'doge-payout-cycle' /etc/cron.d/* /etc/crontab 2>/dev/null | grep -v '^#' | head -1)
+if [ -n "$CRON_LINE" ]; then
+  CRON_USER=$(echo "$CRON_LINE" | awk '{print $6}')
+  CRON_LOG=$(echo "$CRON_LINE" | sed -n 's/.*>> *\([^ ]*\).*/\1/p')
+  echo "    runs as user : ${CRON_USER:-?}"
+  echo "    redirects to : ${CRON_LOG:-(none)}"
+  if [ -n "$CRON_LOG" ]; then
+    if [ -e "$CRON_LOG" ]; then
+      echo "    log exists   : yes  ($(stat -c '%a %U:%G' "$CRON_LOG"))"
+      sudo -u "${CRON_USER:-root}" test -w "$CRON_LOG" 2>/dev/null \
+        && echo "    writable by ${CRON_USER}: YES" \
+        || echo "    !! writable by ${CRON_USER}: NO -- every cron run dies here, silently."
+    else
+      echo "    log exists   : NO"
+      DIRN=$(dirname "$CRON_LOG")
+      sudo -u "${CRON_USER:-root}" test -w "$DIRN" 2>/dev/null \
+        && echo "    ${DIRN} writable by ${CRON_USER}: YES" \
+        || echo "    !! ${DIRN} NOT writable by ${CRON_USER} -- the shell cannot create the log,"
+      echo "       so the redirect fails and $CYCLE NEVER EXECUTES. Silent, every 10 minutes."
+    fi
+  fi
+  echo "    no flock in the line? $(echo "$CRON_LINE" | grep -q flock && echo 'has flock' || echo 'NO FLOCK -- overlapping runs possible')"
+fi
+echo
+echo "  recent cron delivery attempts for this job:"
+journalctl -u cron --since '2 hours ago' --no-pager 2>/dev/null | grep -i doge | tail -5 | sed 's/^/    /' || echo "    (none)"
+echo
+
+
 
 # ---------------------------------------------------------------- 2. the ledger
 echo "===== 2. ledger state (what DOGE owes and when it last moved)"
