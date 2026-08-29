@@ -38,7 +38,7 @@ eval "$(sed -n "s/.*define( *'YAAMP_DBUSER' *, *'\([^']*\)').*/DBU='\1'/p;s/.*de
 MY()  { mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 MYN() { mysql -N -B -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -e "$1" 2>&1 | grep -v '\[Warning\]'; }
 
-echo "doge-payout-revive v1  $(date -u '+%F %T UTC')  mode=$MODE"
+echo "doge-payout-revive v2  $(date -u '+%F %T UTC')  mode=$MODE"
 echo
 
 # ---------------------------------------------------------------- 1. the runner
@@ -95,7 +95,11 @@ echo "===== 4. hot wallet + unlock wiring"
 $DCLI getwalletinfo 2>&1 | grep -E 'balance|unlocked_until|txcount' | sed 's/^/    /'
 if [ -f "$PASS_ENV" ]; then
   echo "    $PASS_ENV present ($(stat -c '%a %U:%G' "$PASS_ENV")) -- cycle can unlock on demand"
-  grep -q 'DOGE' "$PASS_ENV" && echo "    DOGE passphrase key present" || echo "    !! no DOGE key in $PASS_ENV"
+  if grep -qE '^(DOGE_PASSPHRASE|WALLET_PASSPHRASE)=' "$PASS_ENV"; then
+    echo "    DOGE-capable passphrase key present (DOGE_PASSPHRASE or shared WALLET_PASSPHRASE)"
+  else
+    echo "    !! no DOGE_PASSPHRASE / WALLET_PASSPHRASE in $PASS_ENV"
+  fi
 else
   echo "    !! $PASS_ENV MISSING -- cycle cannot unlock; sends will fail with -13"
 fi
