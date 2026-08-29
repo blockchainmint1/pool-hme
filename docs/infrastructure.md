@@ -79,6 +79,13 @@ Notes:
   'Service'` means systemd re-read the unit and ignored a misplaced directive.
   It does **not** mean the daemon restarted. Confirm with the unit's `Active:
   active (running) since ...` timestamp and main PID.
+- **LTC `getblocktemplate` needs BOTH rules since MWEB:** call it with
+  `'{"rules":["mweb","segwit"]}'`. Calling with `["segwit"]` alone returns
+  `error code: -8 ... must be called with the segwit & mweb rule sets`. That
+  error from a hand-run CLI test is a **test artifact**, not proof the stratum
+  is broken — the stratum sends its own ruleset.
+
+
 
 ### Hot-wallet rotation log
 
