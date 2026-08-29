@@ -78,14 +78,29 @@ print(f"   {\"TOTAL IMMATURE\":36s} {sum(imm.values()):14.4f}")
 '
 
 hr "4. what the pool still OWES miners in DOGE"
-DID=$(MYN "SELECT id FROM coins WHERE symbol='DOGE'")
-OWED_ACC=$(MYN "SELECT ROUND(IFNULL(SUM(balance),0),4) FROM accounts WHERE coinid=$DID AND balance>0")
-OWED_PEND=$(MYN "SELECT ROUND(IFNULL(SUM(amount),0),4) FROM payouts WHERE idcoin=$DID AND completed=0")
-OWED_ACC=${OWED_ACC:-0}; OWED_PEND=${OWED_PEND:-0}
-echo "  unpaid account balances : $OWED_ACC"
-echo "  pending payout rows     : $OWED_PEND"
-OWED=$(awk -v a="$OWED_ACC" -v p="$OWED_PEND" 'BEGIN{printf "%.4f", a+p}')
-echo "  total liabilities       : $OWED"
+# This box credits DOGE through a CUSTOM ledger, not accounts.balance/coinid:
+#   doge_payout_ledger (unpaid rows) + accounts.doge_balance + pending payouts rows.
+# Every source is summed and the largest interpretation is kept behind.
+DID=$(MYN "SELECT id FROM coins WHERE symbol='DOGE'"); DID=${DID:-9}
+OWED_LEDGER=$(MYN "SELECT ROUND(IFNULL(SUM(amount),0),4) FROM doge_payout_ledger WHERE paid_at IS NULL")
+OWED_DBAL=$(MYN  "SELECT ROUND(IFNULL(SUM(doge_balance),0),4) FROM accounts WHERE doge_balance>0")
+OWED_ACC=$(MYN   "SELECT ROUND(IFNULL(SUM(balance),0),4) FROM accounts WHERE coinid=$DID AND balance>0")
+OWED_PEND=$(MYN  "SELECT ROUND(IFNULL(SUM(amount),0),4) FROM payouts WHERE idcoin=$DID AND completed=0")
+OWED_LEDGER=${OWED_LEDGER:-0}; OWED_DBAL=${OWED_DBAL:-0}; OWED_ACC=${OWED_ACC:-0}; OWED_PEND=${OWED_PEND:-0}
+echo "  doge_payout_ledger unpaid   : $OWED_LEDGER"
+echo "  accounts.doge_balance       : $OWED_DBAL"
+echo "  accounts.balance (coinid=$DID) : $OWED_ACC"
+echo "  payouts rows not completed  : $OWED_PEND"
+OWED=$(awk -v l="$OWED_LEDGER" -v d="$OWED_DBAL" -v a="$OWED_ACC" -v p="$OWED_PEND" \
+  'BEGIN{printf "%.4f", l+d+a+p}')
+echo "  total liabilities (sum, deliberately conservative) : $OWED"
+echo "  -- top owed miners (custom ledger view):"
+mysql -u"${DBU:-}" -p"${DBP:-}" yiimpfrontend -t -e "
+  SELECT LEFT(username,26) miner, LEFT(IFNULL(doge_payout_address,'(none)'),36) doge_dest,
+         ROUND(doge_balance,4) owed
+  FROM accounts WHERE doge_balance>0 ORDER BY doge_balance DESC LIMIT 12" 2>&1 \
+  | grep -v '\[Warning\]' | sed 's/^/  /'
+
 
 hr "5. sweep math"
 KEEP=$(awk -v o="$OWED" -v r="$RESERVE" 'BEGIN{printf "%.8f", o+r}')
