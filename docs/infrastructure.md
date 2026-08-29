@@ -229,6 +229,20 @@ Learning goals while we still have limited access:
 
 ## 9. Incident notes
 
+### 2026-08-29 — DOGE payout scheduler lock ownership
+
+- `/var/web/doge-payout-cycle.sh` exclusively owns its internal lock at
+  `/var/web/runtime/doge-payout/doge-payout-cycle.lock`.
+- Cron and manual wrappers must use the separate
+  `/var/web/runtime/doge-payout/doge-payout-wrapper.lock`. Wrapping the cycle
+  with its own internal lock makes every child invocation self-deadlock and
+  report “already running.”
+- The active cron is root, every 10 minutes, and logs to
+  `/var/web/runtime/doge-payout/cycle.log`.
+- Do not pipe an interactive cycle through `tail`: it buffers until process
+  exit and makes a healthy long-running backlog drain look hung. Use `tee` for
+  live output.
+
 ### 2026-07-15 — Conroe L9 scale-up incident
 
 - Yesterday the scrypt pool was operating normally.
