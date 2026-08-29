@@ -20,8 +20,9 @@
 | Stratum log                          | `/var/stratum/scrypt.log` (systemd `StandardOutput`/`StandardError=append:`) — there is NO `/var/stratum/log/` dir |
 | Systemd unit                         | `stratum-aws-scrypt.service`                                                   |
 | Stratum port (scrypt / LTC)          | `3433`                                                                         |
-| Public stratum URL                   | `stratum+tcp://stratum.pool.texitcoin.org:3433`                                 |
-| Old public stratum URL (being retired) | `stratum+tcp://pool.texitcoin.org:3433`                                        |
+| Public stratum URL                   | `stratum+tcp://stratum.pool.honest.money:3433` (only hostname that resolves + accepts TCP 3433) |
+| DEAD stratum hostnames               | `pool.texitcoin.org` (repointed to the website CDN 185.158.133.1 on 29 Aug 2026 — TCP 3433 CLOSED) and `stratum.pool.texitcoin.org` (NXDOMAIN, never created). Any miner still configured with these is OFFLINE. |
+
 | Yiimp frontend DB                    | MySQL `yiimpfrontend` on the same host                                         |
 | Yiimp DB credentials                | `/var/web/serverconfig.php` (`YAAMP_DBUSER` / `YAAMP_DBPASSWORD`); parse as root, never use placeholders |
 | Vardiff report script (workstation)  | `./infra/stratum-stack/scripts/vardiff-report.sh` (NOT on the box)             |
