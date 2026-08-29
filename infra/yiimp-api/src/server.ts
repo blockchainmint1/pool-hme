@@ -483,15 +483,27 @@ async function computeSummary() {
     const algo = String(r.algo);
     const s = stratum[algo];
     const h = hashByAlgo[algo];
+    const liveHs = Number(r.live_hashrate ?? 0);
+    const statsFresh = !!h && h.time > 0 && nowSec - h.time <= HASHSTATS_MAX_AGE_SEC;
+    // Prefer hashstats when fresh; otherwise the shares-derived value.
+    const useStats = statsFresh && h!.hashrate_hs > 0;
     return {
       algo,
       db_miners: Number(r.db_miners ?? 0),
       db_workers: Number(r.db_workers ?? 0),
       live_clients: s ? s.clients : Number(r.db_workers ?? 0),
-      hashrate_hs: h ? h.hashrate_hs : s ? s.accepted_ghs * 1e9 : 0,
-      hashrate_updated_at: h ? h.time : nowSec,
+      hashrate_hs: useStats ? h!.hashrate_hs : liveHs || (s ? s.accepted_ghs * 1e9 : 0),
+      hashrate_updated_at: useStats ? h!.time : nowSec,
+      // Always exposed so consumers (NiceHash watcher, watchdog) can tell a
+      // real fleet drop from a stalled stats cron.
+      hashrate_live_hs: liveHs,
+      hashrate_stats_hs: h ? h.hashrate_hs : 0,
+      hashrate_stats_age_sec: h && h.time > 0 ? nowSec - h.time : null,
+      hashrate_source: useStats ? "hashstats" : "shares",
+      hashrate_stats_stale: !statsFresh,
     };
   });
+
 
   // 10-minute active-miner count — updated by yiimp on every share submit,
   // so it's the honest number. Stratum diag `clients` is a TCP snapshot and
