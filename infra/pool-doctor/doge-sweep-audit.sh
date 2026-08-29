@@ -15,7 +15,7 @@
 #     keeps every DOGE the pool still owes miners plus RESERVE behind,
 #     and re-locks the wallet immediately after the send.
 set -uo pipefail
-VERSION=v1
+VERSION=v2
 MODE="${1:-AUDIT}"; CONFIRM="${2:-}"
 DEST="${DEST:-DNW32nET5ZVmzTj9BR8yHB5ovHNSG4wLSj}"
 RESERVE="${RESERVE:-25000}"          # working float left behind, DOGE
@@ -55,10 +55,10 @@ tot=defaultdict(float); n=defaultdict(int); minconf={}
 for x in u:
     a=x.get("address","(none)"); tot[a]+=float(x.get("amount",0)); n[a]+=1
     minconf[a]=min(minconf.get(a,10**9), x.get("confirmations",0))
-print(f"   {\"address\":36s} {\"DOGE\":>16s} {\"utxos\":>7s} {\"minconf\":>9s}")
+print("   %-36s %16s %7s %9s" % ("address","DOGE","utxos","minconf"))
 for a,v in sorted(tot.items(), key=lambda kv:-kv[1]):
-    print(f"   {a:36s} {v:16.4f} {n[a]:7d} {minconf[a]:9d}")
-print(f"   {\"TOTAL SPENDABLE\":36s} {sum(tot.values()):16.4f} {sum(n.values()):7d}")
+    print("   %-36s %16.4f %7d %9d" % (a,v,n[a],minconf[a]))
+print("   %-36s %16.4f %7d" % ("TOTAL SPENDABLE",sum(tot.values()),sum(n.values())))
 '
 
 hr "3. immature coinbase still locked (matures at 60 confs)"
@@ -73,8 +73,8 @@ for x in t:
         imm[x.get("address","(none)")]+=float(x.get("amount",0)); n[x.get("address","(none)")]+=1
 if not imm: print("   (none)")
 for a,v in sorted(imm.items(), key=lambda kv:-kv[1]):
-    print(f"   {a:36s} {v:14.4f}  ({n[a]} blocks)")
-print(f"   {\"TOTAL IMMATURE\":36s} {sum(imm.values()):14.4f}")
+    print("   %-36s %14.4f  (%d blocks)" % (a,v,n[a]))
+print("   %-36s %14.4f" % ("TOTAL IMMATURE",sum(imm.values())))
 '
 
 hr "4. what the pool still OWES miners in DOGE"
