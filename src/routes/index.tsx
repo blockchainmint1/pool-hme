@@ -728,17 +728,15 @@ function nextDailyPayoutEpoch() {
 // ---------------------------------------------------------------------------
 function LiveBlocks24hKpi() {
   const { data } = useSuspenseQuery(poolSummaryQuery);
-  // 5 chains + Total. LTC/DOGE come in as auxpow credit — not solo-found —
+  // 5 chains. LTC/DOGE come in as auxpow credit — not solo-found —
   // so their tiles will normally read 0. That's intentional (see manifesto).
   const chains = ["LTC", "DOGE", "TXC", "ISK", "ZCU"] as const;
-  const total = data.blocks24h;
   return (
     <div className="pool-tick rounded-md p-5">
       <div className="text-[10px] uppercase tracking-widest text-pool-steel font-mono">
         Blocks / 24h
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <MiniBlockTile label="Total" value={total} accent />
         {chains.map((sym) => (
           <MiniBlockTile
             key={sym}
