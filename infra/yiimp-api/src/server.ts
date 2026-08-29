@@ -181,7 +181,7 @@ app.get("/api/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.1" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.2" };
 });
 
 app.get("/api/v1/health", async () => {
@@ -192,7 +192,7 @@ app.get("/api/v1/health", async () => {
   } catch {
     db = false;
   }
-  return { ok: true, db, uptime: process.uptime(), version: "0.7.1" };
+  return { ok: true, db, uptime: process.uptime(), version: "0.7.2" };
 });
 
 // ============================================================================
@@ -527,7 +527,7 @@ async function computeSummary() {
   };
 }
 
-app.get("/api/v1/pool/summary", async () => {
+app.get("/api/v1/pool/summary", async (_req, reply) => {
   const now = Date.now();
   if (summaryCache && now - summaryCache.at < SUMMARY_TTL_MS) return summaryCache.body;
   if (!summaryInflight) {
@@ -536,14 +536,35 @@ app.get("/api/v1/pool/summary", async () => {
         summaryCache = { at: Date.now(), body };
         return body;
       })
+      .catch((e) => {
+        app.log.error({ err: String((e as Error)?.stack ?? e) }, "summary compute failed");
+        throw e;
+      })
       .finally(() => {
         summaryInflight = null;
       });
   }
   // Serve stale while refreshing if we have any cache at all.
   if (summaryCache) return summaryCache.body;
-  return summaryInflight;
+  // Never hang a client forever on a slow/stuck query: bound the first fill.
+  try {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const body = await Promise.race([
+      summaryInflight,
+      new Promise((_r, rej) => {
+        timer = setTimeout(() => rej(new Error("summary timeout after 15s")), 15_000);
+      }),
+    ]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+    return body;
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    app.log.error({ err: msg }, "summary request failed");
+    return reply.code(503).send({ error: "summary_unavailable", detail: msg });
+  }
 });
+
 
 app.get("/api/v1/pool/hashrate", async (req, reply) => {
   const q = req.query as { window?: string; algo?: string };
@@ -1251,7 +1272,7 @@ app.get("/api/v1/openapi.json", async () => ({
   openapi: "3.1.0",
   info: {
     title: "yiimp-api (honest.money pool)",
-    version: "0.7.1",
+    version: "0.7.2",
     description:
       "Read-only pool-native + merged-mining + realtime API. See https://pool.honest.money/docs.",
   },
