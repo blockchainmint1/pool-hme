@@ -15,12 +15,20 @@ import { createFileRoute } from "@tanstack/react-router";
 // Legacy P2PKH merged-mining parent wallet (mem: LTC coinbase legacy-only).
 const RENTAL_LTC_ADDR = "LdSHVgxVWbP5kGKzmZMm8aEXe2wprwwr32";
 
+// Public watchdog endpoint the box POSTs heartbeats to / GETs for checks.
+// Not a secret — just the published URL of this app's /api/public/monitor.
+const MONITOR_URL = "https://pool.honest.money/api/public/monitor";
+
+// Secrets read from the project store. MONITOR_TOKEN is echoed back here so
+// the box's env file stays self-consistent on refresh — but the box must
+// already hold it to call this route (bootstrap: place it by hand once).
 const KEY_MAP: Array<[string, string]> = [
   ["NICEHASH_API", "NICEHASH_API"],
   ["NICEHASH_SECRET", "NICEHASH_SECRET"],
   ["NICEHASH_ORGANIZATION", "NICEHASH_ORGANIZATION"],
   ["TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"],
   ["TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID"],
+  ["MONITOR_TOKEN", "MONITOR_TOKEN"],
 ];
 
 function readToken(request: Request): string {
