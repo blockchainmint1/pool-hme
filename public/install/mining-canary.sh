@@ -17,7 +17,28 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v7  2026-08-30  DEEP DIVE release. "One DOGE block in 24h" needed evidence,
+#                   not vibes, so the canary now measures LUCK instead of just
+#                   liveness:
+#                     * new section 4c: expected-vs-actual finds per coin over
+#                       1h/24h/7d from hashrate x window / network difficulty.
+#                       Under 25% of expectation on a >=5-block expectation is
+#                       a REGRESSION, not variance. This is the only section
+#                       that can tell "the pool is fine, luck was bad" apart
+#                       from "high-difficulty submits are being dropped".
+#                     * new section 4d: parent-chain submit evidence -- counts
+#                       block-candidate / submitblock / submitauxblock / accept
+#                       / reject lines per coin over the whole live log, so a
+#                       FOUND-but-REJECTED block can never look like bad luck.
+#                     * new section 4e: reject + stale rate and share-difficulty
+#                       spread over 10 min (a vardiff collapse silently costs
+#                       real work), plus daemon tip vs our last recorded block.
+#                     * false positives fixed: the 30s log sample is skipped
+#                       when the live log was just rotated, and the TXC/ISK dry
+#                       thresholds moved to WARN 15m / FAIL 25m (8/15 fired on
+#                       a healthy pool during normal variance).
 #   v6  2026-08-13  ZCU added to section 4 block cadence (and to the baseline
+
 #                   height set). Only judged when the gate is ARMED; a dry ZCU
 #                   with accepted gate blocks is reported as a yiimp-sync issue,
 #                   never as a mining failure. Limits WARN 30m / FAIL 60m.
@@ -49,7 +70,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v6"
+CANARY_VERSION="v7"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -162,9 +183,13 @@ for S in TXC ISK; do
   # we are the ONLY pool on TXC/ISK: healthy is ~1 block / 3 min.
   # Tightened 14 Aug 2026: 20m dry used to print WARN and the run still said
   # "ALL GREEN". At 3m target, 10m dry is already a >3-sigma event.
-  if   [ "$AGO" -le 8 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
-  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
+  # v7: 8/15 fired on a pool that was objectively fine. Target is ~3m, but the
+  # find process is Poisson: a 12m dry spell happens by chance several times a
+  # day. WARN at 15m, FAIL at 25m (still ~8x the target interval).
+  if   [ "$AGO" -le 15 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
+  elif [ "$AGO" -le 25 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
   else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; CADENCE_OK=0; fi
+
 done
 
 # --- ZCU (v6). Judged differently from TXC/ISK on purpose:
@@ -220,8 +245,15 @@ RPCTO=$(grep -ci 'rpc timeout\|connect error\|couldn.t connect' "$SAMPLE" || tru
 RPCTO=$(echo "${RPCTO:-0}" | head -1 | tr -dc '0-9'); RPCTO=${RPCTO:-0}
 
 echo "  30s sample: ${NEW} new lines   gbt-errors=$GBT  aux-errors=$AUXERR  wallet-errors=$WALLET  rpc-conn-errors=$RPCTO"
-if [ "$NEW" -eq 0 ]; then
+# v7: a log that was rotated seconds before the sample legitimately shows 0 new
+# lines in the OLD handle. Do not FAIL on that -- it is the rotation, not stratum.
+LOGBORN=$(stat -c %W "$LOG" 2>/dev/null); [ "${LOGBORN:-0}" -gt 0 ] 2>/dev/null || LOGBORN=$(stat -c %Z "$LOG" 2>/dev/null || echo 0)
+LOGBORNAGE=$(( $(date -u +%s) - ${LOGBORN:-0} ))
+if [ "$NEW" -eq 0 ] && [ "$LOGBORNAGE" -lt 120 ]; then
+  warn "0 new lines in 30s but $LOG is only ${LOGBORNAGE}s old -- log just rotated, sample is not evidence of a stall"
+elif [ "$NEW" -eq 0 ]; then
   bad "stratum wrote ZERO lines in 30s -- it is not looping, treat as stalled"
+
 elif [ "$GBT" -eq 0 ]; then
   ok "no getblocktemplate errors in the last 30s"
 else
@@ -249,6 +281,152 @@ if [ "$NEW" -gt 200 ] && [ "$COINNAMES" -eq 0 ]; then
   fi
 fi
 rm -f "$SAMPLE"
+
+##############################################################################
+hr "4c. LUCK vs REGRESSION -- expected finds from our own hashrate (v7)"
+##############################################################################
+# The question "we only mined ONE DOGE block in 24h, is something broken?"
+# cannot be answered by liveness checks. It is arithmetic:
+#
+#   expected blocks = hashrate(H/s) * window(s) / (network_difficulty * 2^32)
+#
+# If actual is close to expected, the pool is fine and luck was bad. If actual
+# is a small fraction of expected on a large expectation, high-difficulty work
+# is being lost somewhere between the miner and the daemon -- a REGRESSION.
+#
+# Hashrate source, best first:
+#   1. measured share window (exact, but only ~10 min of `shares` is retained)
+#   2. hashstats averages for the 24h / 7d windows
+HS_NOW=$(MY "SELECT ROUND(SUM(CASE WHEN valid=1 THEN difficulty ELSE 0 END)*4294967296
+              / GREATEST(UNIX_TIMESTAMP()-MIN(time),1))
+             FROM shares WHERE time > UNIX_TIMESTAMP()-600")
+HS_NOW=$(echo "${HS_NOW:-0}" | tr -dc '0-9'); HS_NOW=${HS_NOW:-0}
+HS_24=$(MY "SELECT ROUND(AVG(hashrate)) FROM hashstats WHERE time > UNIX_TIMESTAMP()-86400")
+HS_24=$(echo "${HS_24:-0}" | tr -dc '0-9'); [ "${HS_24:-0}" -gt 0 ] 2>/dev/null || HS_24=$HS_NOW
+HS_7D=$(MY "SELECT ROUND(AVG(hashrate)) FROM hashstats WHERE time > UNIX_TIMESTAMP()-604800")
+HS_7D=$(echo "${HS_7D:-0}" | tr -dc '0-9'); [ "${HS_7D:-0}" -gt 0 ] 2>/dev/null || HS_7D=$HS_24
+awk -v a="$HS_NOW" -v b="$HS_24" -v c="$HS_7D" \
+  'BEGIN{printf "  hashrate: now %.2f TH/s   24h avg %.2f TH/s   7d avg %.2f TH/s\n",a/1e12,b/1e12,c/1e12}'
+if [ "$HS_NOW" -eq 0 ]; then
+  warn "no share work in the last 10 min -- luck maths below is meaningless"
+fi
+
+printf '  %-5s %-13s %6s %8s %6s %8s %6s %8s\n' \
+  COIN NET_DIFF exp1h act1h exp24h act24h exp7d act7d
+for S in LTC DOGE TXC ISK; do
+  ND=$(MY "SELECT difficulty FROM coins WHERE symbol='$S' LIMIT 1")
+  case "${ND:-0}" in ''|0|0.0*) ND=0 ;; esac
+  A1=$(MY  "SELECT COUNT(*) FROM blocks b JOIN coins c ON c.id=b.coin_id
+            WHERE c.symbol='$S' AND b.time > UNIX_TIMESTAMP()-3600")
+  A24=$(MY "SELECT COUNT(*) FROM blocks b JOIN coins c ON c.id=b.coin_id
+            WHERE c.symbol='$S' AND b.time > UNIX_TIMESTAMP()-86400")
+  A7=$(MY  "SELECT COUNT(*) FROM blocks b JOIN coins c ON c.id=b.coin_id
+            WHERE c.symbol='$S' AND b.time > UNIX_TIMESTAMP()-604800")
+  A1=${A1:-0}; A24=${A24:-0}; A7=${A7:-0}
+  read -r E1 E24 E7 VERDICT <<EOF
+$(awk -v nd="${ND:-0}" -v h1="$HS_NOW" -v h24="$HS_24" -v h7="$HS_7D" \
+      -v a1="$A1" -v a24="$A24" -v a7="$A7" 'BEGIN{
+    if (nd <= 0) { print "n/a n/a n/a nodiff"; exit }
+    w = nd * 4294967296;
+    e1  = h1  * 3600   / w;
+    e24 = h24 * 86400  / w;
+    e7  = h7  * 604800 / w;
+    v = "ok";
+    if (e24 >= 5 && a24 < 0.25 * e24)      v = "fail24";
+    else if (e24 >= 5 && a24 < 0.5 * e24)  v = "warn24";
+    else if (e7  >= 20 && a7 < 0.5 * e7)   v = "warn7";
+    printf "%.2f %.2f %.2f %s", e1, e24, e7, v;
+  }')
+EOF
+  printf '  %-5s %-13s %6s %8s %6s %8s %6s %8s\n' \
+    "$S" "${ND:-?}" "${E1:-?}" "$A1" "${E24:-?}" "$A24" "${E7:-?}" "$A7"
+  case "${VERDICT:-}" in
+    fail24) bad  "$S found $A24 block(s) in 24h but our own hashrate says ~$E24 -- under 25% of expectation is a REGRESSION, not luck" ;;
+    warn24) warn "$S found $A24 in 24h vs ~$E24 expected -- below half of expectation; watch the next few hours before acting" ;;
+    warn7)  warn "$S 7-day finds ($A7) are below half of the ~$E7 our hashrate should produce -- long-run shortfall" ;;
+    nodiff) warn "$S has no network difficulty in the coins table -- cannot judge luck for it" ;;
+    *)      [ "${E24:-n/a}" = "n/a" ] || ok "$S finds are in line with expectation ($A24 in 24h vs ~$E24)" ;;
+  esac
+done
+echo "  note: a SINGLE coin short while the others are on target is luck or a"
+echo "        chain-specific problem. LTC and DOGE short TOGETHER means the"
+echo "        shared parent path (coinbase, template, submit) -- read 4d."
+
+##############################################################################
+hr "4d. parent-chain submit evidence -- did we FIND and then LOSE a block?"
+##############################################################################
+# A found-but-rejected block looks exactly like bad luck in the blocks table,
+# because no row is ever written. The only trace is in the stratum log.
+LOGS=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | grep -v '/client-' | head -3)
+echo "  scanning: $(echo "$LOGS" | tr '\n' ' ')"
+CAND=$(grep -hicE 'block found|found block|submitblock|submitauxblock' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
+CAND=$(echo "${CAND:-0}" | tr -dc '0-9'); CAND=${CAND:-0}
+REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null | grep -icE 'block|submit' || true)
+REJL=$(echo "${REJL:-0}" | head -1 | tr -dc '0-9'); REJL=${REJL:-0}
+echo "  submit/found lines in the live logs: $CAND    reject-flavoured block lines: $REJL"
+if [ "$REJL" -gt 0 ]; then
+  warn "$REJL block-submit rejection line(s) found -- these are blocks we MINED and LOST. Newest 8:"
+  grep -hiE 'rejected|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null \
+    | grep -iE 'block|submit' | tail -8 | cut -c1-200 | sed 's/^/       /'
+else
+  ok "no block-submit rejections in the retained logs -- nothing was found and thrown away"
+fi
+# CDataStream / serialization breakage is the exact 20 Aug signature of a
+# bech32 LTC parent coinbase killing every aux child at once.
+CDS=$(grep -hic 'CDataStream\|end of data' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
+CDS=$(echo "${CDS:-0}" | tr -dc '0-9'); CDS=${CDS:-0}
+[ "${CDS:-0}" -gt 0 ] && bad "$CDS 'CDataStream / end of data' line(s) -- auxpow serialization is breaking. Check the LTC parent coinbase is LEGACY P2PKH (must start with L..., iswitness:false)" \
+                      || ok "no auxpow serialization errors"
+# the parent coinbase itself -- one query, the single most expensive mistake
+MYT "SELECT symbol, master_wallet, enable, auto_ready FROM coins
+     WHERE symbol IN ('LTC','DOGE','TXC','ISK','ZCU') ORDER BY symbol" | sed 's/^/  /'
+LTCW=$(MY "SELECT master_wallet FROM coins WHERE symbol='LTC' LIMIT 1")
+case "${LTCW:-}" in
+  L*) ok "LTC parent coinbase is legacy P2PKH ($LTCW)" ;;
+  ltc1*) bad "LTC parent coinbase is BECH32 ($LTCW) -- this breaks DOGE/TXC/ISK/ZCU merged mining. Revert to the legacy L... address NOW" ;;
+  *) warn "LTC parent coinbase looks unusual: ${LTCW:-<empty>}" ;;
+esac
+
+##############################################################################
+hr "4e. work quality -- rejects, vardiff spread, daemon tips"
+##############################################################################
+MYT "SELECT COUNT(*) shares_10m,
+      SUM(valid=1) valid, SUM(valid<>1) invalid,
+      ROUND(100*SUM(valid<>1)/GREATEST(COUNT(*),1),2) reject_pct,
+      ROUND(MIN(difficulty),3) min_diff,
+      ROUND(AVG(difficulty),3) avg_diff,
+      ROUND(MAX(difficulty),3) max_diff
+     FROM shares WHERE time > UNIX_TIMESTAMP()-600" | sed 's/^/  /'
+RPCT=$(MY "SELECT ROUND(100*SUM(valid<>1)/GREATEST(COUNT(*),1))
+           FROM shares WHERE time > UNIX_TIMESTAMP()-600")
+RPCT=$(echo "${RPCT:-0}" | tr -dc '0-9'); RPCT=${RPCT:-0}
+if   [ "$RPCT" -le 3 ];  then ok "reject rate ${RPCT}% -- normal"
+elif [ "$RPCT" -le 10 ]; then warn "reject rate ${RPCT}% -- elevated; stale jobs or a bad container"
+else bad "reject rate ${RPCT}% -- we are throwing away real work, this directly costs blocks"; fi
+# a vardiff collapse costs finds without touching shares/min
+AVGD=$(MY "SELECT ROUND(AVG(difficulty)) FROM shares WHERE time > UNIX_TIMESTAMP()-600")
+AVGD=$(echo "${AVGD:-0}" | tr -dc '0-9'); AVGD=${AVGD:-0}
+[ "$AVGD" -lt 8192 ] && warn "average share difficulty is only $AVGD -- vardiff may have collapsed; the pool does the same work but pays far more submit overhead" \
+                     || ok "average share difficulty $AVGD looks sane"
+# daemon tip vs our newest recorded block: are we even on the right chain tip?
+LCLI="/home/ubuntu/litecoin-0.21.4/bin/litecoin-cli -datadir=/home/ubuntu/.litecoin -rpcwallet=pool"
+DCLI="/home/ubuntu/dogecoin-1.14.9/bin/dogecoin-cli -datadir=/home/ubuntu/.dogecoin"
+for pair in "LTC:$LCLI" "DOGE:$DCLI"; do
+  S=${pair%%:*}; CLI=${pair#*:}
+  BIN=${CLI%% *}
+  [ -x "$BIN" ] || { warn "$S cli not found at $BIN -- skipping tip check"; continue; }
+  TIP=$(sudo -u ubuntu $CLI getblockcount 2>/dev/null | tr -dc '0-9')
+  CONN=$(sudo -u ubuntu $CLI getconnectioncount 2>/dev/null | tr -dc '0-9')
+  OURS=$(MY "SELECT MAX(b.height) FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='$S'")
+  OURS=$(echo "${OURS:-0}" | tr -dc '0-9'); OURS=${OURS:-0}
+  if [ -z "${TIP:-}" ]; then
+    bad "$S daemon did not answer getblockcount -- stratum cannot build templates for it"
+  else
+    echo "  $S daemon tip=$TIP peers=${CONN:-?}   our newest recorded block=$OURS (behind by $((TIP-OURS)))"
+    [ "${CONN:-0}" -ge 3 ] && ok "$S daemon has ${CONN} peers" || bad "$S daemon has only ${CONN:-0} peers -- it may be mining on an isolated tip"
+  fi
+done
+
 
 ##############################################################################
 hr "5. aux list sanity -- who is stratum actually merge-mining right now?"
