@@ -36,10 +36,10 @@ for d in /opt/zcu-gate /opt/zcu-adapter /var/zcu /etc/zcu-gate /usr/local/bin; d
 done
 # any zcu scripts referenced by units
 grep -rsl -i zcu /etc/systemd/system/ 2>/dev/null | while read -r u; do
-  grep -oE 'ExecStart=[^ ]+' "$u" | cut -d= -f2- | while read -r p; do
+  grep -oE 'ExecStart=[^ ]+' "$u" 2>/dev/null | cut -d= -f2- | while read -r p; do
     [ -f "$p" ] && cp -a "$p" "$DEST/zcu/" 2>/dev/null || true
   done
-done
+done || true
 
 # --- 3. systemd units ------------------------------------------------------
 say "systemd units"
