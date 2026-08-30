@@ -527,13 +527,18 @@ echo "  stratum: active=$(systemctl is-active "$UNIT")  NRestarts=${R0:-?} -> ${
 cat <<EOF
 
 NEXT STEPS
-  1. ZCU is still OUT of the yiimp rotation (coins.enable=0). This adapter is
-     running in SHADOW: it answers, gates, and logs winners, but submits
-     nothing and nothing routes to it yet.
-  2. Leave it 24h. Check with:  ... | sudo bash -s STATUS
-     Want: self_disarm=0, geth_fail low, gated_miss climbing, stratum
-     NRestarts unchanged, LTC/DOGE/TXC/ISK find rates flat (mining-canary).
-  3. Only then re-enable ZCU in coins and ARM:
+  1. This adapter is in SHADOW: it answers, gates and logs winners, but
+     submits nothing to geth. ZCU is still coins.enable=0, so no stratum
+     traffic reaches it yet.
+  2. To shadow with REAL traffic you must put ZCU back in the rotation
+     (coins.enable=1 / auto_ready=1 + restart stratum). That is safe with v6
+     only because submitauxblock is O(1) and every geth call is bounded --
+     but do it as a deliberate step, watching mining-canary.
+  3. Leave it 24h. Check with:  ... | sudo bash -s STATUS
+     Want: self_disarm=0, geth_fail low, gated_miss climbing, would_forward
+     appearing at roughly the expected block rate, stratum NRestarts
+     unchanged, LTC/DOGE/TXC/ISK find rates flat.
+  4. Only then arm real submits:
        curl -fsSL https://pool.honest.money/install/zcu-adapter-v6.sh | sudo bash -s ARM
      ARM refuses if shadow has run <24h.
 EOF
