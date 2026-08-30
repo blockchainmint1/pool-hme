@@ -795,3 +795,52 @@ in one submit and refused to guess. Observed 1 reject in 5 forwards on 13 Aug; t
 submit of the same hash was accepted. Only investigate if the reject count grows faster
 than accepted blocks. Future hardening: have the gate pick the candidate whose coinbase
 commits to the ZCU aux merkle root before forwarding.
+
+## 15. ZCU removed from rotation — 30 Aug 2026 (READ BEFORE RE-ENABLING ZCU)
+
+**Status (30 Aug 05:00 UTC):** ZCU is **OUT of the aux rotation**. The
+defective gate adapter (`zcu-gate`) caused the 29 Aug 15:23 `scrypt dead lock`
+deadlock (see `docs/postmortems/2026-08-29-zcu-deadlock.md`). ZCU was removed
+via `zcu-remove-rotation.sh REMOVE-ZCU CONFIRM`; DOGE/LTC/TXC/ISK remain
+enabled and are the only coins in the scrypt aux rotation.
+
+### What was disabled
+
+| Unit / table row                     | State           | Re-enabled by          |
+| ------------------------------------ | --------------- | ---------------------- |
+| `coins.symbol='ZCU'`                 | enable=0, auto_ready=0 | `zcu-remove-rotation.sh REVERT` |
+| `zcu-gate.service`                   | stopped, disabled      | `zcu-remove-rotation.sh REVERT` |
+| `zcu-mainnet-yiimp-block-sync.service` | stopped, disabled     | `zcu-remove-rotation.sh REVERT` |
+| `zcu-mainnet-yiimp-block-sync.timer`  | stopped, disabled      | `zcu-remove-rotation.sh REVERT` |
+| `zcu-sync.timer`                     | stopped, disabled      | `zcu-remove-rotation.sh REVERT` |
+| `zcu-deadman.timer`                  | stopped, disabled      | manual (see below)     |
+| geth (`zcu-mainnet-geth`)            | **LEFT RUNNING**  | already running        |
+
+> **`zcu-deadman.timer`** is NOT touched by `zcu-remove-rotation.sh` because
+> the deadman is harmless while ZCU is disabled (it disarms an already-disabled
+> child). But you should stop it to keep the timer list clean:
+> ```bash
+> sudo systemctl disable --now zcu-deadman.timer zcu-deadman.service 2>/dev/null || true
+> ```
+
+### Pre-removal backup
+
+`/var/backups/pre-zcu-removal-20260830-045400/` — 2.7 GB snapshot with manifest.
+Contains the stratum binary, ZCU gate/adapter, systemd units, web payout code,
+yiimp-api, DB schema, `coins` rows, incident-window logs, and the saved ZCU
+`coins` row at `zcu-coins-row.tsv`. Verify with:
+```bash
+cd /var/backups/pre-zcu-removal-20260830-045400 && sha256sum -c MANIFEST.sha256 | grep -v ': OK' || echo ALL-OK
+```
+
+### Re-enable path (do NOT rush this)
+
+ZCU has no payout backlog and is the only pool on its network — there is no
+urgency. DOGE/LTC/TXC/ISK must be proven healthy for 12–24h first. Then the
+adapter must be redesigned (see postmortem) before ZCU re-enters rotation:
+1. Move target gating into stratum/pre-filter before any adapter RPC.
+2. Adapter must fail loudly on geth/backend errors — never fabricate templates.
+3. Hard RPC timeouts + bounded concurrency on all geth calls.
+4. 24h shadow test proving ZCU seals advance and LTC/DOGE/TXC/ISK stay healthy.
+5. Re-enable via `zcu-remove-rotation.sh REVERT` (restores `coins` row,
+   `zcu-gate`, sync units + timers, restarts stratum), then re-arm deadman.
