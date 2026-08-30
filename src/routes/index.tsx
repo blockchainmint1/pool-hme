@@ -371,8 +371,8 @@ function PoolHero() {
           <Kpi label="Pool fee" value="0%" hint="no take · ever" />
           <Kpi
             label="Payouts"
-            value="daily"
-            hint="batched · LTC + DOGE"
+            value="LTC daily · DOGE hourly"
+            hint="over threshold · batched"
           />
         </div>
 
@@ -696,16 +696,12 @@ function PayoutCard() {
       </div>
       <ul className="space-y-2 text-sm text-pool-steel">
         <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
-          <span>Interval</span>
-          <span className="text-pool-steel-hi font-mono">daily · 06:15 UTC</span>
+          <span>LTC</span>
+          <span className="text-pool-steel-hi font-mono">daily · 06:15 UTC · ≥ 0.01</span>
         </li>
         <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
-          <span>Threshold LTC</span>
-          <span className="text-pool-steel-hi font-mono">≥ 0.01</span>
-        </li>
-        <li className="flex items-center justify-between border-b border-pool-hairline pb-2">
-          <span>Threshold DOGE</span>
-          <span className="text-pool-steel-hi font-mono">≥ 50</span>
+          <span>DOGE</span>
+          <span className="text-pool-steel-hi font-mono">hourly cycle · ≥ 200</span>
         </li>
         <li className="flex items-center justify-between">
           <span>Payout coins</span>
@@ -713,10 +709,11 @@ function PayoutCard() {
         </li>
       </ul>
       <div className="text-[11px] font-mono text-pool-steel leading-relaxed">
-        One batched send per day keeps network fees off your earnings. Balances below the
-        threshold simply roll into the next day. TXC / ISK / ZCU are mined for chain security
-        and are not part of the pool payout — by design, so the pool never becomes a
-        distribution bottleneck for TEXITcoin itself.
+        LTC pays out once a day in one batched send; the countdown above is to the next
+        LTC batch. DOGE pays every hour your balance clears 200 DOGE — that's why payouts
+        land several times a day. Balances below threshold roll into the next cycle.
+        TXC / ISK / ZCU are mined for chain security and are not part of the pool payout —
+        by design, so the pool never becomes a distribution bottleneck for TEXITcoin itself.
       </div>
     </div>
   );
