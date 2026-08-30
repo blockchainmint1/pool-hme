@@ -179,9 +179,7 @@ function PoolHome() {
           <RailLink href="#graphs"    icon={Activity}      label="Graphs" />
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
           <RailLink href="#workers"   icon={Cpu}           label="Workers" />
-          <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
-          <RailLink href="#ltc-blocks" icon={Layers}       label="LTC blocks" />
-          <RailLink href="#doge-blocks" icon={Layers}      label="DOGE blocks" />
+          <RailLink href="#blocks"    icon={Layers}        label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
 
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
@@ -262,27 +260,9 @@ function PoolHome() {
             <SectionHeader
               eyebrow="Found by the pool"
               title="Recent blocks."
-              hint="TXC · ISK · ZCU · newest first"
+              hint="all five chains · newest first"
             />
-            <FoundBlocks />
-          </section>
-
-          <section id="ltc-blocks" className="space-y-3">
-            <SectionHeader
-              eyebrow="Parent chain"
-              title="Recent LTC blocks."
-              hint="10 per page · newest first"
-            />
-            <CoinRecentBlocks symbol="LTC" />
-          </section>
-
-          <section id="doge-blocks" className="space-y-3">
-            <SectionHeader
-              eyebrow="Merge-mined"
-              title="Recent DOGE blocks."
-              hint="10 per page · newest first"
-            />
-            <CoinRecentBlocks symbol="DOGE" />
+            <ChainBlocksPanel />
           </section>
 
 
