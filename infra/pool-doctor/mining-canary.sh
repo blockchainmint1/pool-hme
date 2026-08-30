@@ -245,8 +245,15 @@ RPCTO=$(grep -ci 'rpc timeout\|connect error\|couldn.t connect' "$SAMPLE" || tru
 RPCTO=$(echo "${RPCTO:-0}" | head -1 | tr -dc '0-9'); RPCTO=${RPCTO:-0}
 
 echo "  30s sample: ${NEW} new lines   gbt-errors=$GBT  aux-errors=$AUXERR  wallet-errors=$WALLET  rpc-conn-errors=$RPCTO"
-if [ "$NEW" -eq 0 ]; then
+# v7: a log that was rotated seconds before the sample legitimately shows 0 new
+# lines in the OLD handle. Do not FAIL on that -- it is the rotation, not stratum.
+LOGBORN=$(stat -c %W "$LOG" 2>/dev/null); [ "${LOGBORN:-0}" -gt 0 ] 2>/dev/null || LOGBORN=$(stat -c %Z "$LOG" 2>/dev/null || echo 0)
+LOGBORNAGE=$(( $(date -u +%s) - ${LOGBORN:-0} ))
+if [ "$NEW" -eq 0 ] && [ "$LOGBORNAGE" -lt 120 ]; then
+  warn "0 new lines in 30s but $LOG is only ${LOGBORNAGE}s old -- log just rotated, sample is not evidence of a stall"
+elif [ "$NEW" -eq 0 ]; then
   bad "stratum wrote ZERO lines in 30s -- it is not looping, treat as stalled"
+
 elif [ "$GBT" -eq 0 ]; then
   ok "no getblocktemplate errors in the last 30s"
 else
