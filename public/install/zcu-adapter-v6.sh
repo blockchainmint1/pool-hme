@@ -542,4 +542,3 @@ NEXT STEPS
        curl -fsSL https://pool.honest.money/install/zcu-adapter-v6.sh | sudo bash -s ARM
      ARM refuses if shadow has run <24h.
 EOF
-fi
