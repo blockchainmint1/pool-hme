@@ -70,7 +70,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v6"
+CANARY_VERSION="v7"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -183,9 +183,13 @@ for S in TXC ISK; do
   # we are the ONLY pool on TXC/ISK: healthy is ~1 block / 3 min.
   # Tightened 14 Aug 2026: 20m dry used to print WARN and the run still said
   # "ALL GREEN". At 3m target, 10m dry is already a >3-sigma event.
-  if   [ "$AGO" -le 8 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
-  elif [ "$AGO" -le 15 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
+  # v7: 8/15 fired on a pool that was objectively fine. Target is ~3m, but the
+  # find process is Poisson: a 12m dry spell happens by chance several times a
+  # day. WARN at 15m, FAIL at 25m (still ~8x the target interval).
+  if   [ "$AGO" -le 15 ];  then ok "$S found a block ${AGO}m ago (healthy, target ~3m)"
+  elif [ "$AGO" -le 25 ]; then warn "$S dry for ${AGO}m -- 5x the target interval, watch it"; CADENCE_OK=0
   else bad "$S dry for ${AGO}m -- we are the only pool, this is a REGRESSION not variance"; CADENCE_OK=0; fi
+
 done
 
 # --- ZCU (v6). Judged differently from TXC/ISK on purpose:
