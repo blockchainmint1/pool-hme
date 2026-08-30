@@ -443,15 +443,32 @@ if [ "$AUXTOT" -eq 0 ]; then
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
-SHADOW=0; REAL=0; GATE=0
+SHADOW=0; REAL=0; GATE=0; V6=0
 pgrep -f '/opt/zcu-adapter/adapter-capture.py' >/dev/null 2>&1 && SHADOW=1
 pgrep -f '/opt/zcu-adapter/adapter-gate.py' >/dev/null 2>&1 && GATE=1
 pgrep -f '/opt/zcu-adapter/adapter.py' >/dev/null 2>&1 && REAL=1
+pgrep -f '/opt/zcu-adapter/adapter-v6.py' >/dev/null 2>&1 && V6=1
 LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
 
 if [ "$REAL" -eq 1 ]; then
   bad "REAL ZCU adapter (adapter.py) is running -- this is the 13 Aug crash path"
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
+elif [ "$V6" -eq 1 ]; then
+  V6DRY=$(grep -E '^ZCU_DRY_RUN=' /etc/zcu-adapter-v6.env 2>/dev/null | cut -d= -f2 | tr -dc '01'); V6DRY=${V6DRY:-?}
+  if [ "$V6DRY" = "1" ]; then
+    ok "ZCU adapter on :8749 is v6 in SHADOW (dry_run=1): O(1) enqueue, bounded queue, nothing reaches geth"
+  elif [ "$V6DRY" = "0" ]; then
+    ok "ZCU adapter on :8749 is v6 ARMED: O(1) enqueue, bounded queue, rate-limited submits to geth"
+  else
+    ok "ZCU adapter on :8749 is v6 (non-blocking, fail-loud) -- dry_run flag unreadable"
+  fi
+  DIS=$(systemctl show zcu-adapter-v6 -p NRestarts --value 2>/dev/null | tr -dc '0-9'); DIS=${DIS:-0}
+  [ "$DIS" -gt 0 ] && warn "zcu-adapter-v6 has restarted $DIS time(s) -- check journalctl -u zcu-adapter-v6" || ok "zcu-adapter-v6 process stable (0 restarts)"
+  if [ "$ZCU_LIVE" -gt 0 ]; then
+    ok "ZCU is in the aux rotation ($ZCU_LIVE recent lines) -- expected"
+  else
+    warn "adapter is up but no ZCU lines in the log yet -- stratum has not picked ZCU back up"
+  fi
 elif [ "$GATE" -eq 1 ] || [ "$SHADOW" -eq 1 ]; then
   if [ "$GATE" -eq 1 ]; then
     ok "ZCU adapter on :8749 is the GATE (target-checked, always-ACK) -- only winners reach geth, submitauxblock never returns an error"
