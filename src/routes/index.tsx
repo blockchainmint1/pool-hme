@@ -912,24 +912,6 @@ function WorkersTable() {
   );
 }
 
-function CoinBadge({ symbol }: { symbol: string }) {
-  const colorMap: Record<string, string> = {
-    TXC:  "bg-pool-amber",
-    LTC:  "bg-pool-steel",
-    DOGE: "bg-pool-amber",
-    ISK:  "bg-pool-mint",
-    ZCU:  "bg-pool-mint",
-  };
-  return (
-    <span
-      className={`inline-flex size-6 rounded-full items-center justify-center text-[10px] font-mono font-semibold text-pool-obsidian ${
-        colorMap[symbol] ?? "bg-pool-steel"
-      }`}
-    >
-      {symbol.slice(0, 1)}
-    </span>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Learn band
