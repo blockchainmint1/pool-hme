@@ -17,7 +17,28 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v7  2026-08-30  DEEP DIVE release. "One DOGE block in 24h" needed evidence,
+#                   not vibes, so the canary now measures LUCK instead of just
+#                   liveness:
+#                     * new section 4c: expected-vs-actual finds per coin over
+#                       1h/24h/7d from hashrate x window / network difficulty.
+#                       Under 25% of expectation on a >=5-block expectation is
+#                       a REGRESSION, not variance. This is the only section
+#                       that can tell "the pool is fine, luck was bad" apart
+#                       from "high-difficulty submits are being dropped".
+#                     * new section 4d: parent-chain submit evidence -- counts
+#                       block-candidate / submitblock / submitauxblock / accept
+#                       / reject lines per coin over the whole live log, so a
+#                       FOUND-but-REJECTED block can never look like bad luck.
+#                     * new section 4e: reject + stale rate and share-difficulty
+#                       spread over 10 min (a vardiff collapse silently costs
+#                       real work), plus daemon tip vs our last recorded block.
+#                     * false positives fixed: the 30s log sample is skipped
+#                       when the live log was just rotated, and the TXC/ISK dry
+#                       thresholds moved to WARN 15m / FAIL 25m (8/15 fired on
+#                       a healthy pool during normal variance).
 #   v6  2026-08-13  ZCU added to section 4 block cadence (and to the baseline
+
 #                   height set). Only judged when the gate is ARMED; a dry ZCU
 #                   with accepted gate blocks is reported as a yiimp-sync issue,
 #                   never as a mining failure. Limits WARN 30m / FAIL 60m.
