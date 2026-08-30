@@ -45,6 +45,11 @@ case "$MODE" in
     systemctl stop zcu-gate 2>/dev/null || true
     systemctl disable zcu-gate 2>/dev/null || true
     say "zcu-gate stopped+disabled (geth left running)"
+    # ZCU sync units error out (exit 1) when the coin row is disabled — stop
+    # them so they don't crash-loop. REVERT re-enables them.
+    systemctl disable --now zcu-mainnet-yiimp-block-sync.service zcu-mainnet-yiimp-block-sync.timer zcu-sync.timer 2>/dev/null || true
+    systemctl reset-failed zcu-mainnet-yiimp-block-sync.service 2>/dev/null || true
+    say "zcu-mainnet-yiimp-block-sync + timers stopped+disabled (nothing to sync while ZCU is out)"
     systemctl restart stratum-aws-scrypt
     sleep 8
     say "stratum: $(systemctl is-active stratum-aws-scrypt)"
@@ -61,8 +66,11 @@ case "$MODE" in
     mysql yiimpfrontend -e "UPDATE coins SET enable=1, auto_ready=1 WHERE symbol='ZCU';"
     systemctl enable zcu-gate 2>/dev/null || true
     systemctl start zcu-gate 2>/dev/null || true
+    # Re-enable the ZCU sync units + timers that were disabled during removal.
+    systemctl enable zcu-mainnet-yiimp-block-sync.timer zcu-sync.timer 2>/dev/null || true
+    systemctl start zcu-mainnet-yiimp-block-sync.timer zcu-sync.timer 2>/dev/null || true
     systemctl restart stratum-aws-scrypt
-    say "reverted: ZCU enable=1/auto_ready=1, zcu-gate started, stratum restarted"
+    say "reverted: ZCU enable=1/auto_ready=1, zcu-gate started, sync units re-enabled, stratum restarted"
     ;;
   *)
     say "unknown mode: $MODE (use REMOVE-ZCU CONFIRM | REVERT)"; exit 1;;
