@@ -359,9 +359,8 @@ hr "4d. parent-chain submit evidence -- did we FIND and then LOSE a block?"
 # because no row is ever written. The only trace is in the stratum log.
 LOGS=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | grep -v '/client-' | head -3)
 echo "  scanning: $(echo "$LOGS" | tr '\n' ' ')"
-CAND=$(grep -hicE 'block found|found block|BLOCK FOUND|submitblock|submitauxblock' $LOGS 2>/dev/null | paste -sd+ | bc 2>/dev/null)
-case "${CAND:-}" in ''|*[!0-9]*) CAND=$(grep -hcE 'submitblock|submitauxblock|block found' $LOGS 2>/dev/null | head -1 | tr -dc '0-9') ;; esac
-CAND=${CAND:-0}
+CAND=$(grep -hicE 'block found|found block|submitblock|submitauxblock' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
+CAND=$(echo "${CAND:-0}" | tr -dc '0-9'); CAND=${CAND:-0}
 REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null | grep -icE 'block|submit' || true)
 REJL=$(echo "${REJL:-0}" | head -1 | tr -dc '0-9'); REJL=${REJL:-0}
 echo "  submit/found lines in the live logs: $CAND    reject-flavoured block lines: $REJL"
@@ -374,8 +373,8 @@ else
 fi
 # CDataStream / serialization breakage is the exact 20 Aug signature of a
 # bech32 LTC parent coinbase killing every aux child at once.
-CDS=$(grep -hic 'CDataStream\|end of data' $LOGS 2>/dev/null | paste -sd+ | bc 2>/dev/null)
-case "${CDS:-}" in ''|*[!0-9]*) CDS=0 ;; esac
+CDS=$(grep -hic 'CDataStream\|end of data' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
+CDS=$(echo "${CDS:-0}" | tr -dc '0-9'); CDS=${CDS:-0}
 [ "${CDS:-0}" -gt 0 ] && bad "$CDS 'CDataStream / end of data' line(s) -- auxpow serialization is breaking. Check the LTC parent coinbase is LEGACY P2PKH (must start with L..., iswitness:false)" \
                       || ok "no auxpow serialization errors"
 # the parent coinbase itself -- one query, the single most expensive mistake
