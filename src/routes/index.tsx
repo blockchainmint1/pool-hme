@@ -59,13 +59,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, LTC payouts daily and DOGE payouts hourly over threshold. Part of the honest.money ecosystem.",
       },
       { property: "og:title", content: "TEXITcoin Pool — Sound-money mining, made simple" },
       {
         property: "og:description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, LTC payouts daily and DOGE payouts hourly over threshold. Part of the honest.money ecosystem.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -73,7 +73,7 @@ export const Route = createFileRoute("/")({
       {
         name: "twitter:description",
         content:
-          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, and daily batched payouts. Part of the honest.money ecosystem.",
+          "TXC merged mining pool. Live hashrate, active miners, merged-mining across LTC / DOGE / ISK / TXC / ZCU, LTC payouts daily and DOGE payouts hourly over threshold. Part of the honest.money ecosystem.",
       },
     ],
   }),
