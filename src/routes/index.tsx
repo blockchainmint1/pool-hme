@@ -17,30 +17,82 @@ import {
   BookOpen,
   Radio,
 } from "lucide-react";
-import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+import { getPoolSummary } from "@/lib/pool/pool.functions";
+import { getCoinBlocks } from "@/lib/pool/coin.functions";
 import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
 import { ResilienceBand } from "@/components/pool/ResilienceBand";
-import { CoinBlocksTable } from "@/components/pool/CoinBlocksTable";
-import { coinPageQuery, type CoinSymbol } from "@/components/pool/CoinPage";
+import { CoinBlocksTable, CoinDot } from "@/components/pool/CoinBlocksTable";
 
-function CoinRecentBlocks({ symbol }: { symbol: CoinSymbol }) {
-  const { data, isLoading } = useQuery(coinPageQuery(symbol));
-  if (isLoading && !data) {
-    return (
-      <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
-        Loading {symbol} blocks…
-      </div>
-    );
-  }
+// ---------------------------------------------------------------------------
+// Recent blocks — one table, per-chain switcher. Each of the five merged-mined
+// chains gets its own ledger view; tabs fetch lazily so the homepage only pays
+// for the chain being viewed.
+// ---------------------------------------------------------------------------
+const CHAIN_TABS = ["TXC", "ISK", "LTC", "DOGE", "ZCU"] as const;
+type ChainTab = (typeof CHAIN_TABS)[number];
+
+const chainBlocksQuery = (symbol: ChainTab) =>
+  queryOptions({
+    queryKey: ["pool", "chain-blocks", symbol],
+    queryFn: () => getCoinBlocks({ data: { symbol, limit: 200 } }),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+function ChainBlocksPanel() {
+  const [symbol, setSymbol] = useState<ChainTab>("TXC");
+  const { data, isLoading } = useQuery(chainBlocksQuery(symbol));
+
   return (
-    <CoinBlocksTable
-      blocks={data?.blocks ?? []}
-      symbol={symbol}
-      nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
-      pageSize={10}
-      detailsTo={symbol === "LTC" ? "/ltc" : "/doge"}
-      emptyLabel={`No ${symbol} blocks recorded yet.`}
-    />
+    <div className="space-y-3">
+      <div
+        role="tablist"
+        aria-label="Chain"
+        className="flex flex-wrap gap-1.5 font-mono"
+      >
+        {CHAIN_TABS.map((sym) => (
+          <button
+            key={sym}
+            type="button"
+            role="tab"
+            aria-selected={symbol === sym}
+            onClick={() => setSymbol(sym)}
+            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px] tracking-widest transition-colors ${
+              symbol === sym
+                ? "border-pool-mint/50 bg-pool-mint/10 text-pool-steel-hi"
+                : "border-pool-hairline text-pool-steel hover:text-pool-steel-hi"
+            }`}
+          >
+            <CoinDot symbol={sym} />
+            {sym}
+          </button>
+        ))}
+      </div>
+
+      {isLoading && !data ? (
+        <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
+          Loading {symbol} blocks…
+        </div>
+      ) : (
+        <CoinBlocksTable
+          blocks={data?.blocks ?? []}
+          symbol={symbol}
+          nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
+          pageSize={10}
+          detailsTo={symbol === "LTC" ? "/ltc" : symbol === "DOGE" ? "/doge" : undefined}
+          emptyLabel={`No ${symbol} blocks recorded yet.`}
+        />
+      )}
+
+      <p className="text-[11px] font-mono text-pool-steel">
+        LTC is the parent chain; DOGE / ISK / TXC / ZCU are merge-mined via auxpow on the
+        same shares. LTC and DOGE also have{" "}
+        <Link to="/ltc" className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint">
+          full coin pages
+        </Link>{" "}
+        with charts and payout history.
+      </p>
+    </div>
   );
 }
 

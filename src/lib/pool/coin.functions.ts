@@ -77,6 +77,24 @@ async function fetchJson<T>(path: string, timeoutMs = 8000): Promise<T> {
 }
 
 /**
+ * Lightweight blocks-only fetch for the homepage chain switcher — skips the
+ * report and price-history work that getCoinPageData does for full coin pages.
+ */
+export const getCoinBlocks = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) => symbolSchema.parse(data))
+  .handler(async ({ data }) => {
+    const limit = data.limit ?? 100;
+    const blocksRes = await fetchJson<{ blocks: PoolBlock[] }>(
+      `/api/v1/blocks?coin=${data.symbol}&limit=${limit}`,
+    ).catch(() => ({ blocks: [] as PoolBlock[] }));
+    return {
+      symbol: data.symbol,
+      blocks: blocksRes.blocks ?? [],
+      fetchedAt: Math.floor(Date.now() / 1000),
+    };
+  });
+
+/**
  * Everything one coin page needs. The report endpoint is newer than the blocks
  * endpoint, so a 404 there degrades to blocks-only rather than failing the page.
  */
