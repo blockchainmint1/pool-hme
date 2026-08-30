@@ -17,30 +17,82 @@ import {
   BookOpen,
   Radio,
 } from "lucide-react";
-import { getPoolSummary, type PoolBlock } from "@/lib/pool/pool.functions";
+import { getPoolSummary } from "@/lib/pool/pool.functions";
+import { getCoinBlocks } from "@/lib/pool/coin.functions";
 import { PoolHashrateChart } from "@/components/pool/PoolHashrateChart";
 import { ResilienceBand } from "@/components/pool/ResilienceBand";
-import { CoinBlocksTable } from "@/components/pool/CoinBlocksTable";
-import { coinPageQuery, type CoinSymbol } from "@/components/pool/CoinPage";
+import { CoinBlocksTable, CoinDot } from "@/components/pool/CoinBlocksTable";
 
-function CoinRecentBlocks({ symbol }: { symbol: CoinSymbol }) {
-  const { data, isLoading } = useQuery(coinPageQuery(symbol));
-  if (isLoading && !data) {
-    return (
-      <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
-        Loading {symbol} blocks…
-      </div>
-    );
-  }
+// ---------------------------------------------------------------------------
+// Recent blocks — one table, per-chain switcher. Each of the five merged-mined
+// chains gets its own ledger view; tabs fetch lazily so the homepage only pays
+// for the chain being viewed.
+// ---------------------------------------------------------------------------
+const CHAIN_TABS = ["TXC", "ISK", "LTC", "DOGE", "ZCU"] as const;
+type ChainTab = (typeof CHAIN_TABS)[number];
+
+const chainBlocksQuery = (symbol: ChainTab) =>
+  queryOptions({
+    queryKey: ["pool", "chain-blocks", symbol],
+    queryFn: () => getCoinBlocks({ data: { symbol, limit: 200 } }),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+function ChainBlocksPanel() {
+  const [symbol, setSymbol] = useState<ChainTab>("TXC");
+  const { data, isLoading } = useQuery(chainBlocksQuery(symbol));
+
   return (
-    <CoinBlocksTable
-      blocks={data?.blocks ?? []}
-      symbol={symbol}
-      nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
-      pageSize={10}
-      detailsTo={symbol === "LTC" ? "/ltc" : "/doge"}
-      emptyLabel={`No ${symbol} blocks recorded yet.`}
-    />
+    <div className="space-y-3">
+      <div
+        role="tablist"
+        aria-label="Chain"
+        className="flex flex-wrap gap-1.5 font-mono"
+      >
+        {CHAIN_TABS.map((sym) => (
+          <button
+            key={sym}
+            type="button"
+            role="tab"
+            aria-selected={symbol === sym}
+            onClick={() => setSymbol(sym)}
+            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px] tracking-widest transition-colors ${
+              symbol === sym
+                ? "border-pool-mint/50 bg-pool-mint/10 text-pool-steel-hi"
+                : "border-pool-hairline text-pool-steel hover:text-pool-steel-hi"
+            }`}
+          >
+            <CoinDot symbol={sym} />
+            {sym}
+          </button>
+        ))}
+      </div>
+
+      {isLoading && !data ? (
+        <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
+          Loading {symbol} blocks…
+        </div>
+      ) : (
+        <CoinBlocksTable
+          blocks={data?.blocks ?? []}
+          symbol={symbol}
+          nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
+          pageSize={10}
+          detailsTo={symbol === "LTC" ? "/ltc" : symbol === "DOGE" ? "/doge" : undefined}
+          emptyLabel={`No ${symbol} blocks recorded yet.`}
+        />
+      )}
+
+      <p className="text-[11px] font-mono text-pool-steel">
+        LTC is the parent chain; DOGE / ISK / TXC / ZCU are merge-mined via auxpow on the
+        same shares. LTC and DOGE also have{" "}
+        <Link to="/ltc" className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint">
+          full coin pages
+        </Link>{" "}
+        with charts and payout history.
+      </p>
+    </div>
   );
 }
 
@@ -127,9 +179,7 @@ function PoolHome() {
           <RailLink href="#graphs"    icon={Activity}      label="Graphs" />
           <RailLink href="#connect"   icon={Radio}         label="Connect" />
           <RailLink href="#workers"   icon={Cpu}           label="Workers" />
-          <RailLink href="#blocks"    icon={Cpu}           label="Found blocks" />
-          <RailLink href="#ltc-blocks" icon={Layers}       label="LTC blocks" />
-          <RailLink href="#doge-blocks" icon={Layers}      label="DOGE blocks" />
+          <RailLink href="#blocks"    icon={Layers}        label="Found blocks" />
           <RailLink href="#payouts"   icon={Wallet}        label="Payouts" />
 
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
@@ -210,27 +260,9 @@ function PoolHome() {
             <SectionHeader
               eyebrow="Found by the pool"
               title="Recent blocks."
-              hint="TXC · ISK · ZCU · newest first"
+              hint="all five chains · newest first"
             />
-            <FoundBlocks />
-          </section>
-
-          <section id="ltc-blocks" className="space-y-3">
-            <SectionHeader
-              eyebrow="Parent chain"
-              title="Recent LTC blocks."
-              hint="10 per page · newest first"
-            />
-            <CoinRecentBlocks symbol="LTC" />
-          </section>
-
-          <section id="doge-blocks" className="space-y-3">
-            <SectionHeader
-              eyebrow="Merge-mined"
-              title="Recent DOGE blocks."
-              hint="10 per page · newest first"
-            />
-            <CoinRecentBlocks symbol="DOGE" />
+            <ChainBlocksPanel />
           </section>
 
 
@@ -820,95 +852,6 @@ function LiveMinersKpi() {
   return <Kpi label="Active miners" value={value} hint={hint} />;
 }
 
-function FoundBlocks() {
-  const { data } = useSuspenseQuery(poolSummaryQuery);
-  // Anchor "age" to data.fetchedAt (already in the SSR payload) so server and
-  // client render identical strings on first paint. A live re-tick happens on
-  // the next Query refetch (30s) — good enough, and no hydration drift.
-  const nowSec = data.fetchedAt;
-  const rows = data.blocks.slice(0, 8);
-
-  return (
-    <div className="pool-kpi-panel rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-widest text-pool-steel font-mono border-b border-pool-hairline">
-              <th className="text-left px-5 py-3 font-normal">Coin</th>
-              <th className="text-left px-3 py-3 font-normal">Height</th>
-              <th className="text-left px-3 py-3 font-normal">Age</th>
-              <th className="text-right px-3 py-3 font-normal">Reward</th>
-              <th className="text-right px-5 py-3 font-normal">Status</th>
-            </tr>
-          </thead>
-          <tbody className="font-mono">
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-5 py-6 text-center text-pool-steel">
-                  Waiting for the next pool-found block…
-                </td>
-              </tr>
-            )}
-            {rows.map((b: PoolBlock) => {
-              // API returns null for amount/confirmations on brand-new blocks
-              // that haven't been credited yet — coerce so .toLocaleString() etc. don't blow up.
-              const confirmations = b.confirmations ?? 0;
-              const amount = b.amount ?? 0;
-              const isPending = b.confirmations == null || b.amount == null;
-              const isImmature = b.category === "immature" || confirmations < 100;
-              const statusColor = isPending
-                ? "text-pool-steel"
-                : isImmature
-                  ? "text-pool-amber"
-                  : "text-pool-mint";
-              const statusLabel = isPending
-                ? "pending"
-                : isImmature
-                  ? `${confirmations} conf`
-                  : b.category === "orphan"
-                    ? "orphan"
-                    : "confirmed";
-              return (
-                <tr
-                  key={`${b.symbol}-${b.height}-${b.blockhash.slice(0, 8)}`}
-                  className="border-b border-pool-hairline last:border-b-0 hover:pool-graphite-2 transition-colors"
-                >
-                  <td className="px-5 py-3">
-                    <span className="inline-flex items-center gap-2">
-                      <CoinBadge symbol={b.symbol} />
-                      <span className="text-pool-steel-hi">{b.symbol}</span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-pool-steel-hi tabular-nums">
-                    {b.height.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-3 text-pool-steel">
-                    {ago(Math.max(0, nowSec - b.time))}
-                  </td>
-                  <td className="px-3 py-3 text-right text-pool-steel-hi tabular-nums">
-                    {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
-                    <span className="text-pool-steel">{b.symbol}</span>
-                  </td>
-                  <td className={`px-5 py-3 text-right tabular-nums ${statusColor}`}>
-                    {statusLabel}
-                  </td>
-                </tr>
-              );
-            })}
-
-          </tbody>
-        </table>
-      </div>
-      <div className="border-t border-pool-hairline px-5 py-3 flex items-center justify-between">
-        <div className="text-[11px] font-mono text-pool-steel">
-          Live from stratum · snapshot age {ago(0)}. LTC / DOGE are
-          merge-mined via auxpow (share credit, not solo-found) and are not listed here.
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Workers table — miner-version breakdown, modeled on pool.txc
 // ---------------------------------------------------------------------------
@@ -969,24 +912,6 @@ function WorkersTable() {
   );
 }
 
-function CoinBadge({ symbol }: { symbol: string }) {
-  const colorMap: Record<string, string> = {
-    TXC:  "bg-pool-amber",
-    LTC:  "bg-pool-steel",
-    DOGE: "bg-pool-amber",
-    ISK:  "bg-pool-mint",
-    ZCU:  "bg-pool-mint",
-  };
-  return (
-    <span
-      className={`inline-flex size-6 rounded-full items-center justify-center text-[10px] font-mono font-semibold text-pool-obsidian ${
-        colorMap[symbol] ?? "bg-pool-steel"
-      }`}
-    >
-      {symbol.slice(0, 1)}
-    </span>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Learn band
