@@ -24,14 +24,14 @@ import { ResilienceBand } from "@/components/pool/ResilienceBand";
 import { CoinBlocksTable, CoinDot } from "@/components/pool/CoinBlocksTable";
 
 // ---------------------------------------------------------------------------
-// Recent blocks — one table, per-chain switcher. Each of the five merged-mined
-// chains gets its own ledger view; tabs fetch lazily so the homepage only pays
-// for the chain being viewed.
+// Recent blocks — one combined table with per-chain visibility toggles. All
+// five ledgers load together and share one stable set of columns; toggles only
+// filter rows, so the table layout never changes between selections.
 // ---------------------------------------------------------------------------
-const CHAIN_TABS = ["TXC", "ISK", "LTC", "DOGE", "ZCU"] as const;
-type ChainTab = (typeof CHAIN_TABS)[number];
+const CHAIN_FILTERS = ["TXC", "ISK", "LTC", "DOGE", "ZCU"] as const;
+type ChainFilter = (typeof CHAIN_FILTERS)[number];
 
-const chainBlocksQuery = (symbol: ChainTab) =>
+const chainBlocksQuery = (symbol: ChainFilter) =>
   queryOptions({
     queryKey: ["pool", "chain-blocks", symbol],
     queryFn: () => getCoinBlocks({ data: { symbol, limit: 200 } }),
@@ -40,57 +40,103 @@ const chainBlocksQuery = (symbol: ChainTab) =>
   });
 
 function ChainBlocksPanel() {
-  const [symbol, setSymbol] = useState<ChainTab>("TXC");
-  const { data, isLoading } = useQuery(chainBlocksQuery(symbol));
+  const [visibleChains, setVisibleChains] = useState<Set<ChainFilter>>(
+    () => new Set(CHAIN_FILTERS),
+  );
+
+  const txcQuery = useQuery(chainBlocksQuery("TXC"));
+  const iskQuery = useQuery(chainBlocksQuery("ISK"));
+  const ltcQuery = useQuery(chainBlocksQuery("LTC"));
+  const dogeQuery = useQuery(chainBlocksQuery("DOGE"));
+  const zcuQuery = useQuery(chainBlocksQuery("ZCU"));
+  const queries = [txcQuery, iskQuery, ltcQuery, dogeQuery, zcuQuery];
+
+  const isInitialLoading = queries.some((query) => query.isLoading && !query.data);
+  const nowSec = Math.max(
+    ...queries.map((query) => query.data?.fetchedAt ?? 0),
+    Math.floor(Date.now() / 1000),
+  );
+  const blocks = queries
+    .flatMap((query) => query.data?.blocks ?? [])
+    .filter((block) => visibleChains.has(block.symbol as ChainFilter))
+    .sort((a, b) => b.time - a.time || b.height - a.height);
+  const visibleKey = CHAIN_FILTERS.filter((symbol) => visibleChains.has(symbol)).join("-") || "none";
+
+  const toggleChain = (symbol: ChainFilter) => {
+    setVisibleChains((current) => {
+      const next = new Set(current);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-3">
-      <div
-        role="tablist"
-        aria-label="Chain"
-        className="flex flex-wrap gap-1.5 font-mono"
-      >
-        {CHAIN_TABS.map((sym) => (
-          <button
-            key={sym}
-            type="button"
-            role="tab"
-            aria-selected={symbol === sym}
-            onClick={() => setSymbol(sym)}
-            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px] tracking-widest transition-colors ${
-              symbol === sym
-                ? "border-pool-mint/50 bg-pool-mint/10 text-pool-steel-hi"
-                : "border-pool-hairline text-pool-steel hover:text-pool-steel-hi"
-            }`}
-          >
-            <CoinDot symbol={sym} />
-            {sym}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1.5 font-mono">
+        <span className="mr-1 text-[10px] uppercase tracking-widest text-pool-steel">
+          Show
+        </span>
+        {CHAIN_FILTERS.map((sym) => {
+          const selected = visibleChains.has(sym);
+          return (
+            <button
+              key={sym}
+              type="button"
+              aria-pressed={selected}
+              title={`${selected ? "Hide" : "Show"} ${sym} blocks`}
+              onClick={() => toggleChain(sym)}
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[11px] tracking-widest transition-all ${
+                selected
+                  ? "border-pool-mint/50 bg-pool-mint/10 text-pool-steel-hi"
+                  : "border-pool-hairline text-pool-steel opacity-55 hover:opacity-100 hover:text-pool-steel-hi"
+              }`}
+            >
+              <CoinDot symbol={sym} />
+              {sym}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setVisibleChains(new Set(CHAIN_FILTERS))}
+          disabled={visibleChains.size === CHAIN_FILTERS.length}
+          className="ml-1 rounded-md border border-pool-hairline px-2.5 py-1.5 text-[10px] uppercase tracking-widest text-pool-steel hover:text-pool-steel-hi disabled:opacity-35 disabled:cursor-not-allowed transition-colors"
+        >
+          All
+        </button>
       </div>
 
-      {isLoading && !data ? (
+      {isInitialLoading ? (
         <div className="pool-kpi-panel rounded-lg p-6 text-sm text-pool-steel font-mono">
-          Loading {symbol} blocks…
+          Loading recent blocks…
         </div>
       ) : (
         <CoinBlocksTable
-          blocks={data?.blocks ?? []}
-          symbol={symbol}
-          nowSec={data?.fetchedAt ?? Math.floor(Date.now() / 1000)}
+          key={visibleKey}
+          blocks={blocks}
+          symbol="selected"
+          nowSec={nowSec}
           pageSize={10}
-          detailsTo={symbol === "LTC" ? "/ltc" : symbol === "DOGE" ? "/doge" : undefined}
-          emptyLabel={`No ${symbol} blocks recorded yet.`}
+          emptyLabel={
+            visibleChains.size === 0
+              ? "All chains are hidden. Toggle a chain back on to see blocks."
+              : "No blocks recorded for the selected chains yet."
+          }
         />
       )}
 
       <p className="text-[11px] font-mono text-pool-steel">
         LTC is the parent chain; DOGE / ISK / TXC / ZCU are merge-mined via auxpow on the
-        same shares. LTC and DOGE also have{" "}
+        same shares.{" "}
         <Link to="/ltc" className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint">
-          full coin pages
+          LTC
         </Link>{" "}
-        with charts and payout history.
+        and{" "}
+        <Link to="/doge" className="text-pool-steel-hi underline decoration-dotted underline-offset-2 hover:text-pool-mint">
+          DOGE
+        </Link>{" "}
+        also have full coin pages with charts and payout history.
       </p>
     </div>
   );
