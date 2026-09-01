@@ -234,7 +234,11 @@ done
 #     geth tip as ground truth and the DB only to judge homepage freshness.
 #   * Observed cadence on 13 Aug 2026 restoration: ~4 blocks / 10 min. Limits
 #     are deliberately loose (WARN 30m, FAIL 60m) to match the 60m deadman.
-ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-gate.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+# v9: v6's real flag is ZCU_DRY_RUN in /etc/zcu-adapter-v6.env. The retired
+# /etc/zcu-gate.env is only a fallback -- reading it first misreported an
+# ARMED v6 as DISARMED.
+ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-adapter-v6.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+[ -z "${ZARMED:-}" ] && ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-gate.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
 if [ "${ZARMED:-1}" != "0" ]; then
   echo "  ZCU  gate is DISARMED (dry_run=${ZARMED:-?}) -- no ZCU blocks expected, cadence not judged"
 else
@@ -395,13 +399,20 @@ LOGS=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null 
 echo "  scanning: $(echo "$LOGS" | tr '\n' ' ')"
 CAND=$(grep -hicE 'block found|found block|submitblock|submitauxblock' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
 CAND=$(echo "${CAND:-0}" | tr -dc '0-9'); CAND=${CAND:-0}
-REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null | grep -icE 'block|submit' || true)
-REJL=$(echo "${REJL:-0}" | head -1 | tr -dc '0-9'); REJL=${REJL:-0}
+# v9: "ZCU aux submit skip duplicate ... reason=accepted" is the v6 adapter
+# declining to re-submit a hash geth ALREADY accepted -- a de-duplicated WIN,
+# not a lost block. Count those separately and keep them out of REJL.
+ZDUP=$(grep -hiE 'ZCU aux submit skip duplicate' $LOGS 2>/dev/null | grep -c 'reason=accepted' || true)
+ZDUP=$(echo "${ZDUP:-0}" | head -1 | tr -dc '0-9'); ZDUP=${ZDUP:-0}
+REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null \
+       | grep -iE 'block|submit' | grep -v 'ZCU aux submit skip duplicate' | wc -l | tr -dc '0-9')
+REJL=${REJL:-0}
 echo "  submit/found lines in the live logs: $CAND    reject-flavoured block lines: $REJL"
+[ "$ZDUP" -gt 0 ] && echo "  ($ZDUP ZCU 'skip duplicate / reason=accepted' line(s) = winners geth already had -- de-duped, not lost)"
 if [ "$REJL" -gt 0 ]; then
   warn "$REJL block-submit rejection line(s) found -- these are blocks we MINED and LOST. Newest 8:"
   grep -hiE 'rejected|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null \
-    | grep -iE 'block|submit' | tail -8 | cut -c1-200 | sed 's/^/       /'
+    | grep -iE 'block|submit' | grep -v 'ZCU aux submit skip duplicate' | tail -8 | cut -c1-200 | sed 's/^/       /'
 else
   ok "no block-submit rejections in the retained logs -- nothing was found and thrown away"
 fi
