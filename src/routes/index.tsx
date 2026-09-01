@@ -231,7 +231,20 @@ function PoolHome() {
           <RailLink href="#learn"     icon={BookOpen}      label="Learn" />
           <RailLink href="#resilience" icon={ShieldCheck}  label="Failover" />
           <Link
-
+            to="/ltc"
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
+          >
+            <Layers className="size-4" />
+            <span>LTC blocks</span>
+          </Link>
+          <Link
+            to="/doge"
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
+          >
+            <Layers className="size-4" />
+            <span>DOGE blocks</span>
+          </Link>
+          <Link
             to="/diagnostics"
             className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-pool-steel hover:text-pool-steel-hi hover:pool-graphite border border-transparent"
           >
