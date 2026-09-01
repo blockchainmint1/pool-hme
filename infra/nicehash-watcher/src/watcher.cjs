@@ -463,6 +463,9 @@ async function main() {
     }
 
     const amount = round8(CFG.orderAmountBtc);
+    // NiceHash rejects STANDARD orders with 2997 MISSING_DISPLAYMARKETFACTOR_DATA
+    // unless marketFactor + displayMarketFactor are echoed from the order book.
+    const obStats = (orderBook && orderBook.stats && orderBook.stats.BTC) || {};
     const body = {
       market: "BTC",
       algorithm: "SCRYPT",
@@ -472,6 +475,8 @@ async function main() {
       limit,
       poolId: pid,
     };
+    if (obStats.marketFactor) body.marketFactor = String(obStats.marketFactor);
+    if (obStats.displayMarketFactor) body.displayMarketFactor = String(obStats.displayMarketFactor);
     log("Creating rental order:", { bid, clearing, top, marketAvailThs: totalAvail, limit, amount, capped, poolId: pid, dryRun: CFG.dryRun });
     if (CFG.dryRun) {
       log("[DRY_RUN] would POST /main/api/v2/hashpower/order", body);
