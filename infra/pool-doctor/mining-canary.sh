@@ -17,6 +17,13 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v10 2026-09-01  DOGE encrypted-wallet false-positive fix:
+#                     * DOGE's payout cycle deliberately unlocks just in time
+#                       and re-locks on EXIT. A LOCKED wallet between cycles is
+#                       therefore the secure expected state, not a payout fault.
+#                     * section 5d now verifies the cycle contains its unlock
+#                       hook, a DOGE-capable passphrase key exists, and recent
+#                       cycle logs contain no unlock/passphrase/send failure.
 #   v9  2026-09-01  False-positive cleanup after the first ARMED v6 run:
 #                     * section 4 ZCU gate flag now reads /etc/zcu-adapter-v6.env
 #                       (v6's real flag). v8 read the retired /etc/zcu-gate.env,
@@ -104,7 +111,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v9"
+CANARY_VERSION="v10"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -642,7 +649,7 @@ SYNC_INS=$(echo "${SYNC_INS:-0}" | tr -dc '0-9'); SYNC_INS=${SYNC_INS:-0}
 echo "       ZCU blocks inserted into yiimp in the last hour: $SYNC_INS"
 
 ##############################################################################
-hr "5d. payouts + wallets (the other way the pool 'works' but earns nothing) [v8]"
+hr "5d. payouts + wallets (the other way the pool 'works' but earns nothing) [v10]"
 ##############################################################################
 # Payouts die for exactly 3 reasons: cadence, wallet lock, loop2 not restarted.
 LOOP2=$(systemctl is-active yiimp-loop2 2>/dev/null || echo n/a)
@@ -665,6 +672,23 @@ for W in litecoin dogecoin; do
   UNTIL=$(echo "$WI" | grep -o '"unlocked_until": *[0-9]*' | grep -o '[0-9]*$')
   printf '       %-9s balance=%-16s' "$W" "${BAL:-?}"
   if [ "${UNL:-0}" -eq 0 ]; then echo "wallet not encrypted"
+  elif [ "${UNTIL:-0}" -eq 0 ] && [ "$W" = dogecoin ]; then
+    echo "LOCKED (expected between payout cycles)"
+    DOGE_CYCLE=/var/web/doge-payout-cycle.sh
+    DOGE_PASS_ENV=/etc/pool-wallets/passphrase.env
+    DOGE_CYCLE_LOG=/var/web/runtime/doge-payout/cycle.log
+    if grep -q 'walletpassphrase' "$DOGE_CYCLE" 2>/dev/null \
+       && grep -qE '^(DOGE_PASSPHRASE|WALLET_PASSPHRASE)=' "$DOGE_PASS_ENV" 2>/dev/null; then
+      RECENT_DOGE_ERRORS=$(tail -n 500 "$DOGE_CYCLE_LOG" 2>/dev/null | grep -ciE 'could not unlock|wrong passphrase|enter the wallet passphrase|sendmany.*fail|payoutSend.*fail' || true)
+      RECENT_DOGE_ERRORS=$(echo "${RECENT_DOGE_ERRORS:-0}" | head -1 | tr -dc '0-9'); RECENT_DOGE_ERRORS=${RECENT_DOGE_ERRORS:-0}
+      if [ "$RECENT_DOGE_ERRORS" -eq 0 ]; then
+        ok "DOGE wallet uses just-in-time unlock + EXIT re-lock; no payout unlock/send failures in recent cycle log"
+      else
+        bad "DOGE payout cycle log has $RECENT_DOGE_ERRORS recent unlock/send failure(s)"
+      fi
+    else
+      bad "DOGE wallet is locked and payout cycle lacks a usable just-in-time unlock hook/passphrase key"
+    fi
   elif [ "${UNTIL:-0}" -eq 0 ]; then echo "LOCKED"; bad "$W wallet is LOCKED -- sendmany will fail, payouts stall"
   else echo "unlocked"; fi
 done
