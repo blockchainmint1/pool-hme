@@ -443,15 +443,39 @@ if [ "$AUXTOT" -eq 0 ]; then
 fi
 ZCU_LIVE=$(tail -n 2000 "$LOG" 2>/dev/null | grep -ic 'Zero Chill\|ZCU' || true)
 ZCU_LIVE=$(echo "${ZCU_LIVE:-0}" | head -1 | tr -dc '0-9'); ZCU_LIVE=${ZCU_LIVE:-0}
-SHADOW=0; REAL=0; GATE=0
-pgrep -f '/opt/zcu-adapter/adapter-capture.py' >/dev/null 2>&1 && SHADOW=1
-pgrep -f '/opt/zcu-adapter/adapter-gate.py' >/dev/null 2>&1 && GATE=1
-pgrep -f '/opt/zcu-adapter/adapter.py' >/dev/null 2>&1 && REAL=1
+SHADOW=0; REAL=0; GATE=0; V6=0; V6MODE=""
+pgrep -f 'adapter-capture.py' >/dev/null 2>&1 && SHADOW=1
+pgrep -f 'adapter-gate.py' >/dev/null 2>&1 && GATE=1
+pgrep -f 'zcu-adapter-v6|adapter-v6.py' >/dev/null 2>&1 && V6=1
+# v8: only treat a bare adapter.py as the 13-Aug crash path when it is NOT v6.
+pgrep -f '/opt/zcu-adapter/adapter\.py' >/dev/null 2>&1 && REAL=1
+[ "$V6" -eq 1 ] && REAL=0
 LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
 
+V6STATE=/var/lib/zcu-adapter-v6/state.json
+if [ "$V6" -eq 1 ]; then
+  DRY=$(grep -o '"dry_run"[: ]*[a-z0-9]*' "$V6STATE" 2>/dev/null | grep -o '[01]\|true\|false' | head -1)
+  case "$DRY" in 0|false) V6MODE=ARMED;; 1|true) V6MODE=SHADOW;; *) V6MODE=UNKNOWN;; esac
+fi
+
 if [ "$REAL" -eq 1 ]; then
-  bad "REAL ZCU adapter (adapter.py) is running -- this is the 13 Aug crash path"
+  bad "legacy ZCU adapter (adapter.py, pre-v6) is running -- this is the 13 Aug crash path"
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
+elif [ "$V6" -eq 1 ]; then
+  ok "ZCU adapter v6 running (mode=$V6MODE) -- O(1) enqueue-or-shed, hard timeouts, self-disarm"
+  for k in forwarded would_forward geth_fail self_disarm shed; do
+    V=$(grep -o "\"$k\"[: ]*[0-9]*" "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1)
+    printf '       %-14s %s\n' "$k" "${V:-n/a}"
+  done
+  GF=$(grep -o '"geth_fail"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); GF=${GF:-0}
+  SD=$(grep -o '"self_disarm"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); SD=${SD:-0}
+  [ "${GF:-0}" -gt 0 ] && warn "geth_fail=$GF -- adapter could not reach geth; check: systemctl status zcu-mainnet-geth"
+  [ "${SD:-0}" -gt 0 ] && bad "adapter SELF-DISARMED ($SD) -- ZCU submits are being dropped; investigate before re-arming"
+  if [ "$ZCU_LIVE" -gt 0 ]; then
+    ok "ZCU is in the aux rotation ($ZCU_LIVE recent lines) -- expected"
+  else
+    warn "adapter is up but no ZCU lines in the log -- stratum has not picked ZCU back up"
+  fi
 elif [ "$GATE" -eq 1 ] || [ "$SHADOW" -eq 1 ]; then
   if [ "$GATE" -eq 1 ]; then
     ok "ZCU adapter on :8749 is the GATE (target-checked, always-ACK) -- only winners reach geth, submitauxblock never returns an error"
@@ -474,18 +498,20 @@ elif [ "$GATE" -eq 1 ] || [ "$SHADOW" -eq 1 ]; then
     CAP=$(grep -c 'CAPTURED' /var/log/zcu-shadow.log 2>/dev/null | tr -dc '0-9'); CAP=${CAP:-0}
     echo "       captured submits so far: $CAP   (VERIFY once >= 3)"
   fi
-  ZERR=$(tail -n 2000 "$LOG" 2>/dev/null | grep -i 'Zero Chill\|ZCU' | grep -ic 'dead lock\|parent work\|auxpow payload' || true)
-  ZERR=$(echo "${ZERR:-0}" | head -1 | tr -dc '0-9'); ZERR=${ZERR:-0}
-  if [ "$ZERR" -gt 0 ]; then
-    bad "ZCU submit/validation errors present ($ZERR) -- STOP the adapter: curl -fsSL https://pool.honest.money/install/zcu-gate.sh | sudo bash -s STOP"
-  else
-    ok "no ZCU submit-rejection or deadlock lines"
-  fi
-
 elif [ "$LISTEN" -eq 1 ]; then
   bad "something is LISTENING on :8749 but it is neither the shadow nor a known adapter -- identify it before doing anything else"
 else
   ok "ZCU fully out of the rotation (nothing on :8749)"
+fi
+
+if [ "$V6" -eq 1 ] || [ "$GATE" -eq 1 ] || [ "$SHADOW" -eq 1 ]; then
+  ZERR=$(tail -n 2000 "$LOG" 2>/dev/null | grep -i 'Zero Chill\|ZCU' | grep -ic 'dead lock\|parent work\|auxpow payload' || true)
+  ZERR=$(echo "${ZERR:-0}" | head -1 | tr -dc '0-9'); ZERR=${ZERR:-0}
+  if [ "$ZERR" -gt 0 ]; then
+    bad "ZCU submit/validation errors present ($ZERR) -- disarm: curl -fsSL https://pool.honest.money/install/zcu-adapter-v6.sh | sudo bash -s SHADOW"
+  else
+    ok "no ZCU submit-rejection or deadlock lines"
+  fi
 fi
 
 ##############################################################################
