@@ -17,6 +17,22 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v9  2026-09-01  False-positive cleanup after the first ARMED v6 run:
+#                     * section 4 ZCU gate flag now reads /etc/zcu-adapter-v6.env
+#                       (v6's real flag). v8 read the retired /etc/zcu-gate.env,
+#                       so an ARMED v6 printed "gate DISARMED, cadence not
+#                       judged" while ZCU was sealing blocks.
+#                     * section 5 v6 mode + counters now come from the same
+#                       sources as the adapter's own STATUS: ZCU_DRY_RUN in
+#                       /etc/zcu-adapter-v6.env and the JSONL capture at
+#                       /var/log/zcu-v6-capture.jsonl (counted by "kind").
+#                       v8 looked for a state.json that v6 never writes, so it
+#                       printed mode=UNKNOWN and every counter as n/a.
+#                     * section 4d: "ZCU aux submit skip duplicate ...
+#                       reason=accepted" lines are the adapter correctly
+#                       de-duplicating a hash geth ALREADY accepted -- wins,
+#                       not losses. They no longer count as "blocks we MINED
+#                       and LOST" and get their own informational line.
 #   v8  2026-09-01  FULL-STACK release. v7 only judged mining; three real
 #                   incidents lived outside it, so the canary now also checks:
 #                     * section 5 rewritten for adapter v6: recognises the v6
@@ -88,7 +104,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v8"
+CANARY_VERSION="v9"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
@@ -218,7 +234,11 @@ done
 #     geth tip as ground truth and the DB only to judge homepage freshness.
 #   * Observed cadence on 13 Aug 2026 restoration: ~4 blocks / 10 min. Limits
 #     are deliberately loose (WARN 30m, FAIL 60m) to match the 60m deadman.
-ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-gate.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+# v9: v6's real flag is ZCU_DRY_RUN in /etc/zcu-adapter-v6.env. The retired
+# /etc/zcu-gate.env is only a fallback -- reading it first misreported an
+# ARMED v6 as DISARMED.
+ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-adapter-v6.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+[ -z "${ZARMED:-}" ] && ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-gate.env 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
 if [ "${ZARMED:-1}" != "0" ]; then
   echo "  ZCU  gate is DISARMED (dry_run=${ZARMED:-?}) -- no ZCU blocks expected, cadence not judged"
 else
@@ -379,13 +399,20 @@ LOGS=$(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null 
 echo "  scanning: $(echo "$LOGS" | tr '\n' ' ')"
 CAND=$(grep -hicE 'block found|found block|submitblock|submitauxblock' $LOGS 2>/dev/null | awk '{t+=$1} END{print t+0}')
 CAND=$(echo "${CAND:-0}" | tr -dc '0-9'); CAND=${CAND:-0}
-REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null | grep -icE 'block|submit' || true)
-REJL=$(echo "${REJL:-0}" | head -1 | tr -dc '0-9'); REJL=${REJL:-0}
+# v9: "ZCU aux submit skip duplicate ... reason=accepted" is the v6 adapter
+# declining to re-submit a hash geth ALREADY accepted -- a de-duplicated WIN,
+# not a lost block. Count those separately and keep them out of REJL.
+ZDUP=$(grep -hiE 'ZCU aux submit skip duplicate' $LOGS 2>/dev/null | grep -c 'reason=accepted' || true)
+ZDUP=$(echo "${ZDUP:-0}" | head -1 | tr -dc '0-9'); ZDUP=${ZDUP:-0}
+REJL=$(grep -hiE 'rejected|rejct|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null \
+       | grep -iE 'block|submit' | grep -v 'ZCU aux submit skip duplicate' | wc -l | tr -dc '0-9')
+REJL=${REJL:-0}
 echo "  submit/found lines in the live logs: $CAND    reject-flavoured block lines: $REJL"
+[ "$ZDUP" -gt 0 ] && echo "  ($ZDUP ZCU 'skip duplicate / reason=accepted' line(s) = winners geth already had -- de-duped, not lost)"
 if [ "$REJL" -gt 0 ]; then
   warn "$REJL block-submit rejection line(s) found -- these are blocks we MINED and LOST. Newest 8:"
   grep -hiE 'rejected|stale block|duplicate|inconclusive|bad-txns|high-hash|prev-blk-not-found' $LOGS 2>/dev/null \
-    | grep -iE 'block|submit' | tail -8 | cut -c1-200 | sed 's/^/       /'
+    | grep -iE 'block|submit' | grep -v 'ZCU aux submit skip duplicate' | tail -8 | cut -c1-200 | sed 's/^/       /'
 else
   ok "no block-submit rejections in the retained logs -- nothing was found and thrown away"
 fi
@@ -470,10 +497,15 @@ pgrep -f '/opt/zcu-adapter/adapter\.py' >/dev/null 2>&1 && REAL=1
 [ "$V6" -eq 1 ] && REAL=0
 LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
 
-V6STATE=/var/lib/zcu-adapter-v6/state.json
+# v9: v6 never writes state.json. Its dry-run flag lives in
+# /etc/zcu-adapter-v6.env (ZCU_DRY_RUN=0/1) and its counters are JSONL events
+# in /var/log/zcu-v6-capture.jsonl, one {"kind": ...} object per line -- the
+# same sources `zcu-adapter-v6.sh STATUS` prints from.
+V6ENV=/etc/zcu-adapter-v6.env
+V6CAP=/var/log/zcu-v6-capture.jsonl
 if [ "$V6" -eq 1 ]; then
-  DRY=$(grep -o '"dry_run"[: ]*[a-z0-9]*' "$V6STATE" 2>/dev/null | grep -o '[01]\|true\|false' | head -1)
-  case "$DRY" in 0|false) V6MODE=ARMED;; 1|true) V6MODE=SHADOW;; *) V6MODE=UNKNOWN;; esac
+  DRY=$(grep -s '^ZCU_DRY_RUN=' "$V6ENV" 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+  case "$DRY" in 0) V6MODE=ARMED;; 1) V6MODE=SHADOW;; *) V6MODE=UNKNOWN;; esac
 fi
 
 if [ "$REAL" -eq 1 ]; then
@@ -481,12 +513,13 @@ if [ "$REAL" -eq 1 ]; then
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
 elif [ "$V6" -eq 1 ]; then
   ok "ZCU adapter v6 running (mode=$V6MODE) -- O(1) enqueue-or-shed, hard timeouts, self-disarm"
-  for k in forwarded would_forward geth_fail self_disarm shed; do
-    V=$(grep -o "\"$k\"[: ]*[0-9]*" "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1)
-    printf '       %-14s %s\n' "$k" "${V:-n/a}"
+  for k in forwarded would_forward geth_fail self_disarm shed queue_dropped; do
+    V=$(grep -c "\"kind\": *\"$k\"" "$V6CAP" 2>/dev/null || true)
+    V=$(echo "${V:-0}" | head -1 | tr -dc '0-9')
+    printf '       %-14s %s\n' "$k" "${V:-0}"
   done
-  GF=$(grep -o '"geth_fail"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); GF=${GF:-0}
-  SD=$(grep -o '"self_disarm"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); SD=${SD:-0}
+  GF=$(grep -c '"kind": *"geth_fail"' "$V6CAP" 2>/dev/null || true); GF=$(echo "${GF:-0}" | head -1 | tr -dc '0-9'); GF=${GF:-0}
+  SD=$(grep -c '"kind": *"self_disarm"' "$V6CAP" 2>/dev/null || true); SD=$(echo "${SD:-0}" | head -1 | tr -dc '0-9'); SD=${SD:-0}
   [ "${GF:-0}" -gt 0 ] && warn "geth_fail=$GF -- adapter could not reach geth; check: systemctl status zcu-mainnet-geth"
   [ "${SD:-0}" -gt 0 ] && bad "adapter SELF-DISARMED ($SD) -- ZCU submits are being dropped; investigate before re-arming"
   if [ "$ZCU_LIVE" -gt 0 ]; then
