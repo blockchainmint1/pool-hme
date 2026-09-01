@@ -17,6 +17,11 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v11 2026-09-01  ZCU cadence source fix:
+#                     * mining cadence now comes from geth's latest block time,
+#                       not the delayed yiimp DB bridge.
+#                     * the same line reports DB age/lag separately, so a healthy
+#                       chain can no longer be called "dry" during backfill.
 #   v10 2026-09-01  DOGE encrypted-wallet false-positive fix:
 #                     * DOGE's payout cycle deliberately unlocks just in time
 #                       and re-locks on EXIT. A LOCKED wallet between cycles is
@@ -249,11 +254,22 @@ ZARMED=$(grep -s '^ZCU_DRY_RUN=' /etc/zcu-adapter-v6.env 2>/dev/null | cut -d= -
 if [ "${ZARMED:-1}" != "0" ]; then
   echo "  ZCU  gate is DISARMED (dry_run=${ZARMED:-?}) -- no ZCU blocks expected, cadence not judged"
 else
-  ZAGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
-             FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'")
-  case "$ZAGO" in ''|*[!0-9]*) ZAGO=9999 ;; esac
+  ZDBAGO=$(MY "SELECT FLOOR((UNIX_TIMESTAMP()-MAX(b.time))/60)
+               FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'")
+  case "$ZDBAGO" in ''|*[!0-9]*) ZDBAGO=9999 ;; esac
+  ZAUTH=()
+  [ -f /etc/zcu-adapter-v6.env ] && . /etc/zcu-adapter-v6.env 2>/dev/null || true
+  [ -n "${GETH_USER:-}" ] && ZAUTH=(-u "$GETH_USER:${GETH_PASS:-}")
+  ZLATEST=$(curl -s --max-time 5 "${ZAUTH[@]}" -X POST -H 'content-type: application/json' \
+    --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["latest",false]}' \
+    http://127.0.0.1:8747 2>/dev/null | grep -o '"timestamp":"0x[0-9a-fA-F]*"' | head -1 | cut -d'"' -f4)
+  if [ -n "${ZLATEST:-}" ]; then
+    ZAGO=$(( ($(date -u +%s) - ZLATEST) / 60 ))
+  else
+    ZAGO=9999
+  fi
   ZACC=$(grep -c 'ZCU BLOCK ACCEPTED' /var/log/zcu-gate.log 2>/dev/null | tr -dc '0-9'); ZACC=${ZACC:-0}
-  if   [ "$ZAGO" -le 30 ]; then ok "ZCU found a block ${ZAGO}m ago (gate ARMED, accepted-total=$ZACC)"
+  if   [ "$ZAGO" -le 30 ]; then ok "ZCU chain advanced ${ZAGO}m ago (gate ARMED, yiimp DB newest=${ZDBAGO}m, accepted-total=$ZACC)"
   elif [ "$ZAGO" -le 60 ]; then warn "ZCU dry for ${ZAGO}m with the gate ARMED -- check forwards: grep -i 'WINNER\|REJECTED' /var/log/zcu-gate.log | tail -20"
   else
     if [ "$ZACC" -gt 0 ]; then

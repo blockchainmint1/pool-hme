@@ -110,7 +110,6 @@ done
 echo "  flat then jump = batching (expected). Flat then flat = sync is stuck."
 
 echo
-echo "echo
 # ---------------------------------------------------------------- 6. worker behavior / restart proof
 echo "===== 6. is each run restarting or capped?"
 echo "  service invocation id : $(systemctl show $SYNC_UNIT -p InvocationID --value 2>/dev/null)"
@@ -145,4 +144,4 @@ if [ -n "${TIP:-}" ] && [ -n "${DBH:-}" ] && [ "$DBH" -lt "$TIP" ]; then
   echo "           if DB height resets or repeats, its cursor/start-height logic is defective."
 fi
 
-echo "zcu-sync-lag $VER done.""
+echo "zcu-sync-lag $VER done."
