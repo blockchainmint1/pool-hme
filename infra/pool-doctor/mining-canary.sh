@@ -497,10 +497,15 @@ pgrep -f '/opt/zcu-adapter/adapter\.py' >/dev/null 2>&1 && REAL=1
 [ "$V6" -eq 1 ] && REAL=0
 LISTEN=0; ss -ltn 2>/dev/null | grep -q ':8749' && LISTEN=1
 
-V6STATE=/var/lib/zcu-adapter-v6/state.json
+# v9: v6 never writes state.json. Its dry-run flag lives in
+# /etc/zcu-adapter-v6.env (ZCU_DRY_RUN=0/1) and its counters are JSONL events
+# in /var/log/zcu-v6-capture.jsonl, one {"kind": ...} object per line -- the
+# same sources `zcu-adapter-v6.sh STATUS` prints from.
+V6ENV=/etc/zcu-adapter-v6.env
+V6CAP=/var/log/zcu-v6-capture.jsonl
 if [ "$V6" -eq 1 ]; then
-  DRY=$(grep -o '"dry_run"[: ]*[a-z0-9]*' "$V6STATE" 2>/dev/null | grep -o '[01]\|true\|false' | head -1)
-  case "$DRY" in 0|false) V6MODE=ARMED;; 1|true) V6MODE=SHADOW;; *) V6MODE=UNKNOWN;; esac
+  DRY=$(grep -s '^ZCU_DRY_RUN=' "$V6ENV" 2>/dev/null | cut -d= -f2 | tr -dc '0-9')
+  case "$DRY" in 0) V6MODE=ARMED;; 1) V6MODE=SHADOW;; *) V6MODE=UNKNOWN;; esac
 fi
 
 if [ "$REAL" -eq 1 ]; then
@@ -508,12 +513,13 @@ if [ "$REAL" -eq 1 ]; then
   echo "       disarm:  sudo pkill -f '/opt/zcu-adapter/adapter.py'"
 elif [ "$V6" -eq 1 ]; then
   ok "ZCU adapter v6 running (mode=$V6MODE) -- O(1) enqueue-or-shed, hard timeouts, self-disarm"
-  for k in forwarded would_forward geth_fail self_disarm shed; do
-    V=$(grep -o "\"$k\"[: ]*[0-9]*" "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1)
-    printf '       %-14s %s\n' "$k" "${V:-n/a}"
+  for k in forwarded would_forward geth_fail self_disarm shed queue_dropped; do
+    V=$(grep -c "\"kind\": *\"$k\"" "$V6CAP" 2>/dev/null || true)
+    V=$(echo "${V:-0}" | head -1 | tr -dc '0-9')
+    printf '       %-14s %s\n' "$k" "${V:-0}"
   done
-  GF=$(grep -o '"geth_fail"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); GF=${GF:-0}
-  SD=$(grep -o '"self_disarm"[: ]*[0-9]*' "$V6STATE" 2>/dev/null | grep -o '[0-9]*$' | head -1); SD=${SD:-0}
+  GF=$(grep -c '"kind": *"geth_fail"' "$V6CAP" 2>/dev/null || true); GF=$(echo "${GF:-0}" | head -1 | tr -dc '0-9'); GF=${GF:-0}
+  SD=$(grep -c '"kind": *"self_disarm"' "$V6CAP" 2>/dev/null || true); SD=$(echo "${SD:-0}" | head -1 | tr -dc '0-9'); SD=${SD:-0}
   [ "${GF:-0}" -gt 0 ] && warn "geth_fail=$GF -- adapter could not reach geth; check: systemctl status zcu-mainnet-geth"
   [ "${SD:-0}" -gt 0 ] && bad "adapter SELF-DISARMED ($SD) -- ZCU submits are being dropped; investigate before re-arming"
   if [ "$ZCU_LIVE" -gt 0 ]; then
