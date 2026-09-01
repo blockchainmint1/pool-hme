@@ -50,6 +50,23 @@ class PoolAPI {
     const sum = pts.reduce((acc, p) => acc + Number(p.hashrate || 0), 0);
     return sum / pts.length / 1e12;
   }
+
+  /**
+   * Seconds since the last block found for a coin symbol (TXC, ISK, ...).
+   * Returns null if the call fails or no block is found.
+   * Uses the yiimp-api /api/v1/coins/:symbol/blocks endpoint, which returns
+   * blocks newest-first with a unix-epoch `time` column.
+   */
+  async lastBlockAgeSec(symbol = "TXC") {
+    const data = await this._get(
+      `/api/v1/coins/${encodeURIComponent(symbol)}/blocks?limit=1`,
+    );
+    const block = (data.blocks || [])[0];
+    if (!block || block.time == null) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const age = now - Number(block.time);
+    return Number.isFinite(age) && age >= 0 ? age : null;
+  }
 }
 
 module.exports = { PoolAPI };

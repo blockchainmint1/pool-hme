@@ -84,7 +84,13 @@ BID_FILL_FRACTION=0.85
 # Cadence
 POLL_INTERVAL_SEC=30
 RECOVER_CONFIRMATIONS=3
-LOW_CONFIRMATIONS=3
+# How many consecutive low-hashrate cycles before renting (each cycle =
+# POLL_INTERVAL_SEC). 5 × 30s = ~2.5 min of sustained low readings.
+LOW_CONFIRMATIONS=5
+# Don't rent if TXC is still finding blocks — a recent TXC block means the
+# fleet is healthy and the low hashrate reading is a stats artifact. Set 0
+# to disable this guard.
+TXC_STALL_MIN=15
 
 # Telegram alerts — fires when hashrate drops below TRIGGER_FRACTION of target,
 # on recovery, and on order placed/cancelled/failed. Leave blank to disable.
