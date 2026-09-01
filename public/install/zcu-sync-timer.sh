@@ -41,6 +41,7 @@ if [ "$MODE" = "STATUS" ]; then
   TIP=$(curl -s --max-time 5 "${GAUTH[@]}" -X POST -H 'content-type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
     http://127.0.0.1:8747 2>/dev/null | grep -o '0x[0-9a-fA-F]*')
+  [ -n "${TIP:-}" ] && echo "  geth tip  : $((TIP))" || echo "  geth tip  : unreachable"
   DBH=$(timeout 8 mysql yiimpfrontend -N -B -e \
     "SELECT COALESCE(MAX(b.height),0) FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'" 2>/dev/null)
   echo "  yiimp DB  : ${DBH:-?}"
