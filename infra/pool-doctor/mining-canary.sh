@@ -563,6 +563,84 @@ else
   [ "$AMB" -gt 0 ] && warn "$AMB winner(s) rejected as 'ambiguous auxpow payload' -- geth saw 2 candidate blobs and refused to guess; harmless unless the count grows faster than accepted blocks"
 fi
 
+##############################################################################
+hr "5c. ZCU -> yiimp block-sync bridge (what the homepage reads) [v8]"
+##############################################################################
+# 1 Sep 2026: geth was sealing, the adapter was armed, and the homepage was
+# still frozen -- because the sync unit was disabled during the Aug 30 removal
+# and 'reset-failed' errored with "Unit not loaded". Discover the real unit
+# name instead of assuming one.
+SYNC_UNITS=$(systemctl list-unit-files --all 2>/dev/null | awk '/zcu/ && /(sync|block)/ {print $1" "$2}')
+if [ -z "$SYNC_UNITS" ]; then
+  warn "no ZCU sync unit found by name -- check: ls /etc/systemd/system | grep -i zcu"
+else
+  echo "$SYNC_UNITS" | while read -r U S; do
+    A=$(systemctl is-active "$U" 2>/dev/null)
+    printf '       %-46s state=%-9s active=%s\n' "$U" "$S" "$A"
+  done
+  DIS=$(echo "$SYNC_UNITS" | awk '$2=="disabled"{print $1}' | tr '\n' ' ')
+  [ -n "$DIS" ] && warn "disabled sync unit(s): $DIS -- enable with: sudo systemctl enable --now $DIS"
+fi
+SYNC_LAST=$(journalctl -u 'zcu*sync*' -n 1 --no-pager -o short-iso 2>/dev/null | tail -1)
+[ -n "$SYNC_LAST" ] && echo "       last sync log line: $SYNC_LAST"
+SYNC_ERR=$(journalctl -u 'zcu*sync*' --since '-60 min' --no-pager 2>/dev/null | grep -ciE 'traceback|error|ZCU_ROW_NOT_EXACTLY_ONE' | head -1)
+SYNC_ERR=$(echo "${SYNC_ERR:-0}" | tr -dc '0-9'); SYNC_ERR=${SYNC_ERR:-0}
+[ "$SYNC_ERR" -gt 0 ] && warn "$SYNC_ERR error lines from the sync job in the last hour"
+SYNC_INS=$(journalctl -u 'zcu*sync*' --since '-60 min' --no-pager 2>/dev/null | grep -c 'INSERTED_ZCU_BLOCK' | head -1)
+SYNC_INS=$(echo "${SYNC_INS:-0}" | tr -dc '0-9'); SYNC_INS=${SYNC_INS:-0}
+echo "       ZCU blocks inserted into yiimp in the last hour: $SYNC_INS"
+
+##############################################################################
+hr "5d. payouts + wallets (the other way the pool 'works' but earns nothing) [v8]"
+##############################################################################
+# Payouts die for exactly 3 reasons: cadence, wallet lock, loop2 not restarted.
+LOOP2=$(systemctl is-active yiimp-loop2 2>/dev/null || echo n/a)
+[ "$LOOP2" = "active" ] && ok "yiimp-loop2 active (payout engine running)" || bad "yiimp-loop2 is $LOOP2 -- no payouts will be sent"
+DOGECRON=$(crontab -l 2>/dev/null | grep -i 'doge-payout-cycle' | head -2; cat /etc/cron.d/* 2>/dev/null | grep -i 'doge-payout-cycle' | head -2)
+if echo "$DOGECRON" | grep -q '\*/10'; then
+  ok "DOGE payout cycle is on the required */10 cadence"
+elif [ -n "$DOGECRON" ]; then
+  bad "DOGE payout cycle cadence is WRONG (daily/hourly credits nobody -- shares are deleted at round close):"; echo "$DOGECRON" | sed 's/^/         /'
+else
+  warn "no doge-payout-cycle cron found -- verify: crontab -l | grep doge"
+fi
+for W in litecoin dogecoin; do
+  CLI=$(ls /home/ubuntu/${W}-*/bin/${W%coin}coin-cli 2>/dev/null | head -1)
+  [ -z "$CLI" ] && CLI=$(command -v ${W}-cli 2>/dev/null)
+  [ -z "$CLI" ] && { echo "       $W: cli not found (skipped)"; continue; }
+  WI=$(sudo -u ubuntu "$CLI" getwalletinfo 2>/dev/null)
+  BAL=$(echo "$WI" | grep -o '"balance": *[0-9.]*' | grep -o '[0-9.]*$')
+  UNL=$(echo "$WI" | grep -c 'unlocked_until')
+  UNTIL=$(echo "$WI" | grep -o '"unlocked_until": *[0-9]*' | grep -o '[0-9]*$')
+  printf '       %-9s balance=%-16s' "$W" "${BAL:-?}"
+  if [ "${UNL:-0}" -eq 0 ]; then echo "wallet not encrypted"
+  elif [ "${UNTIL:-0}" -eq 0 ]; then echo "LOCKED"; bad "$W wallet is LOCKED -- sendmany will fail, payouts stall"
+  else echo "unlocked"; fi
+done
+PENDING=$(MY "SELECT CONCAT(COUNT(*),' rows / ',IFNULL(ROUND(SUM(amount),4),0)) FROM payouts WHERE tx IS NULL OR tx=''")
+echo "       payouts with no txid: ${PENDING:-n/a}"
+LASTPAY=$(MY "SELECT CONCAT(c.symbol,' ',FROM_UNIXTIME(MAX(p.time))) FROM payouts p JOIN coins c ON c.id=p.coin_id GROUP BY c.symbol ORDER BY c.symbol")
+[ -n "$LASTPAY" ] && echo "$LASTPAY" | sed 's/^/       last payout: /'
+
+##############################################################################
+hr "5e. host + public surface [v8]"
+##############################################################################
+df -h / /var 2>/dev/null | tail -n +2 | awk '{printf "       disk %-10s %s used of %s (%s)\n",$6,$3,$2,$5}'
+DFP=$(df -P / | awk 'NR==2{gsub("%","",$5); print $5}')
+[ "${DFP:-0}" -ge 90 ] && bad "root filesystem ${DFP}% full" || ok "disk headroom OK (${DFP}% used on /)"
+read -r L1 _ < /proc/loadavg; echo "       load1=$L1  mem: $(free -m | awk '/Mem:/{print $3"M/"$2"M used"}')"
+OOM=$(journalctl -k --since '-24 hours' --no-pager 2>/dev/null | grep -ci 'out of memory\|oom-kill' | head -1)
+OOM=$(echo "${OOM:-0}" | tr -dc '0-9'); [ "${OOM:-0}" -gt 0 ] && bad "$OOM OOM-kill events in the last 24h" || ok "no OOM kills in 24h"
+for U in api.stratum.pool.honest.money/api/v1/pool/summary pool.honest.money/api/status; do
+  C=$(curl -s -o /dev/null -w '%{http_code} %{time_total}s' --max-time 8 "https://$U" 2>/dev/null)
+  printf '       %-50s %s\n' "$U" "${C:-no answer}"
+  echo "$C" | grep -q '^200' || warn "$U did not return 200"
+done
+NHW=$(systemctl is-active nicehash-watcher 2>/dev/null || echo n/a)
+echo "       nicehash-watcher: $NHW"
+
+
+
 
 ##############################################################################
 hr "6. baseline compare"
