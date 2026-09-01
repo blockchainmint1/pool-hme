@@ -22,6 +22,7 @@
  *   BID_MARGIN=0 BID_TICK=0.0001 BID_FLOOR_PRICE=0 BID_MAX_PRICE=0.05
  *   BID_BUMP_EVERY_MIN=10  BID_FILL_FRACTION=0.85
  *   POLL_INTERVAL_SEC=30  RECOVER_CONFIRMATIONS=3
+ *   LOW_CONFIRMATIONS=5  TXC_STALL_MIN=15
  *   STATE_FILE=/var/lib/nicehash-watcher/state.json
  *   DRY_RUN=false
  *
@@ -69,7 +70,8 @@ const CFG = {
 
   pollIntervalSec: num("POLL_INTERVAL_SEC", 30),
   recoverConfirmations: num("RECOVER_CONFIRMATIONS", 3),
-  lowConfirmations: num("LOW_CONFIRMATIONS", 3),
+  lowConfirmations: num("LOW_CONFIRMATIONS", 5),
+  txcStallMin: num("TXC_STALL_MIN", 15),
   alertCooldownMin: num("ALERT_COOLDOWN_MIN", 30),
   monitorUrl: process.env.MONITOR_URL || "https://pool.honest.money/api/public/monitor",
   monitorToken: env("MONITOR_TOKEN"),
@@ -421,7 +423,34 @@ async function main() {
         actual_ths: round8(actual),
       });
     }
-    const needRent = deficit > 0.1 && lowConfirmed;
+
+    // 5b. TXC-block-stall guard.
+    // TXC finds a block ~every 3 min when the fleet is healthy. If TXC still
+    // found a block within TXC_STALL_MIN minutes, the low hashrate reading is
+    // almost certainly a stats artifact (stalled hashstats cron / estimator
+    // variance), not a real fleet loss — so suppress the rental and trust the
+    // ground truth of block production. Only rent when TXC itself has gone dry.
+    let txcStalled = true; // fail open: rent if we can't read TXC blocks
+    if (lowConfirmed && CFG.txcStallMin > 0) {
+      try {
+        const age = await pool.lastBlockAgeSec("TXC");
+        if (age != null) {
+          txcStalled = age >= CFG.txcStallMin * 60;
+          if (!txcStalled) {
+            log("TXC still finding blocks — suppressing rental as false reading:", {
+              last_txc_block_age_sec: age,
+              stall_threshold_sec: CFG.txcStallMin * 60,
+              actual_ths: round8(actual),
+            });
+          }
+        } else {
+          log("WARN: could not determine TXC last-block age — guard skipped (fail open)");
+        }
+      } catch (e) {
+        log("WARN: TXC block-age check failed — guard skipped (fail open):", { error: String(e.message) });
+      }
+    }
+    const needRent = deficit > 0.1 && lowConfirmed && txcStalled;
 
 
     if (needRent) {
