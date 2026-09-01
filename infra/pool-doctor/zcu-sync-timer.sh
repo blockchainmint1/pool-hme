@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # zcu-sync-timer.sh -- keep the homepage/API in step with the ZCU chain.
 #
-#   install:  curl -fsSL https://pool.honest.money/install/zcu-sync-timer.sh | sudo bash -s INSTALL
+#   install:  curl -fsSL https://pool.honest.money/install/zcu-sync-timer.sh | sudo bash -s INSTALL 30
+#             (second arg = seconds between syncs, default 120, minimum 15)
 #   status:   ... | sudo bash -s STATUS
 #   remove:   ... | sudo bash -s UNINSTALL
 #
@@ -16,7 +17,10 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
 MODE="$(printf '%s' "${1:-INSTALL}" | tr '[:lower:]' '[:upper:]')"
-VER="v2"
+VER="v3"
+INTERVAL="$(printf '%s' "${2:-120}" | tr -cd '0-9')"
+[ -n "$INTERVAL" ] || INTERVAL=120
+[ "$INTERVAL" -ge 15 ] 2>/dev/null || INTERVAL=15
 SYNC_UNIT=zcu-mainnet-yiimp-block-sync
 echo "zcu-sync-timer $VER  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MODE"
 
@@ -34,10 +38,14 @@ fi
 if [ "$MODE" = "STATUS" ]; then
   echo "  timer     : $(systemctl is-enabled zcu-sync.timer 2>/dev/null) / $(systemctl is-active zcu-sync.timer 2>/dev/null)"
   echo "  sync unit : $(systemctl is-active $SYNC_UNIT 2>/dev/null)  last: $(systemctl show $SYNC_UNIT -p ExecMainExitTimestamp --value 2>/dev/null)"
-  TIP=$(curl -s --max-time 5 -X POST -H 'content-type: application/json' \
+  GAUTH=()
+  # shellcheck disable=SC1091
+  [ -f /etc/zcu-adapter-v6.env ] && . /etc/zcu-adapter-v6.env 2>/dev/null || true
+  [ -n "${GETH_USER:-}" ] && GAUTH=(-u "$GETH_USER:${GETH_PASS:-}")
+  TIP=$(curl -s --max-time 5 "${GAUTH[@]}" -X POST -H 'content-type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
     http://127.0.0.1:8747 2>/dev/null | grep -o '0x[0-9a-fA-F]*')
-  [ -n "${TIP:-}" ] && echo "  geth tip  : $((TIP))"
+  [ -n "${TIP:-}" ] && echo "  geth tip  : $((TIP))" || echo "  geth tip  : unreachable"
   DBH=$(timeout 8 mysql yiimpfrontend -N -B -e \
     "SELECT COALESCE(MAX(b.height),0) FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE c.symbol='ZCU'" 2>/dev/null)
   echo "  yiimp DB  : ${DBH:-?}"
@@ -55,11 +63,11 @@ systemctl reset-failed "$SYNC_UNIT" >/dev/null 2>&1 || true
 
 cat > /etc/systemd/system/zcu-sync.timer <<EOF
 [Unit]
-Description=Run the ZCU -> yiimp block DB sync every 2 minutes
+Description=Run the ZCU -> yiimp block DB sync every ${INTERVAL}s
 [Timer]
 Unit=$SYNC_UNIT.service
-OnBootSec=120
-OnUnitActiveSec=120
+OnBootSec=$INTERVAL
+OnUnitActiveSec=$INTERVAL
 AccuracySec=10s
 Persistent=true
 [Install]
@@ -71,7 +79,7 @@ systemctl start --no-block zcu-sync.timer >/dev/null 2>&1
 # --no-block: the oneshot can take many minutes on a big backfill; never hold the installer
 systemctl start --no-block "$SYNC_UNIT" >/dev/null 2>&1 || true
 
-echo "  installed: $SYNC_UNIT now runs every 120s"
+echo "  installed: $SYNC_UNIT now runs every ${INTERVAL}s"
 echo "  timer   : $(systemctl is-active zcu-sync.timer)"
 echo "  check   : curl -fsSL https://pool.honest.money/install/zcu-sync-timer.sh | sudo bash -s STATUS"
 echo "zcu-sync-timer $VER done."
