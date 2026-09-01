@@ -783,6 +783,16 @@ so the yiimp DB only advanced when someone ran it by hand — that is why the si
 a 13 July height while the chain was at 19390. This installs `zcu-sync.timer` which runs
 the existing sync unit every 120s. It touches nothing else.
 
+**1 Sep 2026 live behavior:** the timer firing does not mean the homepage is current.
+The sync worker was observed inserting small sequential batches (for example heights
+27097–27100 followed by 27093–27096) while newer geth blocks remained queued. Its
+durable cursor is the highest ZCU height already in the yiimp `blocks` table; it does
+not normally restart at genesis. A long-running oneshot also causes timer ticks to be
+skipped, and both `zcu-mainnet-yiimp-block-sync.timer` and `zcu-sync.timer` may exist.
+Use `zcu-sync-lag.sh` v2 to expose run boundaries, insertion counts, the live worker's
+batch/cursor source lines, and whether the DB height advances or repeats. Canary v11
+judges ZCU mining cadence from geth and reports yiimp DB age separately.
+
 ```bash
 curl -fsSL "https://pool.honest.money/install/zcu-sync-timer.sh?v=$(date +%s)" | sudo bash -s INSTALL
 curl -fsSL "https://pool.honest.money/install/zcu-deadman.sh?v=$(date +%s)"    | sudo bash -s INSTALL

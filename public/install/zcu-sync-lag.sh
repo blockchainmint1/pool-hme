@@ -13,7 +13,7 @@
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
-VER="v1"
+VER="v2"
 SYNC_UNIT=zcu-mainnet-yiimp-block-sync
 echo "zcu-sync-lag $VER  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  READ-ONLY"
 
@@ -110,4 +110,38 @@ done
 echo "  flat then jump = batching (expected). Flat then flat = sync is stuck."
 
 echo
+# ---------------------------------------------------------------- 6. worker behavior / restart proof
+echo "===== 6. is each run restarting or capped?"
+echo "  service invocation id : $(systemctl show $SYNC_UNIT -p InvocationID --value 2>/dev/null)"
+echo "  active since          : $(systemctl show $SYNC_UNIT -p ActiveEnterTimestamp --value 2>/dev/null)"
+echo "  main pid              : $(systemctl show $SYNC_UNIT -p MainPID --value 2>/dev/null)"
+echo "  executions (last 2h)  : $(journalctl -u $SYNC_UNIT --since '-2 hours' --no-pager 2>/dev/null | grep -c 'Starting\|Started')"
+echo "  inserts (last 2h)     : $(journalctl -u $SYNC_UNIT --since '-2 hours' --no-pager 2>/dev/null | grep -c 'INSERTED_ZCU_BLOCK')"
+echo "  recent run boundaries + inserts:"
+journalctl -u "$SYNC_UNIT" --since '-30 min' --no-pager -o short-iso 2>/dev/null \
+  | grep -E 'Starting|Started|Finished|Deactivated|INSERTED_ZCU_BLOCK|Traceback|error' \
+  | tail -80 | sed 's/^/    /'
+
+SYNC_SCRIPT=$(systemctl show "$SYNC_UNIT" -p ExecStart --value 2>/dev/null | grep -oE '/[^ ;]+\.(py|sh)' | head -1)
+echo "  worker script         : ${SYNC_SCRIPT:-not discovered}"
+if [ -n "${SYNC_SCRIPT:-}" ] && [ -r "$SYNC_SCRIPT" ]; then
+  echo "  cursor/batch clues (read-only source inspection):"
+  grep -nEi 'limit|range\(|max\(|height|cursor|batch|sleep|return|break|sys\.exit' "$SYNC_SCRIPT" 2>/dev/null \
+    | head -80 | sed 's/^/    /'
+fi
+
+echo
+echo "  DB insertion groups by auto-increment id (newest 40 ZCU rows):"
+q "SELECT MIN(id),MAX(id),COUNT(*),MIN(height),MAX(height),FROM_UNIXTIME(MIN(time)),FROM_UNIXTIME(MAX(time))
+     FROM (SELECT b.id,b.height,b.time FROM blocks b JOIN coins c ON c.id=b.coin_id
+           WHERE c.symbol='ZCU' ORDER BY b.id DESC LIMIT 40) x
+    GROUP BY FLOOR(id/1000) ORDER BY MAX(id) DESC" 2>/dev/null | sed 's/^/    /'
+
+echo
+if [ -n "${TIP:-}" ] && [ -n "${DBH:-}" ] && [ "$DBH" -lt "$TIP" ]; then
+  echo "  VERDICT: timer activity does not equal freshness. DB is $((TIP-DBH)) blocks behind."
+  echo "           If each invocation inserts the same small count, the worker is batch-capped;"
+  echo "           if DB height resets or repeats, its cursor/start-height logic is defective."
+fi
+
 echo "zcu-sync-lag $VER done."
