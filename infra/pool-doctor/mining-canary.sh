@@ -17,6 +17,22 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v9  2026-09-01  False-positive cleanup after the first ARMED v6 run:
+#                     * section 4 ZCU gate flag now reads /etc/zcu-adapter-v6.env
+#                       (v6's real flag). v8 read the retired /etc/zcu-gate.env,
+#                       so an ARMED v6 printed "gate DISARMED, cadence not
+#                       judged" while ZCU was sealing blocks.
+#                     * section 5 v6 mode + counters now come from the same
+#                       sources as the adapter's own STATUS: ZCU_DRY_RUN in
+#                       /etc/zcu-adapter-v6.env and the JSONL capture at
+#                       /var/log/zcu-v6-capture.jsonl (counted by "kind").
+#                       v8 looked for a state.json that v6 never writes, so it
+#                       printed mode=UNKNOWN and every counter as n/a.
+#                     * section 4d: "ZCU aux submit skip duplicate ...
+#                       reason=accepted" lines are the adapter correctly
+#                       de-duplicating a hash geth ALREADY accepted -- wins,
+#                       not losses. They no longer count as "blocks we MINED
+#                       and LOST" and get their own informational line.
 #   v8  2026-09-01  FULL-STACK release. v7 only judged mining; three real
 #                   incidents lived outside it, so the canary now also checks:
 #                     * section 5 rewritten for adapter v6: recognises the v6
@@ -88,7 +104,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v8"
+CANARY_VERSION="v9"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
