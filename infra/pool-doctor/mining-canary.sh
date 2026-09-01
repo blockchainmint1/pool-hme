@@ -17,6 +17,24 @@
 # If the banner does not show the version you expect, the site has not been
 # republished yet (public/install/ is served from the published build).
 #
+#   v8  2026-09-01  FULL-STACK release. v7 only judged mining; three real
+#                   incidents lived outside it, so the canary now also checks:
+#                     * section 5 rewritten for adapter v6: recognises the v6
+#                       process + its state counters (forwarded / would_forward
+#                       / geth_fail / self_disarm / shed) and reports ARMED vs
+#                       SHADOW. v7 mis-flagged v6 as the legacy crash path.
+#                     * new 5c: the ZCU -> yiimp block-sync bridge. Discovers
+#                       the REAL unit name (1 Sep: reset-failed said "Unit not
+#                       loaded" while the job existed under another name),
+#                       flags disabled units, and counts INSERTED_ZCU_BLOCK in
+#                       the last hour. A frozen homepage with a healthy chain
+#                       is a sync-bridge fault, never a mining fault.
+#                     * new 5d: payouts + wallets -- loop2 alive, DOGE cycle on
+#                       the mandatory */10 cadence, LTC/DOGE wallet lock state
+#                       and balances, payouts with no txid, last payout per coin.
+#                     * new 5e: host + public surface -- disk, load, memory,
+#                       OOM kills in 24h, pool API + site status HTTP codes,
+#                       nicehash-watcher state.
 #   v7  2026-08-30  DEEP DIVE release. "One DOGE block in 24h" needed evidence,
 #                   not vibes, so the canary now measures LUCK instead of just
 #                   liveness:
@@ -70,7 +88,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v7"
+CANARY_VERSION="v8"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
