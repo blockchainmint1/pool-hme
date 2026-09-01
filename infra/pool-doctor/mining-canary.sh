@@ -116,7 +116,7 @@
 #   v1  2026-08-13  Initial: service restarts/SEGV/deadlock, socket count,
 #                   share flow, block cadence, aux-list sanity, baseline diff.
 # ---------------------------------------------------------------------------
-CANARY_VERSION="v10"
+CANARY_VERSION="v11"
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 
