@@ -422,7 +422,34 @@ async function main() {
         actual_ths: round8(actual),
       });
     }
-    const needRent = deficit > 0.1 && lowConfirmed;
+
+    // 5b. TXC-block-stall guard.
+    // TXC finds a block ~every 3 min when the fleet is healthy. If TXC still
+    // found a block within TXC_STALL_MIN minutes, the low hashrate reading is
+    // almost certainly a stats artifact (stalled hashstats cron / estimator
+    // variance), not a real fleet loss — so suppress the rental and trust the
+    // ground truth of block production. Only rent when TXC itself has gone dry.
+    let txcStalled = true; // fail open: rent if we can't read TXC blocks
+    if (lowConfirmed && CFG.txcStallMin > 0) {
+      try {
+        const age = await pool.lastBlockAgeSec("TXC");
+        if (age != null) {
+          txcStalled = age >= CFG.txcStallMin * 60;
+          if (!txcStalled) {
+            log("TXC still finding blocks — suppressing rental as false reading:", {
+              last_txc_block_age_sec: age,
+              stall_threshold_sec: CFG.txcStallMin * 60,
+              actual_ths: round8(actual),
+            });
+          }
+        } else {
+          log("WARN: could not determine TXC last-block age — guard skipped (fail open)");
+        }
+      } catch (e) {
+        log("WARN: TXC block-age check failed — guard skipped (fail open):", { error: String(e.message) });
+      }
+    }
+    const needRent = deficit > 0.1 && lowConfirmed && txcStalled;
 
 
     if (needRent) {
