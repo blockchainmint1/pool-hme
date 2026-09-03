@@ -172,13 +172,18 @@ export async function evaluatePool(): Promise<Omit<MonitorReport, "alerts_sent">
     );
 
     // 4 — stale hashrate feed
+    // yiimp's `hashrate` table stamps rows on 15-minute buckets, so the age of
+    // the newest row legitimately climbs to ~900s every cycle. Only complain
+    // once two whole buckets have been missed, and never while the
+    // shares-derived live rate proves the pool is still accepting work.
     const feedAge = scrypt?.hashrate_updated_at ? now - Number(scrypt.hashrate_updated_at) : null;
-    if (feedAge != null && feedAge > 900) {
+    const liveShareThs = Number(scrypt?.hashrate_live_hs ?? 0) / 1e12;
+    if (feedAge != null && feedAge > 1800 && liveShareThs <= 0) {
       checks.push({
         key: "feed",
         label: "Hashrate feed",
         severity: "warn",
-        detail: `Last update ${fmtAge(feedAge)} ago — the stats collector may be stuck.`,
+        detail: `Last stats row ${fmtAge(feedAge)} ago and no live share flow — the stats collector may be stuck.`,
       });
     }
   }
