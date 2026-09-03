@@ -23,7 +23,14 @@ import type {
 export type { Severity, CheckResult, WatcherHeartbeat, MonitorReport } from "./types";
 
 interface SummaryShape {
-  algos?: Array<{ algo: string; live_clients?: number; hashrate_hs?: number; hashrate_updated_at?: number }>;
+  algos?: Array<{
+    algo: string;
+    live_clients?: number;
+    hashrate_hs?: number;
+    hashrate_updated_at?: number;
+    hashrate_live_hs?: number;
+    hashrate_source?: string;
+  }>;
   last_blocks?: Array<{ symbol: string; time: number }>;
   active_miners_10m?: number;
   fetched_at?: number;
