@@ -59,7 +59,7 @@ fi
 
 H "9. timeline: order events vs pool hashrate vs blocks (UTC, last 3 days)"
 echo "--- order events"
-J | grep -E 'Order created|cancelling|Orders no longer active' | cut -c1-19,20- | awk '{print substr($0,1,16), substr($0,index($0,$3))}' | cut -c1-160 | tail -40
+J | grep -E 'Order created|cancelling|Orders no longer active' | cut -c1-200 | tail -40
 echo "--- hourly avg pool hashrate (TH/s)"
 Q "SELECT FROM_UNIXTIME(FLOOR(time/3600)*3600) hr, ROUND(AVG(hashrate)/1e12,2) ths FROM hashrate WHERE algo='scrypt' AND time > UNIX_TIMESTAMP()-3*86400 GROUP BY hr ORDER BY hr;"
 echo "--- blocks per hour per coin"
