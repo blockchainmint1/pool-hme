@@ -45,8 +45,8 @@ for f in /var/stratum/logs/*.log /var/stratum/scrypt.log.*; do
   c=$(grep -cE "$PAT" "$f" 2>/dev/null); [ "${c:-0}" -gt 0 ] && echo "$f: $c"
 done
 
-CR=$(sudo bash -c "php -r 'include \"/var/web/serverconfig.php\"; echo YAAMP_DBUSER.\" \".YAAMP_DBPASSWORD;'" 2>/dev/null)
-U=${CR%% *}; P=${CR#* }
+U=$(grep -oP "YAAMP_DBUSER['\"]\s*,\s*['\"]\K[^'\"]+" /var/web/serverconfig.php | head -1)
+P=$(grep -oP "YAAMP_DBPASSWORD['\"]\s*,\s*['\"]\K[^'\"]+" /var/web/serverconfig.php | head -1)
 Q(){ mysql -u"$U" -p"$P" yiimpfrontend -e "$1" 2>&1 | grep -v 'Using a password'; }
 
 H "8. rented workers in pool DB right now"
