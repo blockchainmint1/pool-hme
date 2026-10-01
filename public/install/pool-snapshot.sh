@@ -53,6 +53,15 @@ echo "pool-snapshot $SNAP_VERSION  $(date -u '+%Y-%m-%d %H:%M:%S UTC')  mode=$MO
 # ---- locate MySQL creds the same way the other doctors do --------------------
 find_db_creds() {
   DBU=""; DBP=""; DBN="yiimpfrontend"
+  # Authoritative: YAAMP_DBUSER / YAAMP_DBPASSWORD in serverconfig.php
+  if [ -f /var/web/serverconfig.php ]; then
+    u=$(grep -oP "YAAMP_DBUSER['\"]\s*,\s*['\"]\K[^'\"]+" /var/web/serverconfig.php | head -1)
+    p=$(grep -oP "YAAMP_DBPASSWORD['\"]\s*,\s*['\"]\K[^'\"]+" /var/web/serverconfig.php | head -1)
+    n=$(grep -oP "YAAMP_DBNAME['\"]\s*,\s*['\"]\K[^'\"]+" /var/web/serverconfig.php | head -1)
+    if [ -n "${u:-}" ] && mysql -u"$u" -p"$p" "${n:-yiimpfrontend}" -e 'SELECT 1' >/dev/null 2>&1; then
+      DBU=$u; DBP=$p; DBN=${n:-yiimpfrontend}; return 0
+    fi
+  fi
   for f in /var/stratum/scrypt.conf /var/stratum/*.conf; do
     [ -f "$f" ] || continue
     u=$(grep -oP '^\s*username\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
@@ -60,14 +69,6 @@ find_db_creds() {
     n=$(grep -oP '^\s*database\s*=\s*\K\S+' "$f" 2>/dev/null | head -1)
     [ -n "${u:-}" ] && { DBU=$u; DBP=${p:-}; DBN=${n:-yiimpfrontend}; break; }
   done
-  if [ -z "$DBU" ]; then
-    for f in /var/web/serverconfig.php /var/web/keys.php; do
-      [ -f "$f" ] || continue
-      u=$(grep -oP "YIIMP_DB_USER'\s*,\s*'\K[^']+" "$f" 2>/dev/null | head -1)
-      p=$(grep -oP "YIIMP_DB_PASS'\s*,\s*'\K[^']+" "$f" 2>/dev/null | head -1)
-      [ -n "${u:-}" ] && { DBU=$u; DBP=${p:-}; break; }
-    done
-  fi
   [ -n "$DBU" ]
 }
 myq(){ mysql -u"$DBU" -p"$DBP" "$DBN" -N -B -e "$1" 2>/dev/null; }
