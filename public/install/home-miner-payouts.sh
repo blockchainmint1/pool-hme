@@ -28,7 +28,7 @@ MY "SELECT LEFT(a.username,34) addr,
         (SELECT COUNT(*) FROM workers w WHERE w.userid=a.id) workers_now,
         ROUND((SELECT SUM(s.difficulty) FROM shares s WHERE s.userid=a.id AND s.valid=1),0) live_sharediff,
         ROUND((SELECT IFNULL(SUM(e.amount),0) FROM earnings e WHERE e.userid=a.id AND e.create_time>UNIX_TIMESTAMP()-7*86400),8) earned_7d,
-        ROUND(a.balance,8) balance, ROUND(a.paid,8) paid_total,
+        ROUND(a.balance,8) balance, ROUND((SELECT IFNULL(SUM(p.amount),0) FROM payouts p WHERE p.account_id=a.id),8) paid_total,
         (SELECT FROM_UNIXTIME(MAX(p.time)) FROM payouts p WHERE p.account_id=a.id) last_payout,
         FROM_UNIXTIME(a.last_earning) last_earning
     FROM accounts a JOIN coins c ON c.id=a.coinid
