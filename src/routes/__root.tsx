@@ -47,7 +47,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           Couldn't fetch from the chain
         </h1>
         <p className="mt-2 text-sm text-muted-foreground font-mono break-all">
-          {import.meta.env.DEV ? error.message : "Something went wrong. Please try again."}
+          {import.meta.env.DEV ? (error instanceof Error ? error.message : String(error)) : "Something went wrong. Please try again."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
