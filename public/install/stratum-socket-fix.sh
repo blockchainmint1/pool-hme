@@ -120,7 +120,8 @@ BUILD)
   make -j1 >/tmp/sfix-main.log 2>&1 || { tail -20 /tmp/sfix-main.log; die "main build failed"; }
   [ -x stratum ] || die "no binary produced"
   [ "$(find stratum -mmin -10)" ] || die "binary is stale"
-  tar czf "$ARCHIVE_DIR/stratum-source-socketfix-$TS.tgz" -C "$WORK_ROOT" "stratum-fix-$TS" --exclude='*.o' --exclude='*.a'
+  tar czf "$ARCHIVE_DIR/stratum-source-socketfix-$TS.tgz" --exclude='*.o' --exclude='*.a' -C "$WORK_ROOT" "stratum-fix-$TS" \
+    && echo "source archive (patched): $ARCHIVE_DIR/stratum-source-socketfix-$TS.tgz"
   echo "$W" > /root/stratum-fix.latest
   ls -l stratum; sha256sum stratum
   echo; echo "BUILD OK. Live mining untouched. Next (planned ~20s miner reconnect): ... | sudo bash -s INSTALL CONFIRM"
