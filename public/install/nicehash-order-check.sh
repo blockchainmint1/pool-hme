@@ -27,16 +27,41 @@ J | grep -A40 'Order detail (raw' | tail -45
 H "6. state file"
 cat /var/lib/nicehash-watcher/state.json 2>/dev/null | head -c 3000; echo
 
-H "7. rented machines on the pool (worker name ends in .nh) — stratum log"
+RA=$(grep -E '^RENTAL_LTC_ADDR=' /etc/nicehash-watcher.env 2>/dev/null | cut -d= -f2- | tr -d '"'"'"' ')
+echo; echo "rental login address: ${RA:-<not set>}"
 L=/var/stratum/scrypt.log
-echo "lines mentioning .nh in last 200k log lines:"
-tail -n 200000 "$L" 2>/dev/null | grep -c '\.nh'
-tail -n 200000 "$L" 2>/dev/null | grep '\.nh' | grep -oiE 'reject[a-z ]*|low difficulty|stale|duplicate|invalid|authoriz[a-z]*|disconnect[a-z]*|diff[= ][0-9.]+' | sort | uniq -c | sort -rn | head -20
-echo "--- last 15 .nh lines"
-tail -n 200000 "$L" 2>/dev/null | grep '\.nh' | tail -15
+PAT='\.nh'; [ -n "$RA" ] && PAT="\\.nh|$RA"
 
-H "8. rented workers in pool DB right now"
+H "7. rented machines in stratum log (.nh OR rental address)"
+echo "matching lines in last 500k log lines:"
+tail -n 500000 "$L" 2>/dev/null | grep -cE "$PAT"
+tail -n 500000 "$L" 2>/dev/null | grep -E "$PAT" | grep -oiE 'reject[a-z ]*|low difficulty|stale|duplicate|invalid|authoriz[a-z]*|disconnect[a-z]*|diff[= ][0-9.]+' | sort | uniq -c | sort -rn | head -20
+echo "--- first 5 / last 10 matching lines"
+tail -n 500000 "$L" 2>/dev/null | grep -E "$PAT" | head -5
+tail -n 500000 "$L" 2>/dev/null | grep -E "$PAT" | tail -10
+echo "--- rotated logs mentioning the rental address (file: count)"
+for f in /var/stratum/logs/*.log /var/stratum/scrypt.log.*; do
+  [ -f "$f" ] || continue
+  c=$(grep -cE "$PAT" "$f" 2>/dev/null); [ "${c:-0}" -gt 0 ] && echo "$f: $c"
+done
+
 CR=$(sudo bash -c "php -r 'include \"/var/web/serverconfig.php\"; echo YAAMP_DBUSER.\" \".YAAMP_DBPASSWORD;'" 2>/dev/null)
 U=${CR%% *}; P=${CR#* }
-mysql -u"$U" -p"$P" yiimpfrontend -e "SELECT name, worker, difficulty, version, FROM_UNIXTIME(time) t FROM workers WHERE worker LIKE '%nh%' OR name LIKE '%.nh%' LIMIT 30;" 2>&1 | head -35
+Q(){ mysql -u"$U" -p"$P" yiimpfrontend -e "$1" 2>&1 | grep -v 'Using a password'; }
+
+H "8. rented workers in pool DB right now"
+Q "SELECT name, worker, difficulty, version, FROM_UNIXTIME(time) t FROM workers WHERE worker LIKE '%nh%' OR name LIKE '%.nh%' ${RA:+OR name='$RA'} LIMIT 30;" | head -35
+if [ -n "$RA" ]; then
+  echo "--- account row + recent earnings for rental address"
+  Q "SELECT id, username, balance FROM accounts WHERE username='$RA';"
+  Q "SELECT c.symbol, COUNT(*) n, ROUND(SUM(e.amount),8) amt, FROM_UNIXTIME(MIN(e.create_time)) first, FROM_UNIXTIME(MAX(e.create_time)) last FROM earnings e JOIN accounts a ON a.id=e.userid JOIN coins c ON c.id=e.coinid WHERE a.username='$RA' AND e.create_time > UNIX_TIMESTAMP()-4*86400 GROUP BY c.symbol;"
+fi
+
+H "9. timeline: order events vs pool hashrate vs blocks (UTC, last 3 days)"
+echo "--- order events"
+J | grep -E 'Order created|cancelling|Orders no longer active' | cut -c1-200 | tail -40
+echo "--- hourly avg pool hashrate (TH/s)"
+Q "SELECT FROM_UNIXTIME(FLOOR(time/3600)*3600) hr, ROUND(AVG(hashrate)/1e12,2) ths FROM hashrate WHERE algo='scrypt' AND time > UNIX_TIMESTAMP()-3*86400 GROUP BY hr ORDER BY hr;"
+echo "--- blocks per hour per coin"
+Q "SELECT FROM_UNIXTIME(FLOOR(b.time/3600)*3600) hr, SUM(c.symbol='TXC') TXC, SUM(c.symbol='ISK') ISK, SUM(c.symbol='ZCU') ZCU, SUM(c.symbol='DOGE') DOGE, SUM(c.symbol='LTC') LTC FROM blocks b JOIN coins c ON c.id=b.coin_id WHERE b.time > UNIX_TIMESTAMP()-3*86400 GROUP BY hr ORDER BY hr;"
 echo; echo "DONE (read-only)."
