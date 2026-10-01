@@ -202,62 +202,64 @@ export function CoinPage({ symbol }: { symbol: CoinSymbol }) {
           />
         </section>
 
-        <section className="space-y-3">
-          <Header eyebrow="Where the coinbase goes" title="Reward destination." />
-          <div className="pool-kpi-panel rounded-lg p-5 space-y-4">
-            <div className="flex items-start gap-3">
-              <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0" />
-              <div className="min-w-0 space-y-1">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
-                  Current coinbase address
-                </div>
-                <a
-                  href={explorerAddress(symbol, coinbaseAddress)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block font-mono text-sm text-pool-steel-hi break-all hover:underline"
-                >
-                  {coinbaseAddress}
-                  <ExternalLink className="inline size-3 ml-1.5 -mt-0.5 opacity-70" />
-                </a>
-                <div className="text-[11px] font-mono text-pool-steel">
-                  live since {known.since} · view on{" "}
-                  {symbol === "LTC" ? "litecoinspace.org" : "blockchair.com"}
-                </div>
-              </div>
-            </div>
-
-            {known.previous && (
-              <div className="flex items-start gap-3 pt-3 border-t border-pool-hairline">
-                <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0 opacity-50" />
+        {symbol !== "DOGE" && (
+          <section className="space-y-3">
+            <Header eyebrow="Where the coinbase goes" title="Reward destination." />
+            <div className="pool-kpi-panel rounded-lg p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0" />
                 <div className="min-w-0 space-y-1">
                   <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
-                    Previous coinbase address
+                    Current coinbase address
                   </div>
                   <a
-                    href={explorerAddress(symbol, known.previous)}
+                    href={explorerAddress(symbol, coinbaseAddress)}
                     target="_blank"
                     rel="noreferrer"
-                    className="block font-mono text-sm text-pool-steel break-all hover:underline"
+                    className="block font-mono text-sm text-pool-steel-hi break-all hover:underline"
                   >
-                    {known.previous}
+                    {coinbaseAddress}
                     <ExternalLink className="inline size-3 ml-1.5 -mt-0.5 opacity-70" />
                   </a>
                   <div className="text-[11px] font-mono text-pool-steel">
-                    blocks found before {known.since} paid here
+                    live since {known.since} · view on{" "}
+                    {symbol === "LTC" ? "litecoinspace.org" : "blockchair.com"}
                   </div>
                 </div>
               </div>
-            )}
 
-            <p className="text-sm text-pool-steel leading-relaxed">
-              Block rewards are paid to the pool&apos;s {symbol} coinbase address, which then settles
-              miner balances on the payout schedule. The wallet keeps only a working float;
-              everything above outstanding miner liabilities is swept to cold storage the operator
-              controls.
-            </p>
-          </div>
-        </section>
+              {known.previous && (
+                <div className="flex items-start gap-3 pt-3 border-t border-pool-hairline">
+                  <Wallet className="size-4 text-pool-steel mt-0.5 shrink-0 opacity-50" />
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-pool-steel font-mono">
+                      Previous coinbase address
+                    </div>
+                    <a
+                      href={explorerAddress(symbol, known.previous)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block font-mono text-sm text-pool-steel break-all hover:underline"
+                    >
+                      {known.previous}
+                      <ExternalLink className="inline size-3 ml-1.5 -mt-0.5 opacity-70" />
+                    </a>
+                    <div className="text-[11px] font-mono text-pool-steel">
+                      blocks found before {known.since} paid here
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-sm text-pool-steel leading-relaxed">
+                Block rewards are paid to the pool&apos;s {symbol} coinbase address, which then settles
+                miner balances on the payout schedule. The wallet keeps only a working float;
+                everything above outstanding miner liabilities is swept to cold storage the operator
+                controls.
+              </p>
+            </div>
+          </section>
+        )}
 
 
         <section className="space-y-3">
