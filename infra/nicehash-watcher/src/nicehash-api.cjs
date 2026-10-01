@@ -209,11 +209,20 @@ class NiceHashAPI {
     });
   }
 
-  async updatePriceAndLimit(id, { price, limit }) {
+  // NiceHash rejects this with 2997 "Missing displayMarketFactor data" unless
+  // the unit factors are sent. SCRYPT is priced per TH/day.
+  async updatePriceAndLimit(id, { price, limit, marketFactor, displayMarketFactor }) {
     return this._request(
       "POST",
       `/main/api/v2/hashpower/order/${id}/updatePriceAndLimit`,
-      { body: { price, limit } },
+      {
+        body: {
+          price,
+          limit,
+          marketFactor: String(marketFactor || "1000000000000"),
+          displayMarketFactor: String(displayMarketFactor || "TH"),
+        },
+      },
     );
   }
 
