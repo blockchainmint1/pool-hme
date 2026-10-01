@@ -142,7 +142,7 @@ INSTALL)
   say "health"
   systemctl is-active $UNIT; systemctl show $UNIT -p NRestarts -p ActiveEnterTimestamp
   echo "connections on 3433: $(ss -Htn state established '( sport = :3433 )' | wc -l)"
-  tail -5 /var/stratum/scrypt.log 2>/dev/null
+  tail -5 /var/stratum/logs/stratum-current.log 2>/dev/null
   echo; echo "INSTALLED ($(sha256sum "$LIVE"|cut -c1-12)). If anything looks wrong:"
   echo '  curl -fsSL "https://pool.honest.money/install/stratum-socket-fix.sh?v=$(date +%s)" | sudo bash -s ROLLBACK CONFIRM'
   ;;
