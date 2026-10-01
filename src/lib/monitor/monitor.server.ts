@@ -226,7 +226,11 @@ export async function evaluatePool(): Promise<Omit<MonitorReport, "alerts_sent">
     }
   }
 
-  // 6 — rental watcher heartbeat (only meaningful once we've seen one)
+  // 6 — rental watcher heartbeat (only meaningful once we've seen one).
+  // Heartbeats live in per-isolate memory and the hosting platform runs many
+  // isolates: the watcher's POST lands on one, the monitor tick on another, so
+  // a "stale" heartbeat here is NOT evidence the watcher stopped. Report it as
+  // informational only — the on-box canary checks the systemd unit directly.
   const hb = state.heartbeat;
   if (hb) {
     const age = now - hb.received_at;
@@ -235,8 +239,8 @@ export async function evaluatePool(): Promise<Omit<MonitorReport, "alerts_sent">
         ? {
             key: "watcher",
             label: "Rental watcher",
-            severity: "warn",
-            detail: `No heartbeat for ${fmtAge(age)} — nicehash-watcher may be stopped on the box.`,
+            severity: "ok",
+            detail: `Last heartbeat seen by this server instance ${fmtAge(age)} ago (may have landed on another instance — confirm on the box with the canary).`,
           }
         : {
             key: "watcher",
