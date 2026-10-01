@@ -331,6 +331,15 @@ async function main() {
     }
     state.last_pool_hashrate = round8(actual);
 
+    // 1b. Split pool speed into OUR machines vs RENTED machines. Rented hashrate
+    // also lands on the pool, so without this a working rental looks like
+    // "recovered" and gets cancelled, and a second container loss is masked.
+    await syncActiveOrders(state);
+    const rented = await rentedSpeedThs(state);
+    const own = round8(Math.max(0, actual - rented.accepted));
+    state.last_rented_ths = rented.accepted;
+    state.last_own_ths = own;
+
     // 2. refresh target (max(7d avg, min)) every ~15 min
     const now = Date.now();
     if (!state.target_updated_at || now - state.target_updated_at > 900000) {
@@ -345,11 +354,16 @@ async function main() {
       }
     }
     const target = state.target_ths || CFG.minTargetThs;
-    const deficit = round8(Math.max(0, target - actual));
+    const deficit = round8(Math.max(0, target - own));
+    // Speed still uncovered after counting what existing orders are set to buy.
+    const uncovered = round8(Math.max(0, deficit - rented.limits));
     const triggerThreshold = target * CFG.triggerFraction;
 
     log("cycle", {
-      actual_ths: round8(actual),
+      pool_ths: round8(actual),
+      rented_ths: rented.accepted,
+      actual_ths: own,
+      uncovered_ths: uncovered,
       target_ths: target,
       deficit_ths: deficit,
       trigger_below: round8(triggerThreshold),
@@ -360,6 +374,8 @@ async function main() {
     // 2a-bis. Heartbeat + remote watchdog (pool.honest.money side alerting).
     await pingMonitor({
       actual_ths: round8(actual),
+      own_ths: own,
+      rented_ths: rented.accepted,
       target_ths: round8(target),
       active_orders: state.active_orders.length,
       spend_today_btc: round8(state.spend_today.btc),
@@ -367,8 +383,8 @@ async function main() {
     });
 
     // 2b. Telegram alerting on the 75%-of-target threshold
-    if (actual < triggerThreshold) {
-      const pct = target > 0 ? (actual / target) * 100 : 0;
+    if (own < triggerThreshold) {
+      const pct = target > 0 ? (own / target) * 100 : 0;
       if (!state.below_trigger) {
         state.below_trigger = true;
         state.alerts = state.alerts || {};
@@ -378,27 +394,25 @@ async function main() {
         state,
         "below",
         `\u26a0\ufe0f <b>Pool hashrate low</b>\n` +
-          `Current: <b>${round8(actual)} TH/s</b>\n` +
+          `Our machines: <b>${own} TH/s</b> (rented ${rented.accepted})\n` +
           `Target (7d avg, min ${CFG.minTargetThs}): <b>${round8(target)} TH/s</b>\n` +
           `That's <b>${pct.toFixed(1)}%</b> of target (alert below ${(CFG.triggerFraction * 100).toFixed(0)}%).\n` +
           `Deficit: ${deficit} TH/s — NiceHash rental will be used to cover it.`
       );
-    } else if (state.below_trigger && actual >= target) {
+    } else if (state.below_trigger && own >= target) {
       state.below_trigger = false;
       state.alerts = state.alerts || {};
       delete state.alerts["below"];
       await tg.send(
         `\u2705 <b>Pool hashrate recovered</b>\n` +
-          `Current: <b>${round8(actual)} TH/s</b> (target ${round8(target)} TH/s)`,
+          `Our machines: <b>${own} TH/s</b> (rented ${rented.accepted}) (target ${round8(target)} TH/s)`,
         log
       );
     }
 
-    // 3. sync active orders with NiceHash reality
-    await syncActiveOrders(state);
 
-    // 4. recovery handling — once actual >= target for N cycles, cancel & refund
-    if (actual >= target) {
+    // 4. recovery handling — once own >= target for N cycles, cancel & refund
+    if (own >= target) {
       state.recover_count = (state.recover_count || 0) + 1;
       if (state.recover_count >= CFG.recoverConfirmations && state.active_orders.length) {
         log("Pool recovered above target — cancelling rental orders:", { ids: state.active_orders.map((o) => o.id) });
@@ -413,14 +427,14 @@ async function main() {
     // Debounce: a single low sample is usually a stalled stats feed, not a
     // real fleet loss. Require LOW_CONFIRMATIONS consecutive low cycles before
     // spending money on NiceHash.
-    const belowTrigger = actual < triggerThreshold;
+    const belowTrigger = own < triggerThreshold;
     state.low_count = belowTrigger ? (state.low_count || 0) + 1 : 0;
     const lowConfirmed = state.low_count >= CFG.lowConfirmations;
     if (belowTrigger && !lowConfirmed) {
       log("Below trigger but not yet confirmed — holding off on rental:", {
         low_count: state.low_count,
         need: CFG.lowConfirmations,
-        actual_ths: round8(actual),
+        actual_ths: own,
       });
     }
 
@@ -440,7 +454,7 @@ async function main() {
             log("TXC still finding blocks — suppressing rental as false reading:", {
               last_txc_block_age_sec: age,
               stall_threshold_sec: CFG.txcStallMin * 60,
-              actual_ths: round8(actual),
+              actual_ths: own,
             });
           }
         } else {
@@ -458,13 +472,15 @@ async function main() {
         log("DAILY_BTC_CAP reached — not renting:", { cap: CFG.dailyBtcCap, spent: state.spend_today.btc });
       } else if (state.active_orders.length >= CFG.maxConcurrentOrders) {
         log("MAX_CONCURRENT_ORDERS reached — managing existing orders:", { count: state.active_orders.length });
-        await manageOrders(state, actual, target);
+        await manageOrders(state, own, target);
+      } else if (uncovered > 0.1) {
+        await createOrder(state, uncovered);
       } else {
-        await createOrder(state, deficit);
+        await manageOrders(state, own, target);
       }
     } else if (state.active_orders.length > 0 && deficit > 0.1) {
       // Below target but above trigger: keep existing orders topped up.
-      await manageOrders(state, actual, target);
+      await manageOrders(state, own, target);
     }
 
     saveState(state);
@@ -532,6 +548,29 @@ async function main() {
       log("ERROR creating order:", { error: String(e.message), status: e.status, body: e.body });
       await alert(state, "order-error", `\u274c <b>NiceHash order failed</b>\n${String(e.message)}`);
     }
+  }
+
+  // Sum of delivered (acceptedCurrentSpeed) and paid-for limits across our
+  // active NiceHash orders, in TH/s. Fails safe to 0 (treat all as our own).
+  async function rentedSpeedThs(state) {
+    const out = { accepted: 0, limits: 0 };
+    if (!state.active_orders || !state.active_orders.length) return out;
+    const client = await ensureNh();
+    if (!client) return out;
+    for (const ao of state.active_orders) {
+      try {
+        const o = await client.getOrder(ao.id);
+        if (o && o.alive === false) continue;
+        out.accepted += Number(o.acceptedCurrentSpeed ?? 0) || 0;
+        out.limits += Number(o.limit ?? ao.limit ?? 0) || 0;
+      } catch (e) {
+        out.limits += Number(ao.limit || 0);
+        log("WARN: rented-speed read failed:", { id: ao.id, error: String(e.message) });
+      }
+    }
+    out.accepted = round8(out.accepted);
+    out.limits = round8(out.limits);
+    return out;
   }
 
   async function manageOrders(state, actual, target) {
