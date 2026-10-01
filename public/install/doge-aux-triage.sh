@@ -168,23 +168,28 @@ echo "    ${CHAINID:-chainid: not reported}  (DOGE mainnet chainid is 98)"
 ##############################################################################
 hr "5. did we FIND DOGE winners and then lose them? (submit reconciliation)"
 ##############################################################################
-for F in $(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | head -4); do
-  S=$(grep -acieE 'doge.*(submitauxblock|block found|block candidate|submit block)' "$F" 2>/dev/null || echo 0)
-  R=$(grep -acieE 'doge.*(reject|invalid|stale|duplicate|bad-|end of data)' "$F" 2>/dev/null || echo 0)
-  printf '  %-70s submits=%-6s rejects=%s\n' "$(basename "$F")" "$S" "$R"
+# v2: v1 used `grep -acieE` -- the `e` swallowed "E" as the pattern, so every
+# count was "lines containing the letter e". Real winners are "DOGE aux submit"
+# lines WITHOUT "skip target"; scan the last ~24 hourly logs.
+LOGS=$(ls -t /var/stratum/logs/stratum-2*.log 2>/dev/null | head -25)
+DSUB=0
+for F in $LOGS; do
+  S=$(grep -a 'DOGE aux submit' "$F" 2>/dev/null | grep -vc 'skip')
+  W=$(grep -a 'TXC aux submit' "$F" 2>/dev/null | grep -vc 'skip')
+  R=$(grep -aiE 'doge' "$F" 2>/dev/null | grep -ciE 'reject|invalid|stale|duplicate|bad-|end of data|error')
+  DSUB=$((DSUB + ${S:-0}))
+  printf '  %-45s DOGE_winners=%-4s DOGE_errors=%-4s (TXC_winners=%s)\n' "$(basename "$F")" "${S:-0}" "${R:-0}" "${W:-0}"
 done
-echo "  --- newest DOGE submit/reject flavoured lines ---"
-grep -ahiE 'doge.*(submitauxblock|block found|block candidate|reject|invalid|end of data)' \
-  $(ls -t /var/stratum/scrypt.log /var/stratum/logs/stratum*.log 2>/dev/null | head -4) 2>/dev/null \
-  | tail -12 | cut -c1-200 | sed 's/^/    /'
-DSUB=$(grep -achieE 'doge.*(submitauxblock|block found|block candidate)' "$LOG" 2>/dev/null || echo 0)
+echo "  --- newest DOGE winner lines + the next line (daemon reply) ---"
+for F in $LOGS; do grep -a -A1 'DOGE aux submit' "$F" 2>/dev/null | grep -v 'skip target' | grep -v '^--$'; done \
+  | tail -16 | cut -c1-220 | sed 's/^/    /'
 DREC=$(MY "SELECT COUNT(*) FROM blocks b JOIN coins c ON c.id=b.coin_id
            WHERE c.symbol='DOGE' AND b.time > UNIX_TIMESTAMP()-86400")
-echo "  DOGE submit-ish lines in the live log: ${DSUB:-0}   DOGE block rows recorded in 24h: ${DREC:-0}"
-if [ "${DSUB:-0}" -gt 0 ] && [ "${DREC:-0}" -le 1 ]; then
-  bad "we SUBMITTED DOGE winners but almost none were recorded -- blocks are being found and LOST, not unlucky"
-elif [ "${DSUB:-0}" -eq 0 ]; then
-  warn "no DOGE submit lines at all in the live log -- consistent with DOGE never receiving work (sections 2-4)"
+echo "  DOGE winners submitted (retained logs): $DSUB   DOGE block rows recorded in 24h: ${DREC:-0}"
+if [ "$DSUB" -gt $(( ${DREC:-0} + 1 )) ]; then
+  bad "stratum SUBMITTED more DOGE winners than were recorded -- blocks found and LOST"
+elif [ "$DSUB" -eq 0 ]; then
+  warn "no DOGE winners in the retained logs -- either unlucky or DOGE work is not reaching rigs"
 else
   ok "DOGE submits and recorded blocks are consistent"
 fi
