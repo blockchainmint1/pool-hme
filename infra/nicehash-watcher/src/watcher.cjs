@@ -547,7 +547,11 @@ async function main() {
       }
       const remaining = orderRemainingBtc(order);
       const alive = order && order.alive !== false;
-      const acceptedThs = Number((order.acceptedSpeed || 0));
+      // NiceHash order detail reports delivered speed as `acceptedCurrentSpeed`
+      // (string, in the order's market factor = TH/s for SCRYPT). There is no
+      // `acceptedSpeed` field — reading it always gave 0 and falsely flagged
+      // every order as unfilled.
+      const acceptedThs = Number(order.acceptedCurrentSpeed ?? order.acceptedSpeed ?? 0) || 0;
       log("order status:", { id: ao.id, alive, acceptedSpeed: acceptedThs, limit: order.limit, remaining });
 
       // Price escalation: we deliberately open at the depth-derived clearing
