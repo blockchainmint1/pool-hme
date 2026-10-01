@@ -20,7 +20,9 @@
 #
 # VERSION LOG
 #   v1  2026-10-01  First cut.
-VER="v1"
+#   v2  2026-10-01  Also searches /root/ZCU-FWDPORT-* and every built
+#                   stratum binary under /root /home/ubuntu /opt for the match.
+VER="v2"
 set -uo pipefail
 MODE="${1:-CHECK}"; CONF="${2:-}"
 LIVE=/var/stratum/stratum
@@ -29,7 +31,7 @@ UNIT=stratum-aws-scrypt
 WORK_ROOT=/root
 ARCHIVE_DIR=/var/backups/stratum-source
 TREES="/home/ubuntu/aws/LIVE/LIVE-FINAL /home/ubuntu/aws/LIVE/yiimp/live-aux-issue-doge /home/ubuntu/aws/LIVE/live-aux-issue-doge /home/ubuntu/aws/LIVE/perfect1"
-for d in /root/ZCU-PROD-YIIMP-PROD4B-*/work/stratum-build-src; do [ -d "$d" ] && TREES="$TREES $d"; done
+for d in /root/ZCU-FWDPORT-* /root/ZCU-FWDPORT-*/* /root/ZCU-PROD-YIIMP-PROD4B-*/work/stratum-build-src; do [ -d "$d" ] && TREES="$TREES $d"; done
 
 say(){ echo; echo "===== $*"; }
 die(){ echo; echo "STOPPED: $*"; echo "Nothing live was changed."; exit 1; }
@@ -50,7 +52,15 @@ find_tree(){
     CANDS="$CANDS $d"
     if [ -f "$d/stratum" ] && [ "$(sha256sum "$d/stratum" | cut -c1-12)" = "$LIVE_SHA" ]; then MATCH="$d"; fi
   done
-  # also: any stratum.bak with same sha tells us which build it was
+  if [ -z "$MATCH" ]; then # wide search: any built stratum binary with same size+sha
+    SZ=$(stat -c %s "$LIVE")
+    while IFS= read -r b; do
+      [ "$b" = "$LIVE" ] && continue
+      [ "$(sha256sum "$b" | cut -c1-12)" = "$LIVE_SHA" ] || continue
+      echo "  identical binary found: $b"
+      dd=$(dirname "$b"); [ -f "$dd/socket.cpp" ] && [ -z "$MATCH" ] && MATCH="$dd"
+    done < <(find /root /home/ubuntu /opt /tmp -xdev -type f -name 'stratum*' -size ${SZ}c 2>/dev/null)
+  fi
 }
 
 PATCH_MARK="SOCKETFIX-20261001"
