@@ -34,7 +34,7 @@ MY "SELECT w.ip, COUNT(DISTINCT s.workerid) machines, COUNT(*) shares, SUM(s.val
     WHERE s.time>UNIX_TIMESTAMP()-600 GROUP BY w.ip ORDER BY rejects DESC LIMIT 15"
 
 H "5. rental (NiceHash) machines vs our own, last 10 min"
-MY "SELECT IF(w.name='${RENT:-none}' AND w.worker NOT LIKE '%L9%', 'rental-login', 'other') who,
+MY "SELECT IF(w.name='${RENT:-none}', 'rental-login', 'other') who,
     COUNT(*) shares, SUM(s.valid=0) rejects, ROUND(100*SUM(s.valid=0)/COUNT(*),1) pct
     FROM shares s JOIN workers w ON w.id=s.workerid
     WHERE s.time>UNIX_TIMESTAMP()-600 GROUP BY 1"
