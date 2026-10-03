@@ -170,9 +170,22 @@ PY
   make -j1 >/tmp/stag-main.log 2>&1 || { tail -20 /tmp/stag-main.log; die "main build failed"; }
   [ -x stratum ] || die "no binary produced"
   [ "$(find stratum -mmin -10)" ] || die "binary is stale"
-  C_NEW=$(grep -ac -e "$NEW_TXT" -e "$NEW_HEX" stratum); C_OLD=$(grep -ac -e "$OLD_TXT" -e "$OLD_HEX" stratum)
-  echo "new binary contains new tag: $C_NEW   old tag: $C_OLD"
-  [ "$C_NEW" -ge 1 ] || die "new tag not found inside the built binary"
+  # The compiler stores the short tag string as 8-byte pieces inside machine
+  # instructions, so the whole string never appears in one piece. Look for the
+  # 8-character pieces instead, and use the LIVE binary as a control.
+  pieces(){ # file hex -> number of 8-char pieces found
+    local f="$1" h="$2" n=0 i
+    for ((i=0; i+8<=${#h}; i+=8)); do grep -aqF "${h:i:8}" "$f" && n=$((n+1)); done
+    echo "$n/$(( ${#h} / 8 ))"
+  }
+  say "proving the new tag is inside the new program (live program as control)"
+  echo "  live program : old-tag pieces $(pieces "$LIVE" "$OLD_HEX")   new-tag pieces $(pieces "$LIVE" "$NEW_HEX")"
+  echo "  new program  : old-tag pieces $(pieces stratum "$OLD_HEX")   new-tag pieces $(pieces stratum "$NEW_HEX")"
+  LIVE_OLD=$(pieces "$LIVE" "$OLD_HEX"); NEW_NEW=$(pieces stratum "$NEW_HEX"); NEW_OLD=$(pieces stratum "$OLD_HEX")
+  [ "${LIVE_OLD%%/*}" = "${LIVE_OLD##*/}" ] || die "control failed: can't even see the old tag in the live program"
+  [ "${NEW_NEW%%/*}" = "${NEW_NEW##*/}" ] || die "new tag not found inside the built binary"
+  [ "${NEW_OLD%%/*}" = 0 ] || echo "  note: some old-tag pieces still present (may be coincidence; INSTALL's live check is the final proof)"
+  cmp -s stratum "$LIVE" && die "new program is identical to the live one"
   tar czf "$ARCHIVE_DIR/stratum-source-tag-$TS.tgz" --exclude='*.o' --exclude='*.a' -C "$WORK_ROOT" "stratum-tag-$TS" \
     && echo "source archive: $ARCHIVE_DIR/stratum-source-tag-$TS.tgz"
   echo "$W" > /root/stratum-tag.latest
