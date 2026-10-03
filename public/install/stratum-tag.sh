@@ -68,8 +68,8 @@ except Exception as e:
     print("  could not connect to 127.0.0.1:3433:",e); sys.exit(2)
 s.settimeout(3)
 s.sendall(b'{"id":1,"method":"mining.subscribe","params":["tagcheck/1"]}\n')
-s.sendall(('{"id":2,"method":"mining.authorize","params":["%s","x"]}\n'%user).encode())
-buf=b""; end=time.time()+12; en1=None; en2=None; notify=None
+s.sendall(('{"id":2,"method":"mining.authorize","params":["%s.tagcheck","x"]}\n'%user).encode())
+buf=b""; end=time.time()+45; en1=None; en2=None; notify=None
 while time.time()<end and notify is None:
     try: d=s.recv(65536)
     except socket.timeout: continue
@@ -81,7 +81,11 @@ while time.time()<end and notify is None:
         if j.get("id")==1 and j.get("result"): en1=j["result"][1]; en2=j["result"][2]
         if j.get("method")=="mining.notify": notify=j["params"]
 s.close()
-if not notify or en1 is None: print("  no mining.notify received (is stratum up?)"); sys.exit(2)
+if not notify or en1 is None:
+    print("  no mining.notify received within 45s. What the stratum did say:")
+    for line in buf.split(b"\n")[:6]: print("   ", line[:300].decode(errors="replace"))
+    if not buf: print("    (nothing at all)")
+    sys.exit(2)
 coinb1,coinb2=notify[2],notify[3]
 tx=bytes.fromhex(coinb1+en1+"00"*int(en2)+coinb2)
 ok=True
