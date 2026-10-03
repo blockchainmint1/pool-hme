@@ -854,3 +854,10 @@ adapter must be redesigned (see postmortem) before ZCU re-enters rotation:
 4. 24h shadow test proving ZCU seals advance and LTC/DOGE/TXC/ISK stay healthy.
 5. Re-enable via `zcu-remove-rotation.sh REVERT` (restores `coins` row,
    `zcu-gate`, sync units + timers, restarts stratum), then re-arm deadman.
+
+## TXC Core 0.26 candidate build (started 2026-10-03)
+
+- Script: `public/install/txc-026-build.sh` (modes CHECK / BUILD / STATUS / TEST). Builds in `/root/txc026-<timestamp>/`, pointer file `/root/txc026.latest`, source archive in `/var/backups/txc-source/`.
+- Recipe: tag v0.25.2 (commit 3d10743) + `lwma-difficulty.patch` + `send-to-many.patch` from core.honest.money/patches, NO `--enable-feature` flag so mining RPCs stay compiled in. Send To Many patch needs hunk-header recount (done by the script).
+- Mainnet activation heights in both patches stay at the 999999999 placeholder until the TXC devs announce one; checkpoint entry (height/hash) not yet chosen, not in build.
+- Swapping this binary onto the live box is a separate, later step (snapshot first, keep old binary, never roll back to 0.25.1).
