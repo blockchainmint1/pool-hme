@@ -152,8 +152,22 @@ start_node(){
 # ---------------------------------------------------------------- SWAP
 do_swap(){
   [ "$CONF" = CONFIRM ] || die "add CONFIRM"
-  [ -f "$STATE" ] || die "run CHECK first (it must pass)"
-  NB=$(cat "$STATE"); [ -x "$NB/texitcoind" ] || die "staged program missing; run CHECK again"
+  # Quick path (v2): the private test chain was already run elsewhere, so skip it.
+  # Still checks the file fingerprint, unpacks it, and proves the program starts on this box.
+  say "quick check of the downloaded file (no test chain)"
+  [ -f "$ZIP" ] || die "$ZIP not found"
+  S=$(sha256sum "$ZIP" | cut -d' ' -f1)
+  [ "$S" = "$ZIP_SHA" ] || die "fingerprint is $S, expected $ZIP_SHA. Nothing changed."
+  ok "fingerprint matches"
+  command -v unzip >/dev/null || { apt-get install -y -qq unzip >/dev/null 2>&1; }
+  rm -rf "$STAGE"; mkdir -p "$STAGE"; unzip -q "$ZIP" -d "$STAGE" || die "unzip failed. Nothing changed."
+  NB=$(dirname "$(find "$STAGE" -type f -name texitcoind | head -1)")
+  [ -f "$NB/texitcoind" ] || die "no texitcoind inside the zip. Nothing changed."
+  for b in $BINS; do [ -f "$NB/$b" ] && chmod 755 "$NB/$b"; done
+  M=$(ldd "$NB/texitcoind" 2>&1 | grep -i "not found")
+  [ -z "$M" ] || die "missing system libraries: $M. Nothing changed."
+  V=$("$NB/texitcoind" --version 2>&1 | head -1); echo "  $V"
+  case "$V" in *0.26.1*) ok "version 0.26.1";; *) die "new program does not report 0.26.1 here. Nothing changed.";; esac
   find_live || die "no running texitcoind found"
   say "before"; show_live
   TS=$(date -u +%Y%m%dT%H%M%SZ); BK="$BK_ROOT/pre-0261-$TS"; mkdir -p "$BK"
@@ -176,7 +190,10 @@ do_swap(){
     start_node && echo "  old program running again." ; die "swap undone. Paste this output to me."
   fi
   find_live; show_live
-  mining_ok "new live node" || echo "  (if this fails, run ROLLBACK CONFIRM right away)"
+  FAILS=0; mm=0
+  for i in 1 2 3 4 5 6; do FAILS=0; mining_ok "new live node" >/tmp/txc0261.mining 2>&1 && { mm=1; break; }; sleep 10; done
+  cat /tmp/txc0261.mining
+  [ $mm = 1 ] || echo "  Mining commands did NOT answer. Paste this to me before doing anything else."
   echo; echo "  Stratum was NOT restarted; it picks the node back up by itself."
   echo "  Undo (only before block $GOLIVE):"
   echo "    curl -fsSL \"https://pool.honest.money/install/txc-swap-0261.sh?v=\$(date +%s)\" | sudo bash -s ROLLBACK CONFIRM"
