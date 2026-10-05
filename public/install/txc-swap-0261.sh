@@ -17,7 +17,7 @@
 #
 # VERSION LOG
 #   v1  2026-10-05  First cut.
-VER="v1"
+VER="v2"
 set -uo pipefail
 MODE="${1:-CHECK}"; CONF="${2:-}"
 ZIP=/root/txc-MINING-PRIVATE-amd-ubuntu22-v0.26.1.zip
@@ -66,7 +66,7 @@ show_live(){
 }
 
 mining_ok(){ # $1 = label ; uses LC
-  local r; r=$(LC getblocktemplate '{"rules":["segwit"]}' 2>&1 | head -c 300)
+  local r; r=$(LC getblocktemplate '{"rules":["mweb","segwit"]}' 2>&1 | head -c 300)
   case "$r" in *'"height"'*) ok "$1: getblocktemplate gives a job"; return 0;; *) bad "$1: getblocktemplate -> $(echo "$r"|head -1)"; return 1;; esac
 }
 
@@ -116,7 +116,7 @@ do_check(){
   H=$(LC getblockcount 2>/dev/null)
   echo "  checkpoint block $CHECKPOINT_H on our chain: $(LC getblockhash $CHECKPOINT_H 2>&1 | head -1)"
   [ -n "$H" ] && echo "  blocks until go-live $GOLIVE: $((GOLIVE - H))  (~$(( (GOLIVE - H) * 3 / 60 )) hours)"
-  r=$(LC getblocktemplate '{"rules":["segwit"]}' 2>&1 | head -c 120)
+  r=$(LC getblocktemplate '{"rules":["mweb","segwit"]}' 2>&1 | head -c 120)
   case "$r" in *'"height"'*) echo "  live node mining commands: working";; *) echo "  live node mining commands: $(echo "$r"|head -1)";; esac
   for b in $BINS; do [ -e "$BINDIR/$b" ] && echo "  will replace $BINDIR/$b" || warn "$BINDIR/$b does not exist (will be added)"; done
   ls -l /usr/local/bin/texitcoin* 2>/dev/null | sed 's/^/  /'
