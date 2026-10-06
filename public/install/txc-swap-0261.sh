@@ -66,8 +66,8 @@ show_live(){
 }
 
 mining_ok(){ # $1 = label ; uses LC
-  local r; r=$(LC getblocktemplate '{"rules":["mweb","segwit"]}' 2>&1 | head -c 300)
-  case "$r" in *'"height"'*) ok "$1: getblocktemplate gives a job"; return 0;; *) bad "$1: getblocktemplate -> $(echo "$r"|head -1)"; return 1;; esac
+  local r; r=$(LC getblocktemplate '{"rules":["mweb","segwit"]}' 2>&1 )
+  case "$r" in *'"previousblockhash"'*) ok "$1: getblocktemplate gives a job"; return 0;; *) bad "$1: getblocktemplate -> $(echo "$r"|head -1)"; return 1;; esac
 }
 
 # ---------------------------------------------------------------- CHECK
