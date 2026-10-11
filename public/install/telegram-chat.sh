@@ -40,7 +40,7 @@ fi
 echo "  sending test message..."
 R=$(curl -sS -m 15 -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
   -d chat_id="$CHAT" -d parse_mode=HTML \
-  --data-urlencode text="<b>Pool alerts moved to this chat</b>%0ANiceHash watcher, ZCU deadman and payout watchdog now report here." 2>&1)
+  --data-urlencode text="$(printf "<b>Pool alerts moved to this chat</b>\nNiceHash watcher, ZCU deadman and payout watchdog now report here.")" 2>&1)
 case "$R" in
   *'"ok":true'*) echo "  OK  test message delivered -- check the chat" ;;
   *) echo "  FAIL test message: $R"
